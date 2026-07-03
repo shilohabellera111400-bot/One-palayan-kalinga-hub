@@ -295,26 +295,29 @@ $count_stmt->execute();
 $total_records = $count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
 $total_pages = ceil($total_records / $per_page);
 
-// Build query with filters and pagination
-$query = "SELECT * FROM residents WHERE 1=1";
+// Build query with filters and pagination - JOIN with users to get profile_picture
+$query = "SELECT r.*, u.profile_picture 
+          FROM residents r
+          LEFT JOIN users u ON r.user_id = u.user_id
+          WHERE 1=1";
 $params = [];
 
 if (!empty($search)) {
-    $query .= " AND (first_name LIKE :search OR last_name LIKE :search OR resident_number LIKE :search OR contact_number LIKE :search)";
+    $query .= " AND (r.first_name LIKE :search OR r.last_name LIKE :search OR r.resident_number LIKE :search OR r.contact_number LIKE :search)";
     $params[':search'] = "%$search%";
 }
 
 if (!empty($barangay_filter)) {
-    $query .= " AND barangay = :barangay";
+    $query .= " AND r.barangay = :barangay";
     $params[':barangay'] = $barangay_filter;
 }
 
 if ($status_filter !== '') {
-    $query .= " AND is_active = :status";
+    $query .= " AND r.is_active = :status";
     $params[':status'] = $status_filter;
 }
 
-$query .= " ORDER BY created_at DESC LIMIT :offset, :per_page";
+$query .= " ORDER BY r.created_at DESC LIMIT :offset, :per_page";
 
 $stmt = $db->prepare($query);
 foreach ($params as $key => $value) {
@@ -480,16 +483,37 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             align-items: center;
             gap: 12px;
         }
+        .logo-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .logo-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            object-fit: contain;
+            background: rgba(255,255,255,0.10);
+            padding: 4px;
+            flex-shrink: 0;
+        }
         .logo-icon {
             width: 44px;
             height: 44px;
             background: rgba(255,255,255,0.10);
             border-radius: 12px;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             color: var(--maroon-light);
             font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        .logo-text {
+            flex: 1;
+            min-width: 0;
         }
         .logo-text h2 {
             color: var(--text-sidebar-active);
@@ -964,11 +988,40 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .data-table tbody tr:hover {
             background: var(--badge-bg);
         }
-        .data-table .resident-name {
+
+        /* Resident Cell with Avatar */
+        .resident-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .resident-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--badge-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            border: 2px solid var(--border-color);
+        }
+        .resident-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .resident-avatar .initials {
+            font-weight: 700;
+            font-size: 0.7rem;
+            color: var(--text-primary);
+        }
+        .resident-name {
             font-weight: 600;
             color: var(--text-primary);
         }
-        .data-table .resident-id {
+        .resident-id {
             font-weight: 600;
             color: var(--maroon-light);
             font-size: 0.75rem;
@@ -1279,6 +1332,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .modal-content { width: 95%; padding: 0; }
             .modal-body { padding: 16px; }
             .pagination .page-info { width: 100%; text-align: center; margin-right: 0; margin-bottom: 8px; }
+            .resident-avatar { width: 28px; height: 28px; }
         }
         @media (max-width: 480px) {
             .main-content { padding: 16px; }
@@ -1286,6 +1340,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .btn-sm { font-size: 0.6rem; padding: 3px 8px; }
             .quick-btn { font-size: 0.7rem; padding: 8px 14px; }
             .pagination a, .pagination span { min-width: 30px; height: 30px; font-size: 0.7rem; padding: 0 8px; }
+            .resident-cell { gap: 8px; }
+            .resident-avatar { width: 24px; height: 24px; }
         }
     </style>
 </head>
@@ -1294,10 +1350,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-crown"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Admin Panel</span>
+            <div class="logo-wrapper">
+                <!-- LOGO IMAGE - Replace the src path with your actual logo file path -->
+                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
+                <div class="logo-text">
+                    <h2>One Palayan-Kalinga Hub</h2>
+                    <span>Admin Panel</span>
+                </div>
             </div>
         </div>
         
@@ -1480,10 +1540,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                             $categories = [];
                             if($resident['senior_citizen']) $categories[] = ['label' => 'Senior', 'class' => 'senior'];
                             if($resident['pwd']) $categories[] = ['label' => 'PWD', 'class' => 'pwd'];
+                            
+                            $resident_initials = strtoupper(substr($resident['first_name'], 0, 1) . substr($resident['last_name'], 0, 1));
+                            $profile_pic = !empty($resident['profile_picture']) && file_exists(__DIR__ . '/../' . $resident['profile_picture']) 
+                                ? '../' . $resident['profile_picture'] 
+                                : '';
                         ?>
                         <tr>
                             <td><span class="resident-id"><?php echo htmlspecialchars($resident['resident_number']); ?></span></td>
-                            <td class="resident-name"><?php echo htmlspecialchars($resident['first_name'] . ' ' . $resident['last_name']); ?></td>
+                            <td>
+                                <div class="resident-cell">
+                                    <div class="resident-avatar">
+                                        <?php if(!empty($profile_pic)): ?>
+                                            <img src="<?php echo htmlspecialchars($profile_pic); ?>" alt="Profile">
+                                        <?php else: ?>
+                                            <span class="initials"><?php echo $resident_initials; ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <span class="resident-name"><?php echo htmlspecialchars($resident['first_name'] . ' ' . $resident['last_name']); ?></span>
+                                </div>
+                            </td>
                             <td><?php echo htmlspecialchars($resident['barangay'] ?: 'N/A'); ?></td>
                             <td><?php echo htmlspecialchars($resident['contact_number'] ?: 'N/A'); ?></td>
                             <td><?php echo $age; ?> yrs</td>

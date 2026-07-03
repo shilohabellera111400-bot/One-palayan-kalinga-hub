@@ -1138,7 +1138,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         </ul>
         
         <div class="sidebar-footer">
-            <a href="../index.php"><i class="fas fa-globe"></i> View Main Site</a>
         </div>
     </div>
 

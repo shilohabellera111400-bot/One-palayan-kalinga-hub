@@ -1,3 +1,4 @@
+
 <?php
 // update-profile-info.php
 require_once __DIR__ . '/config/database.php';
@@ -83,12 +84,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_profile_info'])
                 $stmt = $db->prepare($query);
                 $stmt->bindParam(':user_id', $_SESSION['user_id']);
             } else {
-                // Generate resident number if new resident
+                // Generate a unique resident number
                 $year = date('Y');
-                $count_query = "SELECT COUNT(*) as count FROM residents WHERE YEAR(created_at) = $year";
-                $count_result = $db->query($count_query);
-                $count = $count_result->fetch(PDO::FETCH_ASSOC)['count'];
-                $resident_number = 'RES-' . $year . '-' . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+                $resident_number = null;
+                $attempts = 0;
+                $max_attempts = 10;
+                
+                while ($resident_number === null && $attempts < $max_attempts) {
+                    $attempts++;
+                    
+                    // Get the count for the current year
+                    $count_query = "SELECT COUNT(*) as count FROM residents WHERE YEAR(created_at) = :year";
+                    $count_stmt = $db->prepare($count_query);
+                    $count_stmt->bindParam(':year', $year);
+                    $count_stmt->execute();
+                    $count_result = $count_stmt->fetch(PDO::FETCH_ASSOC);
+                    $count = $count_result['count'] + $attempts;
+                    
+                    $candidate_number = 'RES-' . $year . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
+                    
+                    // Check if this resident number already exists
+                    $check_number_query = "SELECT id FROM residents WHERE resident_number = :resident_number";
+                    $check_number_stmt = $db->prepare($check_number_query);
+                    $check_number_stmt->bindParam(':resident_number', $candidate_number);
+                    $check_number_stmt->execute();
+                    
+                    if ($check_number_stmt->rowCount() == 0) {
+                        $resident_number = $candidate_number;
+                    }
+                }
+                
+                // If we couldn't generate a unique number after max attempts
+                if ($resident_number === null) {
+                    // Use timestamp-based fallback
+                    $resident_number = 'RES-' . date('Ymd-His') . '-' . uniqid();
+                }
                 
                 $query = "INSERT INTO residents (
                     resident_number, user_id, first_name, last_name, middle_name, suffix, gender, 
@@ -736,10 +766,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             cursor: not-allowed;
             transform: none;
             color: var(--text-muted);
-        }
-        .btn-primary:disabled:hover {
-            transform: none;
-            box-shadow: var(--shadow-sm);
         }
 
         /* ========== RESPONSIVE ========== */

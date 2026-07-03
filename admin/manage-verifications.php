@@ -251,16 +251,37 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             align-items: center;
             gap: 12px;
         }
+        .logo-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .logo-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            object-fit: contain;
+            background: rgba(255,255,255,0.10);
+            padding: 4px;
+            flex-shrink: 0;
+        }
         .logo-icon {
             width: 44px;
             height: 44px;
             background: rgba(255,255,255,0.10);
             border-radius: 12px;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             color: var(--maroon-light);
             font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        .logo-text {
+            flex: 1;
+            min-width: 0;
         }
         .logo-text h2 {
             color: var(--text-sidebar-active);
@@ -919,10 +940,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-crown"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Admin Panel</span>
+            <div class="logo-wrapper">
+                <!-- LOGO IMAGE - Replace the src path with your actual logo file path -->
+                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
+                <div class="logo-text">
+                    <h2>One Palayan-Kalinga Hub</h2>
+                    <span>Admin Panel</span>
+                </div>
             </div>
         </div>
         

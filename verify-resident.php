@@ -37,11 +37,14 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_verification'])) {
     $id_type = sanitize($_POST['id_type']);
     $id_number = sanitize($_POST['id_number']);
-    $barangay_name = sanitize($_POST['barangay_name']);
-    $complete_address = sanitize($_POST['complete_address']);
+    $barangay = sanitize($_POST['barangay']);
+    $street = sanitize($_POST['street'] ?? '');
+    $city = sanitize($_POST['city'] ?? 'Palayan City');
+    $province = sanitize($_POST['province'] ?? 'Nueva Ecija');
+    $postal_code = sanitize($_POST['postal_code'] ?? '3132');
     
     // Validate required fields
-    if (empty($id_type) || empty($id_number) || empty($barangay_name) || empty($complete_address)) {
+    if (empty($id_type) || empty($id_number) || empty($barangay)) {
         $error = "Please fill in all required fields.";
     } else {
         // Check if user already has a pending request
@@ -64,51 +67,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_verification'])
                 $error = "Please upload a valid ID.";
             }
             
-            // Upload Proof of Residency
-            if (isset($_FILES['proof_of_residency']) && $_FILES['proof_of_residency']['error'] === UPLOAD_ERR_OK) {
-                $file = [
-                    'name' => $_FILES['proof_of_residency']['name'],
-                    'type' => $_FILES['proof_of_residency']['type'],
-                    'tmp_name' => $_FILES['proof_of_residency']['tmp_name'],
-                    'error' => $_FILES['proof_of_residency']['error'],
-                    'size' => $_FILES['proof_of_residency']['size']
-                ];
-                $proof_path = $uploader->upload($file, 'verification');
-            } else {
-                $error = "Please upload proof of residency.";
-            }
-            
-            // Upload Barangay Certificate (optional)
-            $barangay_path = null;
-            if (isset($_FILES['barangay_certificate']) && $_FILES['barangay_certificate']['error'] === UPLOAD_ERR_OK) {
-                $file = [
-                    'name' => $_FILES['barangay_certificate']['name'],
-                    'type' => $_FILES['barangay_certificate']['type'],
-                    'tmp_name' => $_FILES['barangay_certificate']['tmp_name'],
-                    'error' => $_FILES['barangay_certificate']['error'],
-                    'size' => $_FILES['barangay_certificate']['size']
-                ];
-                $barangay_path = $uploader->upload($file, 'verification');
-            }
-            
             if (empty($error)) {
+                // Build complete address
+                $complete_address = trim($street . ', ' . $barangay . ', ' . $city . ', ' . $province . ' ' . $postal_code);
+                
                 // Insert verification request
                 $query = "INSERT INTO verification_requests 
-                          (user_id, id_type, id_number, id_file_path, proof_of_residency_path, 
-                           barangay_certificate_path, barangay_name, complete_address, remarks) 
-                          VALUES (:user_id, :id_type, :id_number, :id_path, :proof_path, 
-                                  :barangay_path, :barangay_name, :address, :remarks)";
+                          (user_id, id_type, id_number, id_file_path, barangay_name, complete_address, remarks) 
+                          VALUES (:user_id, :id_type, :id_number, :id_path, :barangay, :address, :remarks)";
                 $stmt = $db->prepare($query);
                 $stmt->bindParam(':user_id', $_SESSION['user_id']);
                 $stmt->bindParam(':id_type', $id_type);
                 $stmt->bindParam(':id_number', $id_number);
                 $stmt->bindParam(':id_path', $id_file_path);
-                $stmt->bindParam(':proof_path', $proof_path);
-                $stmt->bindParam(':barangay_path', $barangay_path);
-                $stmt->bindParam(':barangay_name', $barangay_name);
+                $stmt->bindParam(':barangay', $barangay);
                 $stmt->bindParam(':address', $complete_address);
                 
-                $remarks = "Resident of Barangay $barangay_name";
+                $remarks = "Resident verification request submitted.";
                 $stmt->bindParam(':remarks', $remarks);
                 
                 if ($stmt->execute()) {
@@ -161,6 +136,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon-dark: #5a0202;
             --midnight: #0F414A;
             --white: #FFFFFF;
+            --gold: #C9A86C;
+            --gold-light: #E8D5A8;
             
             --bg-primary: #F8F9FC;
             --bg-secondary: #FFFFFF;
@@ -221,6 +198,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon: #8B1A1A;
             --maroon-light: #A82828;
             --maroon-dark: #5a0202;
+            --gold: #B8953A;
+            --gold-light: #D4B86A;
             
             --color-success: #66BB6A;
             --color-warning: #FFA726;
@@ -233,7 +212,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-family: 'Inter', sans-serif;
             background: var(--bg-primary);
             color: var(--text-secondary);
-            line-height: 1.5;
+            line-height: 1.6;
             min-height: 100vh;
             transition: background 0.3s ease, color 0.3s ease;
         }
@@ -483,29 +462,57 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .verification-card {
             background: var(--card-bg);
             border-radius: var(--radius-card);
-            padding: 28px 32px;
+            padding: 30px 36px;
             box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
-            max-width: 800px;
+            max-width: 700px;
             margin: 0 auto;
             transition: background 0.3s ease, border-color 0.3s ease;
         }
-        .verification-card .card-header {
+
+        /* Header with gold accent */
+        .card-header {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
             margin-bottom: 24px;
             padding-bottom: 16px;
             border-bottom: 2px solid var(--border-color);
+            position: relative;
         }
-        .verification-card .card-header h2 {
+        .card-header::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 60px;
+            height: 2px;
+            background: var(--gold);
+        }
+        .card-header .header-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--gold-light);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--maroon);
+            font-size: 1.4rem;
+        }
+        .card-header h2 {
             color: var(--text-primary);
-            font-size: 1.1rem;
+            font-size: 1.15rem;
             font-weight: 700;
+            margin: 0;
         }
-        .verification-card .card-header i {
-            color: var(--maroon-light);
-            font-size: 1.2rem;
+        .card-header p {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin: 2px 0 0;
+        }
+        .card-header .header-text {
+            flex: 1;
         }
 
         /* Status Card */
@@ -518,24 +525,24 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border: 1px solid var(--border-color);
         }
         .status-icon {
-            width: 80px;
-            height: 80px;
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 16px;
-            font-size: 2.5rem;
+            margin: 0 auto 14px;
+            font-size: 2.2rem;
         }
-        .status-pending .status-icon { background: rgba(255, 152, 0, 0.15); color: var(--color-warning); }
-        .status-verified .status-icon { background: rgba(76, 175, 80, 0.15); color: var(--color-success); }
-        .status-rejected .status-icon { background: rgba(244, 67, 54, 0.15); color: var(--color-danger); }
-        .status-not-submitted .status-icon { background: rgba(127, 3, 3, 0.08); color: var(--maroon-light); }
+        .status-pending .status-icon { background: rgba(255, 152, 0, 0.12); color: var(--color-warning); }
+        .status-verified .status-icon { background: rgba(76, 175, 80, 0.12); color: var(--color-success); }
+        .status-rejected .status-icon { background: rgba(244, 67, 54, 0.12); color: var(--color-danger); }
+        .status-not-submitted .status-icon { background: rgba(201, 168, 108, 0.15); color: var(--gold); }
         
         .status-card h2 {
             color: var(--text-primary);
-            font-size: 1.2rem;
-            margin-bottom: 8px;
+            font-size: 1.15rem;
+            margin-bottom: 6px;
         }
         .status-card p {
             color: var(--text-muted);
@@ -544,7 +551,24 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .status-card .small {
             font-size: 0.75rem;
             margin-top: 8px;
+            color: var(--text-muted);
         }
+
+        /* Status badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 14px;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .status-badge.verified { background: rgba(76, 175, 80, 0.12); color: var(--color-success); }
+        .status-badge.pending { background: rgba(255, 152, 0, 0.12); color: var(--color-warning); }
+        .status-badge.rejected { background: rgba(244, 67, 54, 0.12); color: var(--color-danger); }
 
         /* Form */
         .form-group {
@@ -558,8 +582,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.82rem;
         }
         .form-group label i {
-            color: var(--maroon-light);
-            margin-right: 5px;
+            color: var(--gold);
+            margin-right: 6px;
+            width: 18px;
         }
         .form-group label .required-star {
             color: var(--color-danger);
@@ -582,44 +607,93 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: var(--maroon-light);
-            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 168, 108, 0.15);
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
         }
 
-        /* Document Upload */
-        .document-upload {
-            background: var(--badge-bg);
-            padding: 16px 18px;
-            border-radius: var(--radius-element);
-            margin-bottom: 16px;
-            border: 2px dashed var(--border-color);
-            transition: all 0.3s;
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
         }
-        .document-upload:hover {
-            border-color: var(--maroon-light);
+
+        /* Document Upload - Clean & Minimal */
+        .upload-section {
+            margin: 20px 0 16px;
         }
-        .document-upload label {
+        .upload-section .upload-label {
             font-weight: 600;
             color: var(--text-secondary);
+            font-size: 0.82rem;
             display: block;
             margin-bottom: 8px;
-            font-size: 0.82rem;
         }
-        .document-upload label i {
-            color: var(--maroon-light);
-            margin-right: 5px;
+        .upload-section .upload-label i {
+            color: var(--gold);
+            margin-right: 6px;
+            width: 18px;
         }
-        .document-upload input[type="file"] {
-            width: 100%;
-            padding: 8px 0;
-            color: var(--text-primary);
+        .upload-box {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-element);
+            padding: 24px 20px;
+            text-align: center;
+            background: var(--badge-bg);
+            transition: all 0.3s;
             cursor: pointer;
+            position: relative;
         }
-        .document-upload small {
+        .upload-box:hover {
+            border-color: var(--gold);
+            background: var(--bg-card);
+        }
+        .upload-box i {
+            font-size: 2.2rem;
+            color: var(--gold);
+            opacity: 0.6;
+            margin-bottom: 8px;
             display: block;
-            margin-top: 6px;
+        }
+        .upload-box p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin: 0;
+        }
+        .upload-box .file-types {
             color: var(--text-muted);
             font-size: 0.7rem;
+            margin-top: 4px;
+        }
+        .upload-box input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .file-name {
+            display: none;
+            padding: 6px 14px;
+            background: rgba(201, 168, 108, 0.12);
+            border-radius: 6px;
+            color: var(--gold);
+            font-size: 0.8rem;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+        .file-name.show {
+            display: inline-block;
+        }
+        .upload-box.has-file {
+            border-color: var(--gold);
+            border-style: solid;
+            background: rgba(201, 168, 108, 0.05);
         }
 
         .btn-submit {
@@ -655,21 +729,25 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         /* ========== RESPONSIVE ========== */
         @media (max-width: 992px) {
             .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
+            .main-content { margin-left: 0; padding: 20px 24px; }
+            .form-row { grid-template-columns: 1fr; }
         }
         @media (max-width: 768px) {
             .top-bar { flex-direction: column; align-items: stretch; }
             .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
             .verification-card { padding: 20px; margin: 0 10px; }
             .status-card { padding: 20px; }
-            .status-icon { width: 60px; height: 60px; font-size: 2rem; }
-            .document-upload { padding: 12px 14px; }
+            .status-icon { width: 60px; height: 60px; font-size: 1.8rem; }
+            .card-header { flex-direction: column; text-align: center; }
+            .card-header::after { left: 50%; transform: translateX(-50%); }
             .btn-submit { width: 100%; justify-content: center; }
+            .page-title h1 { font-size: 1.3rem; }
         }
         @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .verification-card { padding: 16px; }
+            .main-content { padding: 14px 16px; }
+            .verification-card { padding: 16px; margin: 0; }
             .form-group input, .form-group select, .form-group textarea { padding: 8px 12px; font-size: 0.8rem; }
+            .upload-box { padding: 16px; }
         }
     </style>
 </head>
@@ -725,7 +803,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <!-- Top Bar -->
         <div class="top-bar">
             <div class="page-title">
-                <h1><i class="fas fa-shield-alt" style="color: var(--maroon-light); margin-right: 10px;"></i> Verify Your Residency</h1>
+                <h1><i class="fas fa-shield-alt" style="color: var(--gold); margin-right: 10px;"></i> Verify Residency</h1>
                 <p>Complete your verification to access all services</p>
             </div>
             <div class="top-bar-actions">
@@ -738,8 +816,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         <div class="verification-card">
             <div class="card-header">
-                <i class="fas fa-id-card"></i>
-                <h2>Residency Verification</h2>
+                <div class="header-icon"><i class="fas fa-id-card"></i></div>
+                <div class="header-text">
+                    <h2>Residency Verification</h2>
+                    <p>Submit your valid ID and address to verify your residency</p>
+                </div>
             </div>
 
             <?php if($error): ?>
@@ -758,13 +839,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <div class="status-icon"><i class="fas fa-check-circle"></i></div>
                     <h2>✓ You are Verified!</h2>
                     <p>Your residency has been verified. You now have full access to all services.</p>
-                    <p class="small"><i class="fas fa-check-circle" style="color: var(--color-success);"></i> Verified Resident</p>
+                    <p class="small">
+                        <span class="status-badge verified"><i class="fas fa-check-circle"></i> Verified</span>
+                    </p>
                 </div>
             <?php elseif($verification_status == 'rejected'): ?>
                 <div class="status-card status-rejected">
                     <div class="status-icon"><i class="fas fa-times-circle"></i></div>
                     <h2>Verification Failed</h2>
-                    <p>Your verification request was rejected. Please submit new documents.</p>
+                    <p>Your verification request was rejected. Please submit a new ID and address.</p>
                     <?php if($existing_request && !empty($existing_request['rejection_reason'])): ?>
                         <div class="alert alert-info" style="margin-top: 15px; text-align: left;">
                             <i class="fas fa-info-circle"></i> <strong>Reason:</strong> <?php echo htmlspecialchars($existing_request['rejection_reason']); ?>
@@ -793,10 +876,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <label><i class="fas fa-hashtag"></i> ID Number <span class="required-star">*</span></label>
                         <input type="text" name="id_number" placeholder="Enter your ID number" required>
                     </div>
-                    
+
                     <div class="form-group">
                         <label><i class="fas fa-map-marker-alt"></i> Barangay <span class="required-star">*</span></label>
-                        <select name="barangay_name" required>
+                        <select name="barangay" required>
                             <option value="">Select Barangay</option>
                             <option value="Atate">Atate</option>
                             <option value="Aulo">Aulo</option>
@@ -819,28 +902,38 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                             <option value="Singalat">Singalat</option>
                         </select>
                     </div>
-                    
-                    <div class="form-group">
-                        <label><i class="fas fa-home"></i> Complete Address <span class="required-star">*</span></label>
-                        <textarea name="complete_address" rows="2" placeholder="Enter your complete address in Palayan City" required></textarea>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-road"></i> Street/Block/Lot</label>
+                            <input type="text" name="street" placeholder="e.g. 123 Mabini St.">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-map-pin"></i> City/Municipality</label>
+                            <input type="text" name="city" value="Palayan City" readonly class="disabled-field">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-map"></i> Province</label>
+                            <input type="text" name="province" value="Nueva Ecija" readonly class="disabled-field">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-mail-bulk"></i> Postal Code</label>
+                            <input type="text" name="postal_code" value="3132" readonly class="disabled-field">
+                        </div>
                     </div>
                     
-                    <div class="document-upload">
-                        <label><i class="fas fa-id-card"></i> Valid ID (Photo/Scan) <span class="required-star">*</span></label>
-                        <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>Upload a clear photo or scan of your valid ID (PDF, JPG, PNG up to 5MB)</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-alt"></i> Proof of Residency <span class="required-star">*</span></label>
-                        <input type="file" name="proof_of_residency" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>Utility bill (electric, water, internet) or barangay certificate</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-signature"></i> Barangay Certificate (Optional)</label>
-                        <input type="file" name="barangay_certificate" accept=".pdf,.jpg,.jpeg,.png">
-                        <small>Barangay Clearance or Certificate of Residency (recommended)</small>
+                    <div class="upload-section">
+                        <label class="upload-label"><i class="fas fa-upload"></i> Upload Valid ID <span class="required-star">*</span></label>
+                        <div class="upload-box" id="uploadBox">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p><strong>Click to upload</strong> or drag and drop</p>
+                            <div class="file-types">PDF, JPG, PNG up to 5MB</div>
+                            <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required>
+                            <div class="file-name" id="fileName"></div>
+                        </div>
                     </div>
                     
                     <button type="submit" name="submit_verification" class="btn-submit">
@@ -852,14 +945,21 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <div class="status-icon"><i class="fas fa-clock"></i></div>
                     <h2>Verification Pending</h2>
                     <p>Your verification request is currently being reviewed by our staff.</p>
-                    <p class="small"><i class="far fa-calendar-alt"></i> Submitted on: <?php echo date('F d, Y', strtotime($existing_request['submitted_date'])); ?></p>
-                    <p class="small"><i class="fas fa-info-circle"></i> Please check back later or wait for email notification.</p>
+                    <p class="small">
+                        <span class="status-badge pending"><i class="fas fa-clock"></i> Pending</span>
+                        &nbsp;·&nbsp; Submitted: <?php echo date('F d, Y', strtotime($existing_request['submitted_date'])); ?>
+                    </p>
+                    <?php if(!empty($existing_request['barangay_name'])): ?>
+                    <p class="small" style="margin-top: 8px;">
+                        <i class="fas fa-map-marker-alt"></i> Barangay: <?php echo htmlspecialchars($existing_request['barangay_name']); ?>
+                    </p>
+                    <?php endif; ?>
                 </div>
             <?php else: ?>
                 <div class="status-card status-not-submitted">
                     <div class="status-icon"><i class="fas fa-shield-alt"></i></div>
                     <h2>Verify Your Account</h2>
-                    <p>Please submit the required documents to verify your residency in Palayan City.</p>
+                    <p>Please submit a valid ID and your address to verify your residency in Palayan City.</p>
                     <p class="small"><i class="fas fa-clock"></i> Verification usually takes 1-3 business days.</p>
                 </div>
                 
@@ -884,10 +984,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <label><i class="fas fa-hashtag"></i> ID Number <span class="required-star">*</span></label>
                         <input type="text" name="id_number" placeholder="Enter your ID number" required>
                     </div>
-                    
+
                     <div class="form-group">
                         <label><i class="fas fa-map-marker-alt"></i> Barangay <span class="required-star">*</span></label>
-                        <select name="barangay_name" required>
+                        <select name="barangay" required>
                             <option value="">Select Barangay</option>
                             <option value="Atate">Atate</option>
                             <option value="Aulo">Aulo</option>
@@ -910,28 +1010,38 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                             <option value="Singalat">Singalat</option>
                         </select>
                     </div>
-                    
-                    <div class="form-group">
-                        <label><i class="fas fa-home"></i> Complete Address <span class="required-star">*</span></label>
-                        <textarea name="complete_address" rows="2" placeholder="Enter your complete address in Palayan City" required></textarea>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-road"></i> Street/Block/Lot</label>
+                            <input type="text" name="street" placeholder="e.g. 123 Mabini St.">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-map-pin"></i> City/Municipality</label>
+                            <input type="text" name="city" value="Palayan City" readonly class="disabled-field">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-map"></i> Province</label>
+                            <input type="text" name="province" value="Nueva Ecija" readonly class="disabled-field">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-mail-bulk"></i> Postal Code</label>
+                            <input type="text" name="postal_code" value="3132" readonly class="disabled-field">
+                        </div>
                     </div>
                     
-                    <div class="document-upload">
-                        <label><i class="fas fa-id-card"></i> Valid ID (Photo/Scan) <span class="required-star">*</span></label>
-                        <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>Upload a clear photo or scan of your valid ID (PDF, JPG, PNG up to 5MB)</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-alt"></i> Proof of Residency <span class="required-star">*</span></label>
-                        <input type="file" name="proof_of_residency" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>Utility bill (electric, water, internet) or barangay certificate</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-signature"></i> Barangay Certificate (Optional)</label>
-                        <input type="file" name="barangay_certificate" accept=".pdf,.jpg,.jpeg,.png">
-                        <small>Barangay Clearance or Certificate of Residency (recommended)</small>
+                    <div class="upload-section">
+                        <label class="upload-label"><i class="fas fa-upload"></i> Upload Valid ID <span class="required-star">*</span></label>
+                        <div class="upload-box" id="uploadBox">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p><strong>Click to upload</strong> or drag and drop</p>
+                            <div class="file-types">PDF, JPG, PNG up to 5MB</div>
+                            <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required>
+                            <div class="file-name" id="fileName"></div>
+                        </div>
                     </div>
                     
                     <button type="submit" name="submit_verification" class="btn-submit">
@@ -964,6 +1074,47 @@ setTheme(currentTheme);
 themeToggle.addEventListener('click', () => {
     const current = html.getAttribute('data-theme');
     setTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+// ========== FILE UPLOAD DISPLAY ==========
+const uploadBox = document.getElementById('uploadBox');
+const fileInput = uploadBox.querySelector('input[type="file"]');
+const fileNameDisplay = document.getElementById('fileName');
+
+fileInput.addEventListener('change', function() { vbgty67
+    if (this.files && this.files[0]) {
+        const name = this.files[0].name;
+        const size = (this.files[0].size / 1024 / 1024).toFixed(2);
+        fileNameDisplay.textContent = `📎 ${name} (${size} MB)`;
+        fileNameDisplay.classList.add('show');
+        uploadBox.classList.add('has-file');
+    } else {
+        fileNameDisplay.classList.remove('show');
+        uploadBox.classList.remove('has-file');
+    }
+});
+
+// Drag and drop visual feedback
+uploadBox.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.style.borderColor = 'var(--gold)';
+    this.style.background = 'rgba(201, 168, 108, 0.08)';
+});
+
+uploadBox.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.style.borderColor = '';
+    this.style.background = '';
+});
+
+uploadBox.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.style.borderColor = '';
+    this.style.background = '';
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event('change'));
+    }
 });
 </script>
 </body>

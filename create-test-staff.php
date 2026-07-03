@@ -1,6 +1,12 @@
 <?php
 require_once __DIR__ . '/config/database.php';
 
+// 🔒 ADMIN ONLY — Lock this debug file down
+if (!isAdmin()) {
+    http_response_code(403);
+    die('<h3 style="font-family:sans-serif;color:#c00;padding:2rem;">403 Forbidden — Admin access required.</h3>');
+}
+
 $database = new Database();
 $db = $database->getConnection();
 

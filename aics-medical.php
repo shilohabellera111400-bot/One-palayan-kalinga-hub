@@ -23,17 +23,16 @@ $check_stmt->execute();
 $pending_app = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
+    csrf_verify();
     $assistance_type = sanitize($_POST['assistance_type']);
     $amount_requested = sanitize($_POST['amount_requested']);
     $purpose = sanitize($_POST['purpose']);
     $hospital_name = sanitize($_POST['hospital_name'] ?? '');
     $doctor_name = sanitize($_POST['doctor_name'] ?? '');
     
-    // Start transaction
     $db->beginTransaction();
     
     try {
-        // Insert AICS request
         $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, purpose, status, created_at) 
                   VALUES (:user_id, 'medical', :amount, :purpose, 'submitted', NOW())";
         $stmt = $db->prepare($query);
@@ -44,29 +43,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         
         $aics_id = $db->lastInsertId();
         
-        // Handle document uploads
         $uploader = new FileUploader();
         $document_fields = [
-            'valid_id' => 'Valid ID',
+            'valid_id'            => 'Valid ID',
             'medical_certificate' => 'Medical Certificate',
-            'hospital_bill' => 'Hospital Bill',
-            'prescription' => 'Prescription',
-            'laboratory_request' => 'Laboratory Request',
-            'quotation' => 'Quotation'
+            'hospital_bill'       => 'Hospital Bill',
+            'prescription'        => 'Prescription',
+            'laboratory_request'  => 'Laboratory Request',
+            'quotation'           => 'Quotation'
         ];
         
         foreach ($document_fields as $field => $doc_name) {
             if (isset($_FILES[$field]) && $_FILES[$field]['error'] === UPLOAD_ERR_OK) {
                 $file = [
-                    'name' => $_FILES[$field]['name'],
-                    'type' => $_FILES[$field]['type'],
+                    'name'     => $_FILES[$field]['name'],
+                    'type'     => $_FILES[$field]['type'],
                     'tmp_name' => $_FILES[$field]['tmp_name'],
-                    'error' => $_FILES[$field]['error'],
-                    'size' => $_FILES[$field]['size']
+                    'error'    => $_FILES[$field]['error'],
+                    'size'     => $_FILES[$field]['size']
                 ];
-                
                 $file_path = $uploader->upload($file, 'aics');
-                
                 $doc_query = "INSERT INTO aics_documents (aics_id, document_type, document_path) 
                               VALUES (:aics_id, :doc_type, :path)";
                 $doc_stmt = $db->prepare($doc_query);
@@ -77,7 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
             }
         }
         
-        // Create notification
         $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
                         VALUES (:user_id, 'AICS Application Submitted', 
                         'Your Medical Assistance application has been submitted successfully. Tracking #: AICS-" . str_pad($aics_id, 6, '0', STR_PAD_LEFT) . "', 'aics')";
@@ -86,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $notif_stmt->execute();
         
         $db->commit();
-        
         $success = "Application submitted successfully! Your tracking number is: <strong>AICS-" . str_pad($aics_id, 6, '0', STR_PAD_LEFT) . "</strong>";
         
     } catch (Exception $e) {
@@ -100,289 +94,445 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medical Assistance - AICS</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Medical Assistance - AICS | Palayan-Kalinga Hub</title>
+    <meta name="description" content="Apply for Medical Assistance under AICS – financial support for hospital bills, medicines, laboratory tests, and medical procedures.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/aics-enhanced.css">
     <style>
         :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --alabaster: #EFE8DF;
-            --light-blue: #96C0CE;
+            --accent: #7F0303;
+            --accent-light: #9a1515;
+            --accent-dark: #5a0202;
+            --accent-rgb: 127, 3, 3;
             --midnight: #0F414A;
-            --maroon-light: #9a1515;
-            --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-200: #E4E7E9;
-            --gray-600: #6B7A8A;
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --radius-card: 24px;
-            --radius-element: 16px;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--gray-50); color: var(--gray-600); }
-
-        .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-
-        /* Simple Header with Back Button */
-        .simple-header {
-            background: var(--white);
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--gray-200);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        .back-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--gray-50);
-            padding: 10px 20px;
-            border-radius: 40px;
-            text-decoration: none;
-            color: var(--midnight);
-            font-weight: 500;
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
-        }
-        .back-btn:hover {
-            background: var(--midnight);
-            color: white;
-            transform: translateX(-3px);
-        }
-
-        .page-header {
-            background: linear-gradient(135deg, var(--midnight) 0%, #1a6a78 100%);
-            color: white;
-            padding: 60px 0;
-            text-align: center;
-        }
-        .page-header h1 { font-size: 2rem; font-weight: 800; margin-bottom: 10px; }
-        .page-header p { font-size: 1rem; opacity: 0.9; }
-
-        .content-wrapper {
-            display: grid;
-            grid-template-columns: 1fr 1.5fr;
-            gap: 30px;
-            padding: 60px 0;
-        }
-
-        .requirements-section {
-            background: white;
-            border-radius: var(--radius-card);
-            padding: 28px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--gray-200);
-            position: sticky;
-            top: 100px;
-            height: fit-content;
-        }
-        .requirements-section h2 {
-            color: var(--midnight);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--maroon);
-        }
-        .requirements-section h3 {
-            color: var(--midnight);
-            margin: 20px 0 10px;
-            font-size: 1rem;
-        }
-        .requirements-list {
-            list-style: none;
-            padding: 0;
-        }
-        .requirements-list li {
-            padding: 8px 0;
-            padding-left: 25px;
-            position: relative;
-            color: var(--gray-600);
-            border-bottom: 1px dashed var(--gray-200);
-        }
-        .requirements-list li:before {
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: var(--maroon);
-            font-weight: bold;
-        }
-        .note-box {
-            background: rgba(216,186,152,0.15);
-            padding: 15px;
-            border-radius: var(--radius-element);
-            margin-top: 20px;
-            border-left: 4px solid var(--tan);
-        }
-
-        .application-section {
-            background: white;
-            border-radius: var(--radius-card);
-            padding: 28px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--gray-200);
-        }
-        .application-section h2 {
-            color: var(--midnight);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--maroon);
-        }
-        .form-group { margin-bottom: 20px; }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--gray-700);
-            font-weight: 600;
-            font-size: 0.85rem;
-        }
-        .form-group label i { color: var(--maroon); margin-right: 5px; }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid var(--gray-200);
-            border-radius: var(--radius-element);
-            font-size: 0.95rem;
-            transition: all 0.3s;
-        }
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--midnight);
-            box-shadow: 0 0 0 3px rgba(15,65,74,0.1);
-        }
-        .document-upload {
-            background: var(--gray-50);
-            padding: 15px;
-            border-radius: var(--radius-element);
-            margin-bottom: 15px;
-        }
-        .document-upload label { font-weight: 600; color: var(--midnight); }
-        .document-upload small { display: block; color: var(--gray-600); margin-top: 5px; font-size: 0.7rem; }
-        .btn-submit {
-            background: var(--maroon);
-            color: white;
-            padding: 14px;
-            border: none;
-            border-radius: 40px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            width: 100%;
-        }
-        .btn-submit:hover { background: var(--maroon-light); transform: translateY(-2px); }
-        .alert { padding: 15px; border-radius: var(--radius-element); margin-bottom: 20px; }
-        .alert-success { background: #D4EDDA; color: #155724; border: 1px solid #C3E6CB; }
-        .alert-error { background: #F8D7DA; color: #721C24; border: 1px solid #F5C6CB; }
-        .alert-info { background: #CCE5FF; color: #004085; border: 1px solid #B8DAFF; }
-        .pending-card {
-            background: #FFF3CD;
-            border: 1px solid #FFC107;
-            border-radius: var(--radius-element);
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-
-        @media (max-width: 992px) {
-            .content-wrapper { grid-template-columns: 1fr; }
-            .requirements-section { position: static; }
-        }
-        @media (max-width: 768px) {
-            .page-header { padding: 40px 0; }
-            .page-header h1 { font-size: 1.5rem; }
+            --midnight-light: #1a6a78;
         }
     </style>
 </head>
 <body>
-    <!-- Simple Header with Back Button -->
-    <div class="simple-header">
-        <div class="container">
-            <a href="services.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Back to Services
+
+    <!-- Unified Navigation Bar -->
+    <?php include __DIR__ . '/includes/navbar.php'; ?>
+
+    <!-- Top Navigation -->
+    <nav class="aics-topnav">
+        <div class="aics-topnav-inner">
+            <div class="aics-breadcrumb">
+                <a href="services.php">Services</a>
+                <span class="sep"><i class="fas fa-chevron-right"></i></span>
+                <a href="aics.php">AICS</a>
+                <span class="sep"><i class="fas fa-chevron-right"></i></span>
+                <span class="current">Medical Assistance</span>
+            </div>
+            <a href="aics.php" class="back-btn">
+                <i class="fas fa-arrow-left"></i> Back to AICS
             </a>
         </div>
-    </div>
+    </nav>
 
-    <div class="page-header">
-        <div class="container">
-            <h1><i class="fas fa-hospital-user"></i> Medical Assistance</h1>
-            <p>Financial assistance for hospital bills, medicines, laboratory tests, and medical procedures</p>
+    <!-- Hero Header -->
+    <div class="aics-hero">
+        <div class="aics-hero-inner">
+            <div class="aics-hero-badge">
+                <i class="fas fa-shield-alt"></i> AICS Program
+            </div>
+            <div class="aics-hero-icon">
+                <i class="fas fa-hospital-user"></i>
+            </div>
+            <h1>Medical Assistance</h1>
+            <p>Financial support for hospital bills, medicines, laboratory tests, and medical procedures for individuals and families in need.</p>
+            <div class="aics-hero-stats">
+                <div class="hero-stat"><strong>₱100K</strong><span>Max Assistance</span></div>
+                <div class="hero-stat"><strong>3–5 Days</strong><span>Processing Time</span></div>
+                <div class="hero-stat"><strong>Free</strong><span>Application</span></div>
+            </div>
         </div>
     </div>
 
-    <div class="container">
+    <!-- Alerts -->
+    <div class="aics-alert-wrapper">
         <?php if($error): ?>
-            <div class="alert alert-error"><?php echo $error; ?></div>
-        <?php endif; ?>
-        
-        <?php if($success): ?>
-            <div class="alert alert-success"><?php echo $success; ?></div>
-        <?php endif; ?>
-        
-        <?php if($pending_app && $pending_app['status'] != 'rejected'): ?>
-            <div class="pending-card">
-                <i class="fas fa-clock"></i> <strong>You have a pending application!</strong>
-                <p>Your application is currently <strong><?php echo ucfirst($pending_app['status']); ?></strong>. Please wait for the staff to review your request.</p>
-                <a href="track-aics.php?tracking=AICS-<?php echo str_pad($pending_app['aics_id'], 6, '0', STR_PAD_LEFT); ?>" class="btn-submit" style="display: inline-block; width: auto; margin-top: 10px;">Track Application</a>
-            </div>
-        <?php endif; ?>
-
-        <div class="content-wrapper">
-            <!-- Requirements Section -->
-            <div class="requirements-section">
-                <h2><i class="fas fa-clipboard-list"></i> Requirements</h2>
-                <div class="note-box"><strong><i class="fas fa-info-circle"></i> Note:</strong><p>Dalhin ang mga sumusunod base sa tulong na inilalapit.</p></div>
-                <h3>📋 General Requirements:</h3>
-                <ul class="requirements-list"><li>Valid ID ng taong maglalakad/iinterviewhin</li><li>Authorization Letter (if applicable)</li></ul>
-                <h3>🏥 Para sa Hospital Bill:</h3>
-                <ul class="requirements-list"><li>Medical Certificate/Clinical Abstract/Discharge Summary</li><li>Hospital Bill or Statement of Account</li><li>Certificate of Balance and Promissory Note</li><li>Social Case Study Report or Case Summary</li></ul>
-                <h3>💊 Para sa Gamot o Assistive Device:</h3>
-                <ul class="requirements-list"><li>Medical Certificate/Clinical Abstract</li><li>Prescription with date and signature of Physician</li><li>Quotation of Medicine or Assistive Device (if amount > ₱10,000)</li></ul>
-                <div class="note-box"><strong><i class="fas fa-exclamation-triangle"></i> Paalala:</strong><p>Siguraduhing kumpleto ang mga dokumento bago mag-apply upang mapabilis ang proseso.</p></div>
-            </div>
-
-            <!-- Application Form -->
-            <div class="application-section">
-                <h2><i class="fas fa-paper-plane"></i> Apply for Medical Assistance</h2>
-                <?php if(!$pending_app || $pending_app['status'] == 'rejected'): ?>
-                <form method="POST" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label><i class="fas fa-tag"></i> Type of Assistance *</label>
-                        <select name="assistance_type" required>
-                            <option value="">Select type</option>
-                            <option value="hospital_bill">Hospital Bill Payment</option>
-                            <option value="medicine">Medicine / Assistive Device</option>
-                            <option value="laboratory">Laboratory / Medical Procedure</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-hospital"></i> Hospital Name</label>
-                        <input type="text" name="hospital_name" placeholder="Enter hospital name">
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-money-bill"></i> Amount Requested *</label>
-                        <input type="number" name="amount_requested" min="100" max="100000" step="100" required>
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-align-left"></i> Purpose / Explanation *</label>
-                        <textarea name="purpose" rows="4" required placeholder="Explain your situation..."></textarea>
-                    </div>
-                    <h3 style="margin: 20px 0 15px; color: var(--midnight);"><i class="fas fa-upload"></i> Upload Required Documents</h3>
-                    <div class="document-upload"><label><i class="fas fa-id-card"></i> Valid ID *</label><input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required><small>Government-issued ID (PDF, JPG, PNG up to 5MB)</small></div>
-                    <div class="document-upload"><label><i class="fas fa-file-medical"></i> Medical Certificate *</label><input type="file" name="medical_certificate" accept=".pdf,.jpg,.jpeg,.png" required><small>Clinical Abstract or Discharge Summary</small></div>
-                    <div class="document-upload" id="hospitalBillField"><label><i class="fas fa-file-invoice"></i> Hospital Bill</label><input type="file" name="hospital_bill" accept=".pdf,.jpg,.jpeg,.png"><small>Statement of Account or Certificate of Balance</small></div>
-                    <button type="submit" name="submit_application" class="btn-submit"><i class="fas fa-paper-plane"></i> Submit Application</button>
-                </form>
-                <?php else: ?>
-                    <div class="alert alert-info"><i class="fas fa-info-circle"></i> You already have a pending application. Please wait for the staff to review your request before submitting another.</div>
-                <?php endif; ?>
+        <div class="aics-alert error">
+            <div class="aics-alert-icon"><i class="fas fa-times"></i></div>
+            <div class="aics-alert-body">
+                <strong>Application Failed</strong>
+                <p><?php echo $error; ?></p>
             </div>
         </div>
+        <?php endif; ?>
+
+        <?php if($success): ?>
+        <div class="aics-alert success">
+            <div class="aics-alert-icon"><i class="fas fa-check"></i></div>
+            <div class="aics-alert-body">
+                <strong>Application Submitted!</strong>
+                <p><?php echo $success; ?></p>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if($pending_app && $pending_app['status'] != 'rejected'): ?>
+        <div class="pending-banner">
+            <div class="pending-banner-icon"><i class="fas fa-clock"></i></div>
+            <div class="pending-banner-content">
+                <strong>You have a pending application</strong>
+                <p>Status: <strong><?php echo ucfirst($pending_app['status']); ?></strong> — Please wait for the staff to review your request before submitting another.</p>
+            </div>
+            <a href="track-aics.php?tracking=AICS-<?php echo str_pad($pending_app['aics_id'], 6, '0', STR_PAD_LEFT); ?>" class="pending-banner-action">
+                <i class="fas fa-search"></i> Track Application
+            </a>
+        </div>
+        <?php endif; ?>
     </div>
+
+    <!-- Main Content -->
+    <div class="aics-content">
+
+        <!-- Requirements Sidebar -->
+        <aside class="req-panel">
+            <div class="req-panel-header">
+                <h2><i class="fas fa-clipboard-list"></i> Requirements</h2>
+                <p>Prepare the following documents before applying to speed up processing.</p>
+            </div>
+            <div class="req-panel-body">
+
+                <div class="req-group">
+                    <div class="req-group-title">
+                        <span class="group-icon"><i class="fas fa-id-card"></i></span>
+                        General Requirements
+                    </div>
+                    <ul class="req-list">
+                        <li><span class="check"><i class="fas fa-check"></i></span> Valid ID of the applicant or authorized representative</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Authorization Letter (if not applying in person)</li>
+                    </ul>
+                </div>
+
+                <div class="req-group">
+                    <div class="req-group-title">
+                        <span class="group-icon"><i class="fas fa-hospital"></i></span>
+                        Para sa Hospital Bill
+                    </div>
+                    <ul class="req-list">
+                        <li><span class="check"><i class="fas fa-check"></i></span> Medical Certificate / Clinical Abstract / Discharge Summary</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Hospital Bill or Statement of Account</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Certificate of Balance and Promissory Note</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Social Case Study Report or Case Summary</li>
+                    </ul>
+                </div>
+
+                <div class="req-group">
+                    <div class="req-group-title">
+                        <span class="group-icon"><i class="fas fa-pills"></i></span>
+                        Para sa Gamot / Assistive Device
+                    </div>
+                    <ul class="req-list">
+                        <li><span class="check"><i class="fas fa-check"></i></span> Medical Certificate / Clinical Abstract</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Prescription with date and physician's signature</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Quotation (if amount exceeds ₱10,000)</li>
+                    </ul>
+                </div>
+
+                <div class="req-note">
+                    <div class="note-title"><i class="fas fa-exclamation-triangle"></i> Paalala</div>
+                    <p>Siguraduhing kumpleto ang mga dokumento bago mag-apply upang mapabilis ang proseso ng inyong aplikasyon.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Application Form -->
+        <div class="form-panel">
+            <div class="form-panel-header">
+                <h2>
+                    <span class="panel-icon"><i class="fas fa-file-medical"></i></span>
+                    Apply for Medical Assistance
+                </h2>
+                <p>Fill in the form below completely and upload the required documents.</p>
+            </div>
+
+            <?php if(!$pending_app || $pending_app['status'] == 'rejected'): ?>
+            <div class="form-panel-body">
+
+                <div class="form-steps">
+                    <div class="form-step active">
+                        <span class="step-num">1</span>
+                        <span class="step-label">Application Details</span>
+                    </div>
+                    <div class="form-step">
+                        <span class="step-num">2</span>
+                        <span class="step-label">Upload Documents</span>
+                    </div>
+                    <div class="form-step">
+                        <span class="step-num">3</span>
+                        <span class="step-label">Submit & Track</span>
+                    </div>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data" id="applicationForm">
+                    <?php echo csrf_field(); ?>
+
+                    <!-- STEP 1: Details -->
+                    <div class="wizard-step active" data-step="1">
+                        <div class="form-section-title"><i class="fas fa-info-circle"></i> Application Information</div>
+
+                        <div class="form-group">
+                            <label>
+                                <span class="field-icon"><i class="fas fa-tag"></i></span>
+                                Type of Medical Assistance <span class="required-star">*</span>
+                            </label>
+                            <select name="assistance_type" required id="assistanceType" onchange="toggleMedicalFields()">
+                                <option value="">— Select type of assistance —</option>
+                                <option value="hospital_bill">Hospital Bill Payment</option>
+                                <option value="medicine">Medicine / Assistive Device</option>
+                                <option value="laboratory">Laboratory / Medical Procedure</option>
+                            </select>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label>
+                                    <span class="field-icon"><i class="fas fa-hospital"></i></span>
+                                    Hospital / Clinic Name
+                                </label>
+                                <input type="text" name="hospital_name" placeholder="e.g., Philippine General Hospital">
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <span class="field-icon"><i class="fas fa-user-md"></i></span>
+                                    Attending Physician
+                                </label>
+                                <input type="text" name="doctor_name" placeholder="e.g., Dr. Juan Dela Cruz">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <span class="field-icon"><i class="fas fa-peso-sign"></i></span>
+                                Amount Requested (₱) <span class="required-star">*</span>
+                            </label>
+                            <input type="number" name="amount_requested" min="100" max="100000" step="100" required placeholder="0.00">
+                            <div class="form-hint"><i class="fas fa-info-circle"></i> Maximum of ₱100,000 subject to assessment and approval</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <span class="field-icon"><i class="fas fa-align-left"></i></span>
+                                Purpose / Detailed Explanation <span class="required-star">*</span>
+                            </label>
+                            <textarea name="purpose" rows="5" required placeholder="Describe your medical condition, current situation, and why you need this assistance..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: Document Uploads -->
+                    <div class="wizard-step" data-step="2">
+                        <div class="upload-section">
+                            <div class="form-section-title"><i class="fas fa-upload"></i> Upload Required Documents</div>
+
+                            <div class="upload-grid">
+                                <div class="upload-zone" id="zone-valid_id">
+                                    <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required onchange="markUploaded(this,'zone-valid_id')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-id-card"></i></div>
+                                        <div class="upload-zone-meta">
+                                            <strong>Valid ID</strong>
+                                            <span>Government-issued ID</span>
+                                        </div>
+                                        <span class="upload-required-badge">Required</span>
+                                    </div>
+                                    <div class="upload-zone-footer">
+                                        <i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB
+                                    </div>
+                                </div>
+
+                                <div class="upload-zone" id="zone-medical_certificate">
+                                    <input type="file" name="medical_certificate" accept=".pdf,.jpg,.jpeg,.png" required onchange="markUploaded(this,'zone-medical_certificate')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-file-medical"></i></div>
+                                        <div class="upload-zone-meta">
+                                            <strong>Medical Certificate</strong>
+                                            <span>Clinical Abstract / Discharge Summary</span>
+                                        </div>
+                                        <span class="upload-required-badge">Required</span>
+                                    </div>
+                                    <div class="upload-zone-footer">
+                                        <i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB
+                                    </div>
+                                </div>
+
+                                <div class="upload-zone dynamic-field" id="zone-hospital_bill">
+                                    <input type="file" name="hospital_bill" accept=".pdf,.jpg,.jpeg,.png" onchange="markUploaded(this,'zone-hospital_bill')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-file-invoice"></i></div>
+                                        <div class="upload-zone-meta">
+                                            <strong>Hospital Bill</strong>
+                                            <span>Statement of Account / Certificate of Balance</span>
+                                        </div>
+                                        <span class="upload-optional-badge">Optional</span>
+                                    </div>
+                                    <div class="upload-zone-footer">
+                                        <i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB
+                                    </div>
+                                </div>
+
+                                <div class="upload-zone dynamic-field" id="zone-prescription">
+                                    <input type="file" name="prescription" accept=".pdf,.jpg,.jpeg,.png" onchange="markUploaded(this,'zone-prescription')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-prescription-bottle-alt"></i></div>
+                                        <div class="upload-zone-meta">
+                                            <strong>Prescription</strong>
+                                            <span>With date and physician's signature</span>
+                                        </div>
+                                        <span class="upload-optional-badge">Optional</span>
+                                    </div>
+                                    <div class="upload-zone-footer">
+                                        <i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB
+                                    </div>
+                                </div>
+
+                                <div class="upload-zone dynamic-field" id="zone-laboratory_request">
+                                    <input type="file" name="laboratory_request" accept=".pdf,.jpg,.jpeg,.png" onchange="markUploaded(this,'zone-laboratory_request')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-flask"></i></div>
+                                        <div class="upload-zone-meta">
+                                            <strong>Laboratory Request</strong>
+                                            <span>Lab request or results</span>
+                                        </div>
+                                        <span class="upload-optional-badge">Optional</span>
+                                    </div>
+                                    <div class="upload-zone-footer">
+                                        <i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB
+                                    </div>
+                                </div>
+
+                                <div class="upload-zone dynamic-field" id="zone-quotation">
+                                    <input type="file" name="quotation" accept=".pdf,.jpg,.jpeg,.png" onchange="markUploaded(this,'zone-quotation')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-receipt"></i></div>
+                                        <div class="upload-zone-meta">
+                                            <strong>Quotation</strong>
+                                            <span>For amounts exceeding ₱10,000</span>
+                                        </div>
+                                        <span class="upload-optional-badge">Optional</span>
+                                    </div>
+                                    <div class="upload-zone-footer">
+                                        <i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3: Review and Submit -->
+                    <div class="wizard-step" data-step="3">
+                        <div class="form-section-title"><i class="fas fa-check-circle"></i> Review Your Application</div>
+                        
+                        <div class="summary-intro">
+                            <i class="fas fa-shield-alt"></i>
+                            <div class="summary-intro-text">
+                                <strong>Paki-rebyu ang iyong mga detalye</strong>
+                                <p>Tiyaking tama ang lahat ng impormasyon bago isumite ang aplikasyon upang maiwasan ang anumang pagkaantala.</p>
+                            </div>
+                        </div>
+
+                        <div id="summary-preview-table"></div>
+
+                        <div class="summary-confirmation">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="declaration-check" required>
+                                <span>Ako ay nagpapatunay na ang lahat ng nakasulat sa aplikasyong ito ay totoo at tama sa abot ng aking kaalaman.</span>
+                            </label>
+                        </div>
+
+                        <div class="submit-section">
+                            <button type="submit" name="submit_application" class="btn-submit" id="submitBtn" disabled>
+                                <span class="btn-icon"><i class="fas fa-paper-plane"></i></span>
+                                Submit Medical Assistance Application
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <?php else: ?>
+            <div class="form-panel-body">
+                <div class="already-pending">
+                    <div class="already-pending-icon"><i class="fas fa-clock"></i></div>
+                    <h3>Application Under Review</h3>
+                    <p>You already have a pending Medical Assistance application. Please wait for the staff to review your request before submitting another one.</p>
+                    <a href="track-aics.php?tracking=AICS-<?php echo str_pad($pending_app['aics_id'], 6, '0', STR_PAD_LEFT); ?>" class="btn-track">
+                        <i class="fas fa-search"></i> Track Your Application
+                    </a>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="aics-footer">
+        <div class="aics-footer-inner">
+            <div class="footer-brand">
+                <i class="fas fa-hands-helping"></i>
+                Palayan-Kalinga Hub — AICS Division
+            </div>
+            <div class="footer-links">
+                <a href="aics.php">AICS Home</a>
+                <a href="track-aics.php">Track Application</a>
+                <a href="contact.php">Contact Us</a>
+            </div>
+        </div>
+        <div class="footer-note">
+            Assistance to Individuals in Crisis Situation (AICS) — City Social Welfare and Development Office (CSWDO)
+        </div>
+    </footer>
+
+    <script>
+        function toggleMedicalFields() {
+            const type = document.getElementById('assistanceType').value;
+            const allDynamic = document.querySelectorAll('.upload-zone.dynamic-field');
+            allDynamic.forEach(el => { el.classList.remove('visible'); });
+
+            if (type === 'hospital_bill') {
+                document.getElementById('zone-hospital_bill').classList.add('visible');
+            } else if (type === 'medicine') {
+                document.getElementById('zone-prescription').classList.add('visible');
+                document.getElementById('zone-quotation').classList.add('visible');
+            } else if (type === 'laboratory') {
+                document.getElementById('zone-laboratory_request').classList.add('visible');
+            }
+        }
+
+        function markUploaded(input, zoneId) {
+            const zone = document.getElementById(zoneId);
+            if (input.files && input.files.length > 0) {
+                zone.classList.add('uploaded');
+                const meta = zone.querySelector('.upload-zone-meta span');
+                if (meta) meta.textContent = '✓ ' + input.files[0].name;
+            } else {
+                zone.classList.remove('uploaded');
+            }
+        }
+
+        // Drag & drop visual feedback
+        document.querySelectorAll('.upload-zone').forEach(zone => {
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', () => zone.classList.remove('drag-over'));
+        });
+
+        // Toggle submit button based on declaration check
+        const declCheck = document.getElementById('declaration-check');
+        const submitBtn = document.getElementById('submitBtn');
+        if (declCheck && submitBtn) {
+            declCheck.addEventListener('change', function() {
+                submitBtn.disabled = !this.checked;
+            });
+        }
+    </script>
+
+    <!-- Include Wizard Logic JS -->
+    <script src="js/aics-wizard.js"></script>
+
 </body>
 </html>

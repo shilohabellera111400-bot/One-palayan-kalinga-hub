@@ -1,6 +1,12 @@
     <?php
 require_once __DIR__ . '/config/database.php';
 
+// 🔒 ADMIN ONLY — Lock this debug file down
+if (!isAdmin()) {
+    http_response_code(403);
+    die('<h3 style="font-family:sans-serif;color:#c00;padding:2rem;">403 Forbidden — Admin access required.</h3>');
+}
+
 echo "<h1>Staff Password Fix Tool</h1>";
 
 $database = new Database();
@@ -93,9 +99,10 @@ if (isset($_POST['test_login'])) {
     $password = $_POST['test_password'];
     
     $query = "SELECT user_id, username, password, first_name, last_name, role, status 
-              FROM users WHERE username = :username OR email = :username";
+              FROM users WHERE username = :username OR email = :username2";
     $stmt = $db->prepare($query);
-    $stmt->bindParam(':username', $username);
+    $stmt->bindParam(':username',  $username);
+    $stmt->bindParam(':username2', $username);
     $stmt->execute();
     
     if ($stmt->rowCount() == 1) {

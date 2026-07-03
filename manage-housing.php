@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/Mailer.php';
 
 if (!isStaff()) {
     redirect('../login.php');
@@ -48,22 +49,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
     $update_stmt->bindParam(':id', $beneficiary_id);
     
     if ($update_stmt->execute()) {
-        // Get user_id for notification
-        $user_query = "SELECT user_id FROM housing_beneficiaries WHERE beneficiary_id = :id";
+        // Get full housing + user details for email and notification
+        $user_query = "SELECT h.*, p.program_name, u.user_id, u.email, u.first_name, u.last_name
+                       FROM housing_beneficiaries h
+                       JOIN housing_programs p ON h.program_id = p.program_id
+                       JOIN users u ON h.user_id = u.user_id
+                       WHERE h.beneficiary_id = :id";
         $user_stmt = $db->prepare($user_query);
         $user_stmt->bindParam(':id', $beneficiary_id);
         $user_stmt->execute();
-        $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
-        
-        // Create notification
-        $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
-                        VALUES (:user_id, 'Housing Application Updated', 
-                        'Your housing application status has been updated to: " . $new_status . "', 'housing')";
-        $notif_stmt = $db->prepare($notif_query);
-        $notif_stmt->bindParam(':user_id', $user['user_id']);
-        $notif_stmt->execute();
-        
-        $success = "Application status updated successfully!";
+        $housing_details = $user_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($housing_details) {
+            // Create in-app notification
+            $notif_msg = "Your housing application for {$housing_details['program_name']} has been updated to: " . ucfirst($new_status);
+            $notif_query = "INSERT INTO notifications (user_id, title, message, type)
+                            VALUES (:user_id, 'Housing Application Updated', :msg, 'housing')";
+            $notif_stmt = $db->prepare($notif_query);
+            $notif_stmt->bindParam(':user_id', $housing_details['user_id']);
+            $notif_stmt->bindParam(':msg', $notif_msg);
+            $notif_stmt->execute();
+
+            // Send email notification
+            try {
+                $mailer = new Mailer();
+                $user_name = $housing_details['first_name'] . ' ' . $housing_details['last_name'];
+                // Attach current unit assignment to details
+                $housing_details['unit_assigned'] = $unit_assigned;
+                $email_result = $mailer->sendHousingUpdate(
+                    $housing_details['email'],
+                    $user_name,
+                    $housing_details
+                );
+                $email_status = $email_result['success']
+                    ? 'Email notification sent.'
+                    : 'Email failed: ' . $email_result['message'];
+                if (!$email_result['success']) error_log($email_status);
+            } catch (Exception $e) {
+                error_log('Housing email error: ' . $e->getMessage());
+            }
+        }
+
+        $success = 'Application status updated successfully! ' . ($email_status ?? '');
     }
 }
 

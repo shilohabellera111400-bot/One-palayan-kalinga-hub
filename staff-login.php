@@ -42,10 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Check in users table with staff or admin role
         $query = "SELECT user_id, username, password, first_name, last_name, role, status 
                   FROM users 
-                  WHERE (username = :username OR email = :username) 
+                  WHERE (username = :username OR email = :username2) 
                   AND role IN ('staff', 'admin')";
         $stmt = $db->prepare($query);
-        $stmt->bindParam(':username', $username);
+        $stmt->bindParam(':username',  $username);
+        $stmt->bindParam(':username2', $username);
         $stmt->execute();
         
         if ($stmt->rowCount() == 1) {

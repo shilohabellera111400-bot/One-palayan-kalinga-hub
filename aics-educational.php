@@ -6,7 +6,6 @@ if (!isLoggedIn()) {
     redirect('login.php');
 }
 
-// Only residents can apply for AICS
 if (isStaff() || isAdmin()) {
     redirect('staff-dashboard.php');
 }
@@ -17,7 +16,6 @@ $db = $database->getConnection();
 $error = '';
 $success = '';
 
-// Check if user has pending application
 $check_query = "SELECT r.* FROM aics_requests r 
                 WHERE r.user_id = :user_id AND r.request_type = 'educational' 
                 AND r.status IN ('submitted', 'reviewing', 'approved')
@@ -28,19 +26,19 @@ $check_stmt->execute();
 $pending_app = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
-    $amount_requested = sanitize($_POST['amount_requested']);
-    $purpose = sanitize($_POST['purpose']);
-    $student_name = sanitize($_POST['student_name']);
-    $school_name = sanitize($_POST['school_name']);
-    $grade_level = sanitize($_POST['grade_level']);
-    $school_year = sanitize($_POST['school_year']);
-    $tuition_fee = sanitize($_POST['tuition_fee'] ?? 0);
+    csrf_verify();
+    $amount_requested  = sanitize($_POST['amount_requested']);
+    $purpose           = sanitize($_POST['purpose']);
+    $student_name      = sanitize($_POST['student_name']);
+    $school_name       = sanitize($_POST['school_name']);
+    $grade_level       = sanitize($_POST['grade_level']);
+    $school_year       = sanitize($_POST['school_year']);
+    $tuition_fee       = sanitize($_POST['tuition_fee'] ?? 0);
     $enrollment_status = sanitize($_POST['enrollment_status'] ?? 'enrolled');
     
     $db->beginTransaction();
     
     try {
-        // Insert into main aics_requests table (NO purpose column here)
         $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, status) 
                   VALUES (:user_id, 'educational', :amount, 'submitted')";
         $stmt = $db->prepare($query);
@@ -50,7 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         
         $aics_id = $db->lastInsertId();
         
-        // Insert into educational details table (purpose goes here)
         $detail_query = "INSERT INTO aics_educational_details 
                         (aics_id, student_name, school_name, grade_level, school_year, tuition_fee, enrollment_status, purpose) 
                         VALUES (:aics_id, :student_name, :school_name, :grade_level, :school_year, :tuition_fee, :enrollment_status, :purpose)";
@@ -65,24 +62,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $detail_stmt->bindParam(':purpose', $purpose);
         $detail_stmt->execute();
         
-        // Upload documents
         $uploader = new FileUploader();
         $document_fields = [
-            'valid_id' => 'Valid ID',
-            'authorization_letter' => 'Authorization Letter',
-            'school_id' => 'Validated School ID',
-            'enrollment_form' => 'Enrollment Assessment Form',
-            'statement_of_account' => 'Statement of Account'
+            'valid_id'              => 'Valid ID',
+            'authorization_letter'  => 'Authorization Letter',
+            'school_id'             => 'Validated School ID',
+            'enrollment_form'       => 'Enrollment Assessment Form',
+            'statement_of_account'  => 'Statement of Account'
         ];
         
         foreach ($document_fields as $field => $doc_name) {
             if (isset($_FILES[$field]) && $_FILES[$field]['error'] === UPLOAD_ERR_OK) {
                 $file = [
-                    'name' => $_FILES[$field]['name'],
-                    'type' => $_FILES[$field]['type'],
+                    'name'     => $_FILES[$field]['name'],
+                    'type'     => $_FILES[$field]['type'],
                     'tmp_name' => $_FILES[$field]['tmp_name'],
-                    'error' => $_FILES[$field]['error'],
-                    'size' => $_FILES[$field]['size']
+                    'error'    => $_FILES[$field]['error'],
+                    'size'     => $_FILES[$field]['size']
                 ];
                 $file_path = $uploader->upload($file, 'aics');
                 $doc_query = "INSERT INTO aics_documents (aics_id, document_type, document_name, document_path) 
@@ -96,7 +92,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
             }
         }
         
-        // Create notification
         $tracking = "AICS-" . str_pad($aics_id, 6, '0', STR_PAD_LEFT);
         $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
                         VALUES (:user_id, 'Educational Assistance Submitted', 
@@ -119,233 +114,386 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Educational Assistance - AICS</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Educational Assistance - AICS | Palayan-Kalinga Hub</title>
+    <meta name="description" content="Apply for Educational Assistance under AICS – support for school supplies, tuition fees, and other educational needs of students.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/aics-enhanced.css">
     <style>
         :root {
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
+            --accent: #1565c0;
+            --accent-light: #1976d2;
+            --accent-dark: #0d47a1;
+            --accent-rgb: 21, 101, 192;
             --midnight: #0F414A;
-            --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-200: #E4E7E9;
-            --gray-600: #6B7A8A;
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --radius-card: 24px;
-            --radius-element: 16px;
+            --midnight-light: #1a6a78;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--gray-50); }
-
-        .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-        .simple-header { background: var(--white); padding: 16px 24px; border-bottom: 1px solid var(--gray-200); position: sticky; top: 0; z-index: 100; }
-        .back-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--gray-50); padding: 10px 20px; border-radius: 40px; text-decoration: none; color: var(--midnight); font-weight: 500; transition: all 0.3s; border: 1px solid var(--gray-200); }
-        .back-btn:hover { background: var(--midnight); color: white; transform: translateX(-3px); }
-        .page-header { background: linear-gradient(135deg, var(--midnight) 0%, #1a6a78 100%); color: white; padding: 60px 0; text-align: center; }
-        .page-header h1 { font-size: 2rem; font-weight: 800; margin-bottom: 10px; }
-        .page-header p { font-size: 0.9rem; opacity: 0.9; }
-        .content-wrapper { display: grid; grid-template-columns: 1fr 1.5fr; gap: 30px; padding: 60px 0; }
-        .requirements-section { background: white; border-radius: var(--radius-card); padding: 28px; box-shadow: var(--shadow-md); border: 1px solid var(--gray-200); position: sticky; top: 100px; height: fit-content; }
-        .requirements-section h2 { color: var(--midnight); margin-bottom: 20px; border-bottom: 2px solid var(--maroon); padding-bottom: 10px; }
-        .requirements-list { list-style: none; padding: 0; }
-        .requirements-list li { padding: 8px 0; padding-left: 25px; position: relative; color: var(--gray-600); border-bottom: 1px dashed var(--gray-200); }
-        .requirements-list li:before { content: "✓"; position: absolute; left: 0; color: var(--maroon); font-weight: bold; }
-        .note-box { background: rgba(216,186,152,0.15); padding: 15px; border-radius: var(--radius-element); margin-top: 20px; border-left: 4px solid #D8BA98; }
-        .application-section { background: white; border-radius: var(--radius-card); padding: 28px; box-shadow: var(--shadow-md); border: 1px solid var(--gray-200); }
-        .application-section h2 { color: var(--midnight); margin-bottom: 20px; border-bottom: 2px solid var(--maroon); padding-bottom: 10px; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; margin-bottom: 8px; color: var(--gray-700); font-weight: 600; font-size: 0.85rem; }
-        .form-group label i { color: var(--maroon); margin-right: 5px; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 2px solid var(--gray-200); border-radius: var(--radius-element); font-size: 0.95rem; font-family: inherit; }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--midnight); }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .document-upload { background: var(--gray-50); padding: 15px; border-radius: var(--radius-element); margin-bottom: 15px; border: 1px solid var(--gray-200); }
-        .document-upload label { font-weight: 600; display: block; margin-bottom: 8px; }
-        .document-upload small { display: block; margin-top: 5px; color: var(--gray-600); font-size: 0.7rem; }
-        .btn-submit { background: var(--maroon); color: white; padding: 14px; border: none; border-radius: 40px; font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.3s; margin-top: 10px; }
-        .btn-submit:hover { background: var(--maroon-light); transform: translateY(-2px); }
-        .alert { padding: 15px; border-radius: var(--radius-element); margin-bottom: 20px; }
-        .alert-success { background: #D4EDDA; color: #155724; border: 1px solid #C3E6CB; }
-        .alert-error { background: #F8D7DA; color: #721C24; border: 1px solid #F5C6CB; }
-        .alert-info { background: #CCE5FF; color: #004085; border: 1px solid #B8DAFF; }
-        .pending-card { background: #FFF3CD; border: 1px solid #FFC107; border-radius: var(--radius-element); padding: 15px; margin-bottom: 20px; }
-        .pending-card a { background: var(--maroon); color: white; padding: 8px 20px; border-radius: 40px; text-decoration: none; font-size: 0.85rem; font-weight: 600; display: inline-block; margin-top: 10px; }
-        .pending-card a:hover { background: var(--maroon-light); }
-        @media (max-width: 992px) { .content-wrapper { grid-template-columns: 1fr; } .requirements-section { position: static; } .form-row { grid-template-columns: 1fr; } }
+        .aics-hero { background: linear-gradient(135deg, #0d47a1 0%, #1565c0 55%, #0F414A 100%); }
     </style>
 </head>
 <body>
-    <div class="simple-header">
-        <div class="container">
+
+    <!-- Unified Navigation Bar -->
+    <?php include __DIR__ . '/includes/navbar.php'; ?>
+
+    <nav class="aics-topnav">
+        <div class="aics-topnav-inner">
+            <div class="aics-breadcrumb">
+                <a href="services.php">Services</a>
+                <span class="sep"><i class="fas fa-chevron-right"></i></span>
+                <a href="aics.php">AICS</a>
+                <span class="sep"><i class="fas fa-chevron-right"></i></span>
+                <span class="current">Educational Assistance</span>
+            </div>
             <a href="aics.php" class="back-btn"><i class="fas fa-arrow-left"></i> Back to AICS</a>
         </div>
-    </div>
-    
-    <div class="page-header">
-        <div class="container">
-            <h1><i class="fas fa-graduation-cap"></i> Educational Assistance</h1>
-            <p>Support for school supplies, tuition fees, and other educational needs of students</p>
+    </nav>
+
+    <div class="aics-hero">
+        <div class="aics-hero-inner">
+            <div class="aics-hero-badge"><i class="fas fa-shield-alt"></i> AICS Program</div>
+            <div class="aics-hero-icon"><i class="fas fa-graduation-cap"></i></div>
+            <h1>Educational Assistance</h1>
+            <p>Support for school supplies, tuition fees, enrollment fees, and other educational needs of students from indigent families.</p>
+            <div class="aics-hero-stats">
+                <div class="hero-stat"><strong>₱20,000</strong><span>Max Assistance</span></div>
+                <div class="hero-stat"><strong>3–5 Days</strong><span>Processing Time</span></div>
+                <div class="hero-stat"><strong>Free</strong><span>Application</span></div>
+            </div>
         </div>
     </div>
-    
-    <div class="container">
+
+    <div class="aics-alert-wrapper">
         <?php if($error): ?>
-            <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> <?php echo $error; ?></div>
+        <div class="aics-alert error">
+            <div class="aics-alert-icon"><i class="fas fa-times"></i></div>
+            <div class="aics-alert-body"><strong>Application Failed</strong><p><?php echo $error; ?></p></div>
+        </div>
         <?php endif; ?>
-        
         <?php if($success): ?>
-            <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?php echo $success; ?></div>
+        <div class="aics-alert success">
+            <div class="aics-alert-icon"><i class="fas fa-check"></i></div>
+            <div class="aics-alert-body"><strong>Application Submitted!</strong><p><?php echo $success; ?></p></div>
+        </div>
         <?php endif; ?>
-        
         <?php if($pending_app && $pending_app['status'] != 'rejected'): ?>
-            <div class="pending-card">
-                <i class="fas fa-clock"></i> <strong>You have a pending application!</strong>
-                <p>Your application is currently <strong><?php echo ucfirst($pending_app['status']); ?></strong>. Please wait for staff review.</p>
-                <a href="track-aics.php?tracking=AICS-<?php echo str_pad($pending_app['aics_id'], 6, '0', STR_PAD_LEFT); ?>">
-                    <i class="fas fa-search"></i> Track Application
-                </a>
+        <div class="pending-banner">
+            <div class="pending-banner-icon"><i class="fas fa-clock"></i></div>
+            <div class="pending-banner-content">
+                <strong>You have a pending application</strong>
+                <p>Status: <strong><?php echo ucfirst($pending_app['status']); ?></strong> — Please wait for staff review.</p>
             </div>
+            <a href="track-aics.php?tracking=AICS-<?php echo str_pad($pending_app['aics_id'], 6, '0', STR_PAD_LEFT); ?>" class="pending-banner-action">
+                <i class="fas fa-search"></i> Track Application
+            </a>
+        </div>
         <?php endif; ?>
-        
-        <div class="content-wrapper">
-            <!-- Requirements Section -->
-            <div class="requirements-section">
+    </div>
+
+    <div class="aics-content">
+
+        <aside class="req-panel">
+            <div class="req-panel-header">
                 <h2><i class="fas fa-clipboard-list"></i> Mga Kinakailangan</h2>
-                <div class="note-box">
-                    <strong><i class="fas fa-info-circle"></i> Note:</strong>
-                    <p>Educational Assistance para sa mga mag-aaral na nangangailangan ng suporta.</p>
+                <p>Educational Assistance para sa mga mag-aaral na nangangailangan ng suporta.</p>
+            </div>
+            <div class="req-panel-body">
+
+                <div class="req-group">
+                    <div class="req-group-title">
+                        <span class="group-icon"><i class="fas fa-id-card"></i></span>
+                        General Requirements
+                    </div>
+                    <ul class="req-list">
+                        <li><span class="check"><i class="fas fa-check"></i></span> Valid ID ng Parent / Guardian (Government-issued)</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Authorization Letter (if applicable)</li>
+                    </ul>
                 </div>
-                
-                <h3 style="margin-top: 20px;">📋 General Requirements:</h3>
-                <ul class="requirements-list">
-                    <li>Valid ID ng taong maglalakad/iinterviewhin (Parent/Guardian)</li>
-                    <li>Authorization Letter (if applicable)</li>
-                </ul>
-                
-                <h3>🎓 Requirements ng Mag-aaral:</h3>
-                <ul class="requirements-list">
-                    <li>Validated School ID ng mag-aaral</li>
-                    <li>Enrollment Assessment Form or Certificate of Registration</li>
-                    <li>Statement of Account (kung may balance sa tuition)</li>
-                </ul>
-                
-                <div class="note-box">
-                    <strong><i class="fas fa-exclamation-triangle"></i> Paalala:</strong>
-                    <p>Ang educational assistance ay maaaring ibigay sa anyo ng cash, school supplies, o direktang bayad sa paaralan.</p>
+
+                <div class="req-group">
+                    <div class="req-group-title">
+                        <span class="group-icon"><i class="fas fa-graduation-cap"></i></span>
+                        Requirements ng Mag-aaral
+                    </div>
+                    <ul class="req-list">
+                        <li><span class="check"><i class="fas fa-check"></i></span> Validated School ID ng mag-aaral</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Enrollment Assessment Form or Certificate of Registration</li>
+                        <li><span class="check"><i class="fas fa-check"></i></span> Statement of Account (kung may balance sa tuition)</li>
+                    </ul>
+                </div>
+
+                <div class="req-note">
+                    <div class="note-title"><i class="fas fa-info-circle"></i> Uri ng Tulong</div>
+                    <p>Ang educational assistance ay maaaring ibigay sa anyo ng cash, school supplies, o direktang bayad sa paaralan ng mag-aaral.</p>
                 </div>
             </div>
-            
-            <!-- Application Form -->
-            <div class="application-section">
-                <h2><i class="fas fa-paper-plane"></i> Apply for Educational Assistance</h2>
-                
-                <?php if(!$pending_app || $pending_app['status'] == 'rejected'): ?>
-                <form method="POST" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label><i class="fas fa-user-graduate"></i> Name of Student *</label>
-                        <input type="text" name="student_name" required placeholder="Full name of student">
+        </aside>
+
+        <div class="form-panel">
+            <div class="form-panel-header">
+                <h2>
+                    <span class="panel-icon"><i class="fas fa-graduation-cap"></i></span>
+                    Apply for Educational Assistance
+                </h2>
+                <p>Fill in all student information accurately and attach the supporting documents.</p>
+            </div>
+
+            <?php if(!$pending_app || $pending_app['status'] == 'rejected'): ?>
+            <div class="form-panel-body">
+
+                <div class="form-steps">
+                    <div class="form-step active">
+                        <span class="step-num">1</span>
+                        <span class="step-label">Student Details</span>
                     </div>
-                    
-                    <div class="form-group">
-                        <label><i class="fas fa-school"></i> School Name *</label>
-                        <input type="text" name="school_name" required placeholder="Name of school">
+                    <div class="form-step">
+                        <span class="step-num">2</span>
+                        <span class="step-label">Upload Documents</span>
                     </div>
-                    
-                    <div class="form-row">
+                    <div class="form-step">
+                        <span class="step-num">3</span>
+                        <span class="step-label">Submit & Track</span>
+                    </div>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data" id="applicationForm">
+                    <?php echo csrf_field(); ?>
+
+                    <!-- STEP 1: Details -->
+                    <div class="wizard-step" data-step="1">
+                        <div class="form-section-title"><i class="fas fa-info-circle"></i> Student Information</div>
+
                         <div class="form-group">
-                            <label><i class="fas fa-chalkboard"></i> Grade Level / Year Level *</label>
-                            <select name="grade_level" required>
-                                <option value="">Select grade/year</option>
-                                <option value="Kindergarten">Kindergarten</option>
-                                <option value="Grade 1">Grade 1</option>
-                                <option value="Grade 2">Grade 2</option>
-                                <option value="Grade 3">Grade 3</option>
-                                <option value="Grade 4">Grade 4</option>
-                                <option value="Grade 5">Grade 5</option>
-                                <option value="Grade 6">Grade 6</option>
-                                <option value="Grade 7">Grade 7</option>
-                                <option value="Grade 8">Grade 8</option>
-                                <option value="Grade 9">Grade 9</option>
-                                <option value="Grade 10">Grade 10</option>
-                                <option value="Grade 11">Grade 11</option>
-                                <option value="Grade 12">Grade 12</option>
-                                <option value="1st Year College">1st Year College</option>
-                                <option value="2nd Year College">2nd Year College</option>
-                                <option value="3rd Year College">3rd Year College</option>
-                                <option value="4th Year College">4th Year College</option>
-                                <option value="Graduate School">Graduate School</option>
-                                <option value="Vocational">Vocational / Technical</option>
-                            </select>
+                            <label>
+                                <span class="field-icon"><i class="fas fa-user-graduate"></i></span>
+                                Name of Student <span class="required-star">*</span>
+                            </label>
+                            <input type="text" name="student_name" required placeholder="Full name of the student">
                         </div>
+
+                        <div class="form-group">
+                            <label>
+                                <span class="field-icon"><i class="fas fa-school"></i></span>
+                                School Name <span class="required-star">*</span>
+                            </label>
+                            <input type="text" name="school_name" required placeholder="Name of the school or university">
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label>
+                                    <span class="field-icon"><i class="fas fa-chalkboard"></i></span>
+                                    Grade Level / Year Level <span class="required-star">*</span>
+                                </label>
+                                <select name="grade_level" required>
+                                    <option value="">— Select grade/year —</option>
+                                    <option value="Kindergarten">Kindergarten</option>
+                                    <option value="Grade 1">Grade 1</option>
+                                    <option value="Grade 2">Grade 2</option>
+                                    <option value="Grade 3">Grade 3</option>
+                                    <option value="Grade 4">Grade 4</option>
+                                    <option value="Grade 5">Grade 5</option>
+                                    <option value="Grade 6">Grade 6</option>
+                                    <option value="Grade 7">Grade 7</option>
+                                    <option value="Grade 8">Grade 8</option>
+                                    <option value="Grade 9">Grade 9</option>
+                                    <option value="Grade 10">Grade 10</option>
+                                    <option value="Grade 11">Grade 11 (Senior High)</option>
+                                    <option value="Grade 12">Grade 12 (Senior High)</option>
+                                    <option value="1st Year College">1st Year College</option>
+                                    <option value="2nd Year College">2nd Year College</option>
+                                    <option value="3rd Year College">3rd Year College</option>
+                                    <option value="4th Year College">4th Year College</option>
+                                    <option value="Graduate School">Graduate School</option>
+                                    <option value="Vocational">Vocational / Technical</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <span class="field-icon"><i class="fas fa-calendar-alt"></i></span>
+                                    School Year <span class="required-star">*</span>
+                                </label>
+                                <input type="text" name="school_year" placeholder="e.g., 2024-2025" required>
+                            </div>
+                        </div>
+
+                        <div class="form-section-title"><i class="fas fa-peso-sign"></i> Financial Information</div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label>
+                                    <span class="field-icon"><i class="fas fa-peso-sign"></i></span>
+                                    Amount Requested (₱) <span class="required-star">*</span>
+                                </label>
+                                <input type="number" name="amount_requested" min="500" max="20000" step="100" required placeholder="0.00">
+                                <div class="form-hint"><i class="fas fa-info-circle"></i> Maximum ₱20,000 subject to approval</div>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <span class="field-icon"><i class="fas fa-file-invoice"></i></span>
+                                    Tuition Fee Balance (if applicable)
+                                </label>
+                                <input type="number" name="tuition_fee" min="0" step="100" placeholder="0.00">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <span class="field-icon"><i class="fas fa-align-left"></i></span>
+                                Purpose / Explanation <span class="required-star">*</span>
+                            </label>
+                            <textarea name="purpose" rows="5" required placeholder="Explain why you need educational assistance. Include the student's academic performance, family financial situation, and how this will help..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: Document Uploads -->
+                    <div class="wizard-step" data-step="2">
+                        <div class="upload-section">
+                            <div class="form-section-title"><i class="fas fa-upload"></i> Upload Required Documents</div>
+
+                            <div class="upload-grid">
+                                <div class="upload-zone" id="zone-valid_id">
+                                    <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required onchange="markUploaded(this,'zone-valid_id')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-id-card"></i></div>
+                                        <div class="upload-zone-meta"><strong>Valid ID (Parent/Guardian)</strong><span>Government-issued ID</span></div>
+                                        <span class="upload-required-badge">Required</span>
+                                    </div>
+                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB</div>
+                                </div>
+
+                                <div class="upload-zone" id="zone-school_id">
+                                    <input type="file" name="school_id" accept=".pdf,.jpg,.jpeg,.png" required onchange="markUploaded(this,'zone-school_id')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-id-badge"></i></div>
+                                        <div class="upload-zone-meta"><strong>Validated School ID</strong><span>Student's current school ID</span></div>
+                                        <span class="upload-required-badge">Required</span>
+                                    </div>
+                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB</div>
+                                </div>
+
+                                <div class="upload-zone" id="zone-enrollment_form">
+                                    <input type="file" name="enrollment_form" accept=".pdf,.jpg,.jpeg,.png" required onchange="markUploaded(this,'zone-enrollment_form')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-file-alt"></i></div>
+                                        <div class="upload-zone-meta"><strong>Enrollment Assessment Form</strong><span>Certificate of Enrollment / Registration</span></div>
+                                        <span class="upload-required-badge">Required</span>
+                                    </div>
+                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB</div>
+                                </div>
+
+                                <div class="upload-zone" id="zone-statement_of_account">
+                                    <input type="file" name="statement_of_account" accept=".pdf,.jpg,.jpeg,.png" onchange="markUploaded(this,'zone-statement_of_account')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-file-invoice"></i></div>
+                                        <div class="upload-zone-meta"><strong>Statement of Account</strong><span>If there is a tuition balance</span></div>
+                                        <span class="upload-optional-badge">Optional</span>
+                                    </div>
+                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB</div>
+                                </div>
+
+                                <div class="upload-zone" id="zone-authorization_letter">
+                                    <input type="file" name="authorization_letter" accept=".pdf,.jpg,.jpeg,.png" onchange="markUploaded(this,'zone-authorization_letter')">
+                                    <div class="upload-zone-header">
+                                        <div class="upload-icon"><i class="fas fa-file-signature"></i></div>
+                                        <div class="upload-zone-meta"><strong>Authorization Letter</strong><span>If not the parent applying</span></div>
+                                        <span class="upload-optional-badge">Optional</span>
+                                    </div>
+                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3: Review and Submit -->
+                    <div class="wizard-step" data-step="3">
+                        <div class="form-section-title"><i class="fas fa-check-circle"></i> Review Your Application</div>
                         
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar-alt"></i> School Year *</label>
-                            <input type="text" name="school_year" placeholder="e.g., 2024-2025" required>
+                        <div class="summary-intro">
+                            <i class="fas fa-shield-alt"></i>
+                            <div class="summary-intro-text">
+                                <strong>Paki-rebyu ang iyong mga detalye</strong>
+                                <p>Tiyaking tama ang lahat ng impormasyon bago isumite ang aplikasyon upang maiwasan ang anumang pagkaantala.</p>
+                            </div>
+                        </div>
+
+                        <div id="summary-preview-table"></div>
+
+                        <div class="summary-confirmation">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="declaration-check" required>
+                                <span>Ako ay nagpapatunay na ang lahat ng nakasulat sa aplikasyong ito ay totoo at tama sa abot ng aking kaalaman.</span>
+                            </label>
+                        </div>
+
+                        <div class="submit-section">
+                            <button type="submit" name="submit_application" class="btn-submit" id="submitBtn" disabled>
+                                <span class="btn-icon"><i class="fas fa-paper-plane"></i></span>
+                                Submit Educational Assistance Application
+                            </button>
                         </div>
                     </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label><i class="fas fa-money-bill"></i> Amount Requested *</label>
-                            <input type="number" name="amount_requested" min="500" max="20000" step="100" required placeholder="Enter amount">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-file-invoice"></i> Tuition Fee (if applicable)</label>
-                            <input type="number" name="tuition_fee" min="0" step="100" placeholder="Optional">
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label><i class="fas fa-align-left"></i> Purpose / Explanation *</label>
-                        <textarea name="purpose" rows="4" required placeholder="Explain why you need educational assistance..."></textarea>
-                    </div>
-                    
-                    <h3 style="margin: 25px 0 15px; color: var(--midnight);">
-                        <i class="fas fa-upload"></i> Upload Required Documents
-                    </h3>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-id-card"></i> Valid ID (Parent/Guardian) *</label>
-                        <input type="file" name="valid_id" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>Government-issued ID (PDF, JPG, PNG up to 5MB)</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-id-badge"></i> Validated School ID *</label>
-                        <input type="file" name="school_id" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>School ID of the student</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-alt"></i> Enrollment Assessment Form *</label>
-                        <input type="file" name="enrollment_form" accept=".pdf,.jpg,.jpeg,.png" required>
-                        <small>Certificate of Enrollment or Registration</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-invoice"></i> Statement of Account (if applicable)</label>
-                        <input type="file" name="statement_of_account" accept=".pdf,.jpg,.jpeg,.png">
-                        <small>If there is a balance on tuition</small>
-                    </div>
-                    
-                    <div class="document-upload">
-                        <label><i class="fas fa-file-signature"></i> Authorization Letter (if applicable)</label>
-                        <input type="file" name="authorization_letter" accept=".pdf,.jpg,.jpeg,.png">
-                        <small>If not the parent applying</small>
-                    </div>
-                    
-                    <button type="submit" name="submit_application" class="btn-submit">
-                        <i class="fas fa-paper-plane"></i> Submit Application
-                    </button>
                 </form>
-                <?php else: ?>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> You already have a pending application. Please wait for staff review before submitting another.
-                    </div>
-                <?php endif; ?>
+            </div>
+            <?php else: ?>
+            <div class="form-panel-body">
+                <div class="already-pending">
+                    <div class="already-pending-icon"><i class="fas fa-clock"></i></div>
+                    <h3>Application Under Review</h3>
+                    <p>You already have a pending Educational Assistance application. Please wait for the staff to review your request before submitting another one.</p>
+                    <a href="track-aics.php?tracking=AICS-<?php echo str_pad($pending_app['aics_id'], 6, '0', STR_PAD_LEFT); ?>" class="btn-track">
+                        <i class="fas fa-search"></i> Track Your Application
+                    </a>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+
+    </div>
+
+    <footer class="aics-footer">
+        <div class="aics-footer-inner">
+            <div class="footer-brand"><i class="fas fa-hands-helping"></i> Palayan-Kalinga Hub — AICS Division</div>
+            <div class="footer-links">
+                <a href="aics.php">AICS Home</a>
+                <a href="track-aics.php">Track Application</a>
+                <a href="contact.php">Contact Us</a>
             </div>
         </div>
-    </div>
+        <div class="footer-note">Assistance to Individuals in Crisis Situation (AICS) — City Social Welfare and Development Office (CSWDO)</div>
+    </footer>
+
+    <script>
+        function markUploaded(input, zoneId) {
+            const zone = document.getElementById(zoneId);
+            if (input.files && input.files.length > 0) {
+                zone.classList.add('uploaded');
+                const meta = zone.querySelector('.upload-zone-meta span');
+                if (meta) meta.textContent = '✓ ' + input.files[0].name;
+            } else {
+                zone.classList.remove('uploaded');
+            }
+        }
+
+        document.querySelectorAll('.upload-zone').forEach(zone => {
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', () => zone.classList.remove('drag-over'));
+        });
+
+        // Toggle submit button based on declaration check
+        const declCheck = document.getElementById('declaration-check');
+        const submitBtn = document.getElementById('submitBtn');
+        if (declCheck && submitBtn) {
+            declCheck.addEventListener('change', function() {
+                submitBtn.disabled = !this.checked;
+            });
+        }
+    </script>
+
+    <!-- Include Wizard Logic JS -->
+    <script src="js/aics-wizard.js"></script>
+
 </body>
 </html>

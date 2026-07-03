@@ -25,9 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
                 <style>
                     body { font-family: Arial, sans-serif; }
                     .container { max-width: 600px; margin: 0 auto; }
-                    .header { background: #003366; color: white; padding: 20px; text-align: center; }
-                    .content { padding: 20px; background: #f9f9f9; }
-                    .footer { text-align: center; padding: 20px; color: #666; }
+                    .header { background: #0F414A; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                    .content { padding: 20px; background: #f9f9f9; border: 1px solid #eee; }
+                    .footer { text-align: center; padding: 20px; color: #666; font-size: 0.8rem; }
                 </style>
             </head>
             <body>
@@ -69,511 +69,463 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contact Us - One Palayan-Kalinga Hub</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        /* ========== PROFESSIONAL COLOR PALETTE ========== */
+        /* ========== MODERN PROFESSIONAL PALETTE & VARIABLES ========== */
         :root {
             --tan: #D8BA98;
             --maroon: #7F0303;
             --alabaster: #EFE8DF;
             --light-blue: #96C0CE;
             --midnight: #0F414A;
+            --maroon-dark: #5a0202;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-100: #F1F3F8;
-            --gray-200: #E4E7E9;
-            --gray-600: #6B7A8A;
-            --gray-700: #3A4A5A;
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08);
+            
+            /* Light mode default tokens */
+            --bg-primary: #F8F9FC;
+            --bg-secondary: #FFFFFF;
+            --bg-card: #FFFFFF;
+            --text-primary: #1F2937;
+            --text-secondary: #374151;
+            --text-muted: #6B7A8A;
+            --border-color: #E4E7EF;
+            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);
             --radius-card: 24px;
             --radius-element: 16px;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* Dark mode overrides */
+        body.dark-mode, [data-theme="dark"] body {
+            --bg-primary: #0D1117;
+            --bg-secondary: #161B22;
+            --bg-card: #161B22;
+            --text-primary: #F0F6FC;
+            --text-secondary: #C9D1D9;
+            --text-muted: #8B949E;
+            --border-color: #30363D;
+            --white: #161B22;
+            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.2);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+            --alabaster: #21262D;
+            --midnight: #0F414A;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--white);
-            color: var(--gray-700);
-            line-height: 1.5;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            line-height: 1.6;
         }
 
-        .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-
-        /* ========== NAVBAR STYLES ========== */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            z-index: 1000;
-            transition: all 0.3s ease-in-out;
-            background: var(--midnight);
-            border-bottom: none;
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
         }
 
-        .navbar.scrolled {
-            background: var(--white);
-            box-shadow: var(--shadow-md);
-            padding: 0.7rem 2rem;
-            border-bottom: 1px solid var(--gray-200);
+        /* Header Fix for Floating Navbar */
+        .header-spacer {
+            height: 90px;
+        }
+        @media (max-width: 768px) {
+            .header-spacer { height: 75px; }
         }
 
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        /* Logo with white circle background - from login page */
-        .logo-circle {
-            width: 65px;
-            height: 65px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.3s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .logo-circle:hover {
-            transform: scale(1.05);
-        }
-
-        .logo-circle img {
-            width: 63px;
-            height: auto;
-        }
-
-        .logo-text h2 {
-            font-size: 1.3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, white 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            letter-spacing: -0.3px;
-        }
-
-        .logo-text span {
-            font-size: 0.7rem;
-            font-weight: 500;
-            background: var(--tan);
-            padding: 2px 10px;
-            border-radius: 40px;
-            margin-left: 8px;
-            color: #3b2a1f;
-        }
-
-        .navbar.scrolled .logo-text h2 {
-            background: linear-gradient(135deg, var(--midnight) 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-
-        .nav-links a {
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.85);
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .nav-links a:hover {
-            color: white;
-        }
-
-        .navbar.scrolled .nav-links a {
-            color: var(--gray-700);
-        }
-
-        .navbar.scrolled .nav-links a:hover {
-            color: var(--maroon);
-        }
-
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .profile-icon {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.12);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            text-decoration: none;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        .profile-icon i { font-size: 1.1rem; }
-        .profile-icon span { font-size: 0.85rem; }
-        .profile-icon:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-2px); }
-        .logout-icon {
-            background: rgba(255, 255, 255, 0.1);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            color: white;
-            transition: all 0.3s;
-        }
-        .logout-icon:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
-        .navbar.scrolled .profile-icon { background: var(--alabaster); color: var(--midnight); }
-        .navbar.scrolled .profile-icon:hover { background: var(--tan); }
-        .navbar.scrolled .logout-icon { background: var(--gray-100); color: var(--maroon); }
-        .navbar.scrolled .logout-icon:hover { background: var(--gray-200); }
-
-        .login-btn {
-            background: var(--maroon);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .login-btn:hover { background: var(--maroon-light); transform: translateY(-2px); }
-        .navbar.scrolled .login-btn { background: var(--maroon); color: white !important; }
-        .navbar.scrolled .login-btn:hover { background: var(--maroon-light); }
-
-        .register-btn {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .register-btn:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-2px); }
-        .navbar.scrolled .register-btn { background: var(--alabaster); color: var(--midnight) !important; }
-        .navbar.scrolled .register-btn:hover { background: var(--tan); }
-
-        .hamburger {
-            display: none;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 8px;
-        }
-        .hamburger span {
-            display: block;
-            width: 25px;
-            height: 2px;
-            margin: 5px 0;
-            background: white;
-            transition: all 0.3s;
-        }
-        .navbar.scrolled .hamburger span { background: var(--midnight); }
-
-        /* Hero Section */
+        /* Hero Header */
         .page-header {
-            background: linear-gradient(135deg, var(--midnight) 0%, #1a6a78 100%);
+            background: linear-gradient(135deg, var(--midnight) 0%, #155d6a 50%, var(--maroon-dark) 100%);
             color: white;
-            padding: 140px 0 60px;
+            padding: 80px 0;
             text-align: center;
+            border-bottom: 5px solid var(--maroon);
+            position: relative;
+            overflow: hidden;
         }
-        .page-header h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 15px; }
-        .page-header p { font-size: 1rem; max-width: 600px; margin: 0 auto; opacity: 0.9; }
+
+        .page-header::before {
+            content: '✉️';
+            font-size: 16rem;
+            position: absolute;
+            left: -20px;
+            bottom: -50px;
+            opacity: 0.05;
+            transform: rotate(-15deg);
+            pointer-events: none;
+        }
+
+        .page-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 850;
+            margin-bottom: 16px;
+            letter-spacing: -0.03em;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .page-header p {
+            font-size: clamp(1rem, 2vw, 1.15rem);
+            max-width: 600px;
+            margin: 0 auto;
+            opacity: 0.95;
+        }
 
         /* Contact Layout */
         .contact-layout {
             display: grid;
-            grid-template-columns: 1fr 1.5fr;
+            grid-template-columns: 1fr 1.3fr;
             gap: 40px;
             padding: 60px 0;
         }
 
         /* Contact Info Cards */
         .info-section {
-            background: white;
+            background: var(--bg-card);
             border-radius: var(--radius-card);
-            padding: 30px;
+            padding: 40px;
             box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-200);
+            border: 1px solid var(--border-color);
         }
+
         .info-section h2 {
-            color: var(--midnight);
-            font-size: 1.5rem;
-            margin-bottom: 25px;
+            color: var(--text-primary);
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
             border-bottom: 2px solid var(--maroon);
             padding-bottom: 12px;
         }
+
         .contact-info-item {
             display: flex;
-            gap: 15px;
-            margin-bottom: 25px;
-            padding: 15px;
-            background: var(--gray-50);
+            gap: 20px;
+            margin-bottom: 24px;
+            padding: 20px;
+            background: var(--bg-primary);
             border-radius: var(--radius-element);
-            transition: all 0.3s;
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
-        .contact-info-item:hover { transform: translateX(5px); background: var(--gray-100); }
+
+        .contact-info-item:hover {
+            transform: translateX(6px);
+            box-shadow: var(--shadow-sm);
+            border-color: var(--maroon);
+        }
+
         .contact-icon {
-            width: 50px;
-            height: 50px;
+            width: 54px;
+            height: 54px;
             background: var(--maroon);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(127, 3, 3, 0.2);
         }
+
+        body.dark-mode .contact-icon {
+            background: #ff6b6b;
+            color: #0D1117;
+            box-shadow: 0 4px 10px rgba(255, 107, 107, 0.2);
+        }
+
         .contact-details h3 {
-            color: var(--midnight);
-            font-size: 1rem;
-            margin-bottom: 5px;
+            color: var(--text-primary);
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 6px;
         }
+
         .contact-details p {
-            color: var(--gray-600);
-            font-size: 0.85rem;
-            line-height: 1.5;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
         }
 
         /* Office Hours */
         .office-hours {
             margin-top: 30px;
-            padding: 20px;
+            padding: 24px;
             background: var(--alabaster);
             border-radius: var(--radius-element);
+            border: 1px solid var(--border-color);
         }
+
         .office-hours h3 {
             color: var(--maroon);
-            font-size: 1rem;
-            margin-bottom: 15px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 18px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
-        .hours-list { list-style: none; }
+
+        body.dark-mode .office-hours h3 {
+            color: #ff6b6b;
+        }
+
+        .hours-list {
+            list-style: none;
+        }
+
         .hours-list li {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px dashed var(--gray-200);
-            color: var(--gray-600);
-            font-size: 0.85rem;
+            padding: 10px 0;
+            border-bottom: 1px dashed var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
         }
-        .hours-list li:last-child { border-bottom: none; }
 
-        /* Map */
+        .hours-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* Social Links */
+        .social-links {
+            display: flex;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .social-link {
+            width: 44px;
+            height: 44px;
+            background: var(--bg-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--maroon);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s;
+            text-decoration: none;
+            font-size: 1.1rem;
+        }
+
+        body.dark-mode .social-link {
+            color: #ff6b6b;
+        }
+
+        .social-link:hover {
+            background: var(--maroon);
+            color: white;
+            transform: translateY(-4px);
+            border-color: var(--maroon);
+        }
+
+        body.dark-mode .social-link:hover {
+            background: #ff6b6b;
+            color: #0D1117;
+            border-color: #ff6b6b;
+        }
+
+        /* Map styling */
         .map-container {
             margin-top: 30px;
             border-radius: var(--radius-element);
             overflow: hidden;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
+
         .map-container iframe {
             width: 100%;
             height: 250px;
             border: none;
         }
 
-        /* Contact Form */
+        /* Contact Form Section */
         .form-section {
-            background: white;
+            background: var(--bg-card);
             border-radius: var(--radius-card);
-            padding: 30px;
+            padding: 40px;
             box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-200);
+            border: 1px solid var(--border-color);
         }
+
         .form-section h2 {
-            color: var(--midnight);
-            font-size: 1.5rem;
-            margin-bottom: 25px;
+            color: var(--text-primary);
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
             border-bottom: 2px solid var(--maroon);
             padding-bottom: 12px;
         }
-        .form-group { margin-bottom: 20px; }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            color: var(--gray-700);
+            color: var(--text-primary);
             font-weight: 600;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
-        .form-group label i { color: var(--maroon); margin-right: 5px; }
+
+        .form-group label i {
+            color: var(--maroon);
+            margin-right: 6px;
+        }
+
+        body.dark-mode .form-group label i {
+            color: #ff6b6b;
+        }
+
         .form-group input, .form-group textarea {
             width: 100%;
-            padding: 12px 14px;
-            border: 2px solid var(--gray-200);
+            padding: 14px;
+            border: 2px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
             border-radius: var(--radius-element);
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             transition: all 0.3s;
             font-family: inherit;
-        }
-        .form-group input:focus, .form-group textarea:focus {
             outline: none;
-            border-color: var(--midnight);
-            box-shadow: 0 0 0 3px rgba(15,65,74,0.1);
         }
+
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: var(--midnight);
+            box-shadow: 0 0 0 4px rgba(15, 65, 74, 0.15);
+            background: var(--bg-card);
+        }
+
         .btn-submit {
             background: var(--maroon);
             color: white;
-            padding: 14px 28px;
+            padding: 16px 32px;
             border: none;
             border-radius: 40px;
-            font-size: 1rem;
-            font-weight: 600;
+            font-size: 1.05rem;
+            font-weight: 700;
             cursor: pointer;
             width: 100%;
             transition: all 0.3s;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
+            box-shadow: 0 6px 20px rgba(127, 3, 3, 0.25);
         }
-        .btn-submit:hover { background: var(--maroon-light); transform: translateY(-2px); }
 
+        .btn-submit:hover {
+            background: var(--maroon-light);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(127, 3, 3, 0.35);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        /* Alert Banners */
         .alert {
-            padding: 15px 20px;
+            padding: 16px 20px;
             border-radius: var(--radius-element);
-            margin-bottom: 20px;
-        }
-        .alert-success { background: #D4EDDA; color: #155724; border: 1px solid #C3E6CB; }
-        .alert-error { background: #F8D7DA; color: #721C24; border: 1px solid #F5C6CB; }
-
-        /* Social Links */
-        .social-links {
-            display: flex;
-            gap: 15px;
-            margin-top: 20px;
-        }
-        .social-link {
-            width: 40px;
-            height: 40px;
-            background: var(--gray-200);
-            border-radius: 50%;
+            margin-bottom: 24px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            color: var(--maroon);
-            transition: all 0.3s;
-            text-decoration: none;
+            gap: 12px;
+            font-weight: 500;
+            animation: slideDown 0.3s ease;
         }
-        .social-link:hover { background: var(--maroon); color: white; transform: translateY(-3px); }
 
-        /* Footer */
-        .footer {
-            background: var(--midnight);
-            color: white;
-            padding: 60px 0 20px;
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-12px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1.5fr;
-            gap: 40px;
-            margin-bottom: 40px;
-        }
-        .footer-section h3, .footer-section h4 { margin-bottom: 20px; font-weight: 700; }
-        .footer-section h3 { color: var(--tan); font-size: 1.2rem; }
-        .footer-section h4 { color: var(--light-blue); font-size: 1rem; }
-        .footer-section p { color: rgba(255,255,255,0.7); margin-bottom: 15px; font-size: 0.85rem; }
-        .footer-section ul { list-style: none; }
-        .footer-section ul li { margin-bottom: 10px; }
-        .footer-section a { color: rgba(255,255,255,0.6); text-decoration: none; transition: color 0.3s; font-size: 0.85rem; }
-        .footer-section a:hover { color: var(--tan); }
-        .contact-number, .email { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); font-size: 0.85rem; }
-        .footer-bottom { text-align: center; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); font-size: 0.75rem; }
 
+        .alert-success {
+            background: #d1e7dd;
+            color: #0f5132;
+            border: 1px solid #badbcc;
+        }
+
+        body.dark-mode .alert-success {
+            background: rgba(15, 81, 50, 0.2);
+            color: #75b798;
+            border-color: rgba(117, 183, 152, 0.25);
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #842029;
+            border: 1px solid #f5c2c7;
+        }
+
+        body.dark-mode .alert-error {
+            background: rgba(132, 32, 41, 0.2);
+            color: #ea868f;
+            border-color: rgba(234, 134, 143, 0.25);
+        }
+
+        /* Responsive Layouts */
         @media (max-width: 992px) {
-            .contact-layout { grid-template-columns: 1fr; gap: 30px; }
-            .nav-links {
-                display: none;
-                width: 100%;
-                flex-direction: column;
-                padding: 20px 0;
-                gap: 15px;
+            .contact-layout {
+                grid-template-columns: 1fr;
+                gap: 40px;
             }
-            .nav-links.active { display: flex; }
-            .hamburger { display: block; }
         }
+
         @media (max-width: 768px) {
-            .navbar { padding: 0.8rem 1.5rem; }
-            .navbar.scrolled { padding: 0.6rem 1.5rem; }
-            .page-header { padding: 120px 0 40px; }
-            .page-header h1 { font-size: 1.8rem; }
-            .contact-info-item { flex-direction: column; text-align: center; }
-            .contact-icon { margin: 0 auto; }
-            .hours-list li { flex-direction: column; text-align: center; gap: 5px; }
-            .footer-grid { grid-template-columns: 1fr; gap: 30px; }
-            .logo-circle {
-                width: 38px;
-                height: 38px;
+            .page-header {
+                padding: 60px 0;
             }
-            .logo-circle img {
-                width: 26px;
+            .contact-info-item {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
             }
-            .logo-text h2 {
-                font-size: 1rem;
+            .hours-list li {
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar" id="navbar">
-        <div class="logo-area">
-            <div class="logo-circle">
-                <img src="images/logo.png" alt="One Palayan-Kalinga Hub Logo" onerror="this.src='https://placehold.co/32x32?text=PKH'">
-            </div>
-            <div class="logo-text">
-                <h2>ONE PALAYAN-KALINGA HUB</h2>
-                <span>CSWDO Palayan City</span>
-            </div>
-        </div>
-        <div class="nav-links" id="navLinks">
-            <a href="index.php">Home</a>
-            <a href="services.php">Services</a>
-            <a href="about.php">About</a>
-            <a href="contact.php" class="active">Contact</a>
-            
-            <?php if(isLoggedIn()): ?>
-                <div class="user-menu">
-                    <a href="dashboard.php" class="profile-icon">
-                        <i class="fas fa-user-circle"></i>
-                        <span><?php echo htmlspecialchars($_SESSION['full_name']); ?></span>
-                    </a>
-                    
-                </div>
-            <?php else: ?>
-                <a href="login.php" class="login-btn">Login</a>
-                <a href="register.php" class="register-btn">Register</a>
-            <?php endif; ?>
-        </div>
-        <button class="hamburger" id="hamburger"><span></span><span></span><span></span></button>
-    </nav>
 
+    <!-- Global Navigation -->
+    <?php include 'includes/navbar.php'; ?>
+
+    <!-- Header Spacer for Sticky Navbar -->
+    <div class="header-spacer"></div>
+
+    <!-- Hero Header -->
     <div class="page-header">
         <div class="container">
             <h1><i class="fas fa-envelope"></i> Contact Us</h1>
-            <p>We're here to help! Reach out to us for any questions or concerns.</p>
+            <p>We're here to help! Reach out to us for any questions, concerns, or support inquiries.</p>
         </div>
     </div>
     
-    <div class="container">
+    <div class="container" style="padding-top: 40px;">
         <?php if($success): ?>
             <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?php echo $success; ?></div>
         <?php endif; ?>
@@ -584,13 +536,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
         <div class="contact-layout">
             <!-- Contact Information -->
             <div class="info-section">
-                <h2><i class="fas fa-address-card"></i> Contact Information</h2>
+                <h2><i class="fas fa-address-card"></i> Contact Info</h2>
                 
                 <div class="contact-info-item">
                     <div class="contact-icon"><i class="fas fa-map-marker-alt"></i></div>
                     <div class="contact-details">
                         <h3>Office Address</h3>
-                        <p>City Social Welfare and Development Office<br>Palayan City, Nueva Ecija, Philippines 3132</p>
+                        <p>City Social Welfare and Development Office<br>Palayan City Hall, Nueva Ecija, Philippines 3132</p>
                     </div>
                 </div>
                 
@@ -621,20 +573,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
                 </div>
                 
                 <div class="social-links">
-                    <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
-                    <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
-                    <a href="#" class="social-link"><i class="fab fa-viber"></i></a>
-                    <a href="#" class="social-link"><i class="fab fa-facebook-messenger"></i></a>
+                    <a href="#" class="social-link" title="Facebook"><i class="fab fa-facebook-f"></i></a>
+                    <a href="#" class="social-link" title="Twitter"><i class="fab fa-twitter"></i></a>
+                    <a href="#" class="social-link" title="Viber"><i class="fab fa-viber"></i></a>
+                    <a href="#" class="social-link" title="Messenger"><i class="fab fa-facebook-messenger"></i></a>
                 </div>
                 
                 <div class="map-container">
-                    <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d123456!2d121.0!3d15.5!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTXCsDMwJzAwLjAiTiAxMjHCsDAwJzAwLjAiRQ!5e0!3m2!1sen!2sph!4v1234567890" allowfullscreen="" loading="lazy"></iframe>
+                    <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3838.747942698715!2d121.09641737593237!3d15.541062085065403!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x33b18f8ab6230f89%3A0xe54e60b1338dfa0c!2sPalayan%20City%20Hall!5e0!3m2!1sen!2sph!4v1700000000000!5m2!1sen!2sph" allowfullscreen="" loading="lazy"></iframe>
                 </div>
             </div>
             
             <!-- Contact Form -->
             <div class="form-section">
-                <h2><i class="fas fa-paper-plane"></i> Send us a Message</h2>
+                <h2><i class="fas fa-paper-plane"></i> Send a Message</h2>
                 
                 <form method="POST" action="">
                     <div class="form-group">
@@ -662,50 +614,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
                     </button>
                 </form>
                 
-                <div style="margin-top: 20px; padding: 15px; background: var(--gray-50); border-radius: var(--radius-element);">
-                    <p style="font-size: 0.8rem; color: var(--gray-600);">
-                        <i class="fas fa-clock"></i> We typically respond within 1-2 business days.
-                        For urgent concerns, please call our office directly.
+                <div style="margin-top: 24px; padding: 20px; background: var(--alabaster); border: 1px solid var(--border-color); border-radius: var(--radius-element);">
+                    <p style="font-size: 0.88rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-info-circle" style="color: var(--midnight);"></i>
+                        We typically respond within 1-2 business days. For immediate assistance, please call us directly.
                     </p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-section"><h3>ONE PALAYAN-KALINGA HUB</h3><p>CSWDO Palayan City — Integrated Social Services Platform</p><div><h4>SERVICES</h4><ul><li><a href="appointments.php">Appointment Booking</a></li><li><a href="aics.php">AICS Application</a></li><li><a href="housing.php">Housing Programs</a></li></ul></div></div>
-                <div class="footer-section"><h4>RESOURCES</h4><ul><li><a href="user-guide.php">User Guide</a></li><li><a href="faqs.php">FAQs</a></li><li><a href="privacy-policy.php">Privacy Policy</a></li><li><a href="terms.php">Terms of Service</a></li></ul></div>
-                <div class="footer-section"><h4>CONTACT US</h4><p>City Social Welfare and Development Office<br>Palayan City, Nueva Ecija, Philippines</p><p class="contact-number"><i class="fas fa-phone"></i> +63 (44) 123 4567</p><p class="email"><i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</p></div>
-            </div>
-            <div class="footer-bottom"><p>&copy; 2026 One Palayan-Kalinga Hub. All rights reserved. | A project of CSWDO Palayan City</p></div>
-        </div>
-    </footer>
+    <!-- Global Footer -->
+    <?php include 'includes/footer.php'; ?>
 
     <script>
-        // Navbar scroll effect
-        window.addEventListener('scroll', function() {
-            const navbar = document.getElementById('navbar');
-            if (window.scrollY > 50) navbar.classList.add('scrolled');
-            else navbar.classList.remove('scrolled');
-        });
-
-        // Mobile menu toggle
-        const hamburger = document.getElementById('hamburger');
-        const navLinks = document.getElementById('navLinks');
-        if (hamburger) {
-            hamburger.addEventListener('click', () => {
-                hamburger.classList.toggle('active');
-                navLinks.classList.toggle('active');
-            });
-        }
-
+        // Auto-fade alerts after 5 seconds
         setTimeout(function() {
             document.querySelectorAll('.alert').forEach(alert => {
-                alert.style.transition = 'opacity 0.5s';
+                alert.style.transition = 'opacity 0.5s, transform 0.5s';
                 alert.style.opacity = '0';
+                alert.style.transform = 'translateY(-10px)';
                 setTimeout(() => alert.remove(), 500);
             });
         }, 5000);

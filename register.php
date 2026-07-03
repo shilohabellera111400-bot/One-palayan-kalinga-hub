@@ -38,6 +38,7 @@ $form_data = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
+    csrf_verify();
     $database = new Database();
     $db = $database->getConnection();
     
@@ -935,6 +936,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
                 </div>
                 
                 <form method="POST" action="" id="registerForm" novalidate>
+                    <?php echo csrf_field(); ?>
                     <div class="form-row">
                         <div class="form-group">
                             <label><i class="fas fa-user"></i> First name <span style="color:#DC2626;">*</span></label>

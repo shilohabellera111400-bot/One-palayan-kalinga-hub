@@ -14,6 +14,7 @@ $success = '';
 
 // Handle password change
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
+    csrf_verify();
     $current_password = $_POST['current_password'];
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
@@ -539,6 +540,7 @@ $initials = substr($initials, 0, 2);
             </div>
             
             <form method="POST" id="passwordForm">
+                <?php echo csrf_field(); ?>
                 <div class="form-group">
                     <label><i class="fas fa-lock"></i> Current Password</label>
                     <input type="password" name="current_password" id="current_password" required>

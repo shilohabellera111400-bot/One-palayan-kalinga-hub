@@ -128,6 +128,65 @@ class Mailer {
         
         return $this->send($user_email, $subject, $body, $appointment['user_id']);
     }
+
+    /**
+     * Send appointment STATUS UPDATE email (when staff changes status)
+     */
+    public function sendAppointmentStatusUpdate($user_email, $user_name, $appointment, $new_status, $notes = '') {
+        $status_labels = [
+            'confirmed'  => ['label' => 'Confirmed',  'color' => '#4CAF50', 'icon' => '✅'],
+            'completed'  => ['label' => 'Completed',  'color' => '#2196F3', 'icon' => '🎉'],
+            'cancelled'  => ['label' => 'Cancelled',  'color' => '#EF5350', 'icon' => '❌'],
+            'no_show'    => ['label' => 'No Show',    'color' => '#FF9800', 'icon' => '⚠️'],
+            'rescheduled'=> ['label' => 'Rescheduled','color' => '#9C27B0', 'icon' => '📅'],
+        ];
+        $s = $status_labels[$new_status] ?? ['label' => ucfirst($new_status), 'color' => '#666', 'icon' => '📋'];
+
+        $tracking = 'APT-' . str_pad($appointment['appointment_id'], 6, '0', STR_PAD_LEFT);
+        $subject  = "Appointment Update ({$s['label']}) – {$tracking}";
+
+        $date_str = isset($appointment['appointment_date'])
+            ? date('F d, Y', strtotime($appointment['appointment_date'])) : 'N/A';
+        $time_str = isset($appointment['appointment_time'])
+            ? date('h:i A', strtotime($appointment['appointment_time'])) : 'N/A';
+
+        $notes_html = $notes
+            ? "<div style='background:#fff8e1;border-left:4px solid #FFC107;padding:14px 18px;border-radius:8px;margin:16px 0;'>
+                 <strong style='color:#856404;'>Staff Note:</strong><br>{$notes}
+               </div>"
+            : '';
+
+        $body = $this->getEmailTemplate(
+            'Appointment Status Update',
+            $user_name,
+            "
+            <div style='text-align:center;margin:20px 0;'>
+                <div style='display:inline-block;background:{$s['color']};color:white;padding:12px 28px;border-radius:50px;font-size:1.1rem;font-weight:700;'>
+                    {$s['icon']} {$s['label']}
+                </div>
+            </div>
+            <div style='background:#f9f9fb;padding:18px;border-radius:10px;margin:16px 0;'>
+                <table style='width:100%;border-collapse:collapse;'>
+                    <tr><td style='padding:9px;border-bottom:1px solid #eee;color:#666;'>Reference</td>
+                        <td style='padding:9px;border-bottom:1px solid #eee;'><code style='background:#7F0303;color:white;padding:3px 10px;border-radius:5px;'>{$tracking}</code></td></tr>
+                    <tr><td style='padding:9px;border-bottom:1px solid #eee;color:#666;'>Service</td>
+                        <td style='padding:9px;border-bottom:1px solid #eee;font-weight:600;'>{$appointment['service_name']}</td></tr>
+                    <tr><td style='padding:9px;border-bottom:1px solid #eee;color:#666;'>Date</td>
+                        <td style='padding:9px;border-bottom:1px solid #eee;'>{$date_str}</td></tr>
+                    <tr><td style='padding:9px;color:#666;'>Time</td>
+                        <td style='padding:9px;'>{$time_str}</td></tr>
+                </table>
+            </div>
+            {$notes_html}
+            <div style='text-align:center;margin:24px 0;'>
+                <a href='http://localhost/palayan_kalinga_hub/my-appointments.php'
+                   style='background:#7F0303;color:white;padding:12px 30px;text-decoration:none;border-radius:30px;font-weight:700;font-size:0.9rem;'>View My Appointments</a>
+            </div>
+            "
+        );
+
+        return $this->send($user_email, $subject, $body, $appointment['user_id'] ?? null);
+    }
     
     /**
      * Send AICS status update email
@@ -310,35 +369,36 @@ class Mailer {
             <meta charset='UTF-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1.0'>
         </head>
-        <body style='margin: 0; padding: 0; font-family: Arial, sans-serif; background: #f4f4f4;'>
-            <div style='max-width: 600px; margin: 20px auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1);'>
+        <body style='margin:0;padding:0;font-family:Inter,Arial,sans-serif;background:#F0F4F8;'>
+            <div style='max-width:600px;margin:24px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.1);'>
+
                 <!-- Header -->
-                <div style='background: linear-gradient(135deg, #003366 0%, #004d99 100%); padding: 30px; text-align: center;'>
-                    <h1 style='color: white; margin: 0; font-size: 24px;'>ONE PALAYAN-KALINGA HUB</h1>
-                    <p style='color: rgba(255,255,255,0.8); margin: 5px 0 0;'>CSWDO Palayan City</p>
+                <div style='background:linear-gradient(135deg, #0F414A 0%, #7F0303 100%);padding:32px 28px;text-align:center;'>
+                    <h1 style='color:white;margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-0.5px;'>ONE PALAYAN-KALINGA HUB</h1>
+                    <p style='color:rgba(255,255,255,0.75);margin:0;font-size:13px;letter-spacing:1px;'>CSWDO &bull; PALAYAN CITY</p>
                 </div>
-                
+
+                <!-- Title Bar -->
+                <div style='background:#7F0303;padding:14px 28px;'>
+                    <h2 style='color:white;margin:0;font-size:16px;font-weight:700;'>{$title}</h2>
+                </div>
+
                 <!-- Content -->
-                <div style='padding: 30px;'>
-                    <h2 style='color: #003366; margin-top: 0;'>{$title}</h2>
-                    <p>Dear <strong>{$user_name}</strong>,</p>
-                    
+                <div style='padding:28px 28px 20px;'>
+                    <p style='margin:0 0 18px;color:#3A4A5A;'>Dear <strong style='color:#263238;'>{$user_name}</strong>,</p>
                     {$content}
-                    
-                    <hr style='border: none; border-top: 1px solid #eee; margin: 30px 0;'>
-                    
-                    <p style='color: #666; font-size: 0.9rem;'>This is an automated message from the CSWDO Palayan City system. Please do not reply to this email.</p>
-                    
-                    <div style='margin-top: 20px;'>
-                        <p style='margin: 0;'><strong>City Social Welfare and Development Office</strong></p>
-                        <p style='margin: 5px 0 0; color: #666;'>Palayan City, Nueva Ecija</p>
-                        <p style='margin: 5px 0 0; color: #666;'><span style='color: #ff6600;'>☎</span> (044) 123-4567</p>
+                    <hr style='border:none;border-top:1px solid #E8ECF2;margin:24px 0;'>
+                    <p style='color:#9aabb8;font-size:12px;margin:0;'>This is an automated message. Please do not reply directly to this email.</p>
+                    <div style='margin-top:16px;'>
+                        <p style='margin:0;font-weight:700;color:#263238;font-size:13px;'>City Social Welfare and Development Office</p>
+                        <p style='margin:3px 0 0;color:#6B7A8A;font-size:12px;'>Palayan City, Nueva Ecija</p>
+                        <p style='margin:3px 0 0;color:#6B7A8A;font-size:12px;'>&#9990; (044) 123-4567</p>
                     </div>
                 </div>
-                
+
                 <!-- Footer -->
-                <div style='background: #f9f9f9; padding: 20px; text-align: center; border-top: 1px solid #eee;'>
-                    <p style='color: #999; margin: 0; font-size: 0.8rem;'>
+                <div style='background:#F8F9FC;padding:16px 28px;text-align:center;border-top:1px solid #E8ECF2;'>
+                    <p style='color:#aab4be;margin:0;font-size:11px;'>
                         &copy; " . date('Y') . " CSWDO Palayan City. All rights reserved.
                     </p>
                 </div>

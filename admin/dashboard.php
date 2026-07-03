@@ -8,83 +8,65 @@ if (!isAdmin()) {
 $database = new Database();
 $db = $database->getConnection();
 
+
 // ========== COMPREHENSIVE STATISTICS ==========
-$stats = [];
-
-// Total users
-$query = "SELECT COUNT(*) as count FROM users";
-$stats['total_users'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Total staff
-$query = "SELECT COUNT(*) as count FROM users WHERE role = 'staff'";
-$stats['total_staff'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Total residents
-$query = "SELECT COUNT(*) as count FROM users WHERE role = 'resident'";
-$stats['total_residents'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Total appointments
-$query = "SELECT COUNT(*) as count FROM appointments";
-$stats['total_appointments'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Total AICS requests
-$query = "SELECT COUNT(*) as count FROM aics_requests";
-$stats['total_aics'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Total housing applications
-$query = "SELECT COUNT(*) as count FROM housing_beneficiaries";
-$stats['total_housing'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Pending AICS
-$query = "SELECT COUNT(*) as count FROM aics_requests WHERE status = 'submitted'";
-$stats['pending_aics'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Pending housing
-$query = "SELECT COUNT(*) as count FROM housing_beneficiaries WHERE status = 'pending'";
-$stats['pending_housing'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Pending verifications
-$query = "SELECT COUNT(*) as count FROM verification_requests WHERE status = 'pending'";
-$stats['pending_verifications'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-
-// Verified residents
-$query = "SELECT COUNT(*) as count FROM users WHERE verification_status = 'verified'";
-$stats['verified_residents'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+// Combined into ONE query instead of 10 separate round-trips
+$stats_query = "SELECT
+    (SELECT COUNT(*) FROM users)                                                       AS total_users,
+    (SELECT COUNT(*) FROM users WHERE role = 'staff')                                  AS total_staff,
+    (SELECT COUNT(*) FROM users WHERE role = 'resident')                               AS total_residents,
+    (SELECT COUNT(*) FROM appointments)                                                AS total_appointments,
+    (SELECT COUNT(*) FROM aics_requests)                                               AS total_aics,
+    (SELECT COUNT(*) FROM housing_beneficiaries)                                       AS total_housing,
+    (SELECT COUNT(*) FROM aics_requests        WHERE status = 'submitted')             AS pending_aics,
+    (SELECT COUNT(*) FROM housing_beneficiaries WHERE status = 'pending')              AS pending_housing,
+    (SELECT COUNT(*) FROM verification_requests WHERE status = 'pending')              AS pending_verifications,
+    (SELECT COUNT(*) FROM users                WHERE verification_status = 'verified') AS verified_residents";
+$stats_stmt = $db->prepare($stats_query);
+$stats_stmt->execute();
+$stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
 
 // AICS by category
-$query = "SELECT request_type, COUNT(*) as count FROM aics_requests GROUP BY request_type";
-$aics_by_category = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+$cat_stmt = $db->prepare("SELECT request_type, COUNT(*) as count FROM aics_requests GROUP BY request_type");
+$cat_stmt->execute();
+$aics_by_category = $cat_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Recent AICS applications
-$query = "SELECT a.*, u.first_name, u.last_name 
-          FROM aics_requests a 
-          JOIN users u ON a.user_id = u.user_id 
-          ORDER BY a.submission_date DESC LIMIT 5";
-$recent_aics = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+$aics_stmt = $db->prepare("SELECT a.*, u.first_name, u.last_name
+    FROM aics_requests a
+    JOIN users u ON a.user_id = u.user_id
+    ORDER BY a.submission_date DESC LIMIT 5");
+$aics_stmt->execute();
+$recent_aics = $aics_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Recent housing applications
-$query = "SELECT h.*, u.first_name, u.last_name, p.program_name 
-          FROM housing_beneficiaries h 
-          JOIN users u ON h.user_id = u.user_id 
-          LEFT JOIN housing_programs p ON h.program_id = p.program_id 
-          ORDER BY h.application_date DESC LIMIT 5";
-$recent_housing = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+$housing_stmt = $db->prepare("SELECT h.*, u.first_name, u.last_name, p.program_name
+    FROM housing_beneficiaries h
+    JOIN users u ON h.user_id = u.user_id
+    LEFT JOIN housing_programs p ON h.program_id = p.program_id
+    ORDER BY h.application_date DESC LIMIT 5");
+$housing_stmt->execute();
+$recent_housing = $housing_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Monthly AICS trend (last 6 months)
-$query = "SELECT MONTH(submission_date) as month, YEAR(submission_date) as year, COUNT(*) as count 
-          FROM aics_requests 
-          WHERE submission_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-          GROUP BY YEAR(submission_date), MONTH(submission_date)
-          ORDER BY year ASC, month ASC";
-$monthly_trend = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+$trend_stmt = $db->prepare("SELECT MONTH(submission_date) as month, YEAR(submission_date) as year, COUNT(*) as count
+    FROM aics_requests
+    WHERE submission_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    GROUP BY YEAR(submission_date), MONTH(submission_date)
+    ORDER BY year ASC, month ASC");
+$trend_stmt->execute();
+$monthly_trend = $trend_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Status breakdown
-$query = "SELECT status, COUNT(*) as count FROM aics_requests GROUP BY status";
-$status_breakdown = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+$status_stmt = $db->prepare("SELECT status, COUNT(*) as count FROM aics_requests GROUP BY status");
+$status_stmt->execute();
+$status_breakdown = $status_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Recent activities
-$query = "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10";
-$recent_activities = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+$activity_stmt = $db->prepare("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10");
+$activity_stmt->execute();
+$recent_activities = $activity_stmt->fetchAll(PDO::FETCH_ASSOC);
+
 
 // Get initials for sidebar avatar
 $initials = '';
@@ -94,21 +76,97 @@ foreach($name_parts as $part) {
 }
 $initials = substr($initials, 0, 2);
 
-// Prepare month data for chart
-$months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// ─── Prepare last-6-month labels ───────────────────────────────────────────
+$months      = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 $monthly_data = array_fill(0, 12, 0);
 foreach ($monthly_trend as $row) {
-    $monthly_data[$row['month'] - 1] = $row['count'];
+    $monthly_data[$row['month'] - 1] = (int)$row['count'];
 }
 
-// Status colors
+// Build rolling 6-month window
+$chart_labels = [];
+$chart_aics   = [];
+for ($i = 5; $i >= 0; $i--) {
+    $m = (int)date('n') - $i;
+    if ($m < 1) $m += 12;
+    $chart_labels[] = $months[$m - 1];
+    $chart_aics[]   = $monthly_data[$m - 1];
+}
+
+// ─── Monthly appointments trend (last 6 months) ────────────────────────────
+$appt_stmt = $db->prepare(
+    "SELECT MONTH(appointment_date) as month, COUNT(*) as count
+     FROM appointments
+     WHERE appointment_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+     GROUP BY MONTH(appointment_date)"
+);
+$appt_stmt->execute();
+$appt_trend_raw = $appt_stmt->fetchAll(PDO::FETCH_ASSOC);
+$appt_data = array_fill(0, 12, 0);
+foreach ($appt_trend_raw as $row) { $appt_data[$row['month'] - 1] = (int)$row['count']; }
+$chart_appts = [];
+for ($i = 5; $i >= 0; $i--) {
+    $m = (int)date('n') - $i;
+    if ($m < 1) $m += 12;
+    $chart_appts[] = $appt_data[$m - 1];
+}
+
+// ─── AICS category breakdown ────────────────────────────────────────────────
+$cat_labels = [];
+$cat_values = [];
+foreach ($aics_by_category as $c) {
+    $cat_labels[] = ucfirst(str_replace('_', ' ', $c['request_type']));
+    $cat_values[] = (int)$c['count'];
+}
+
+// ─── Housing status distribution ────────────────────────────────────────────
+$housing_stmt = $db->prepare(
+    "SELECT status, COUNT(*) as count FROM housing_beneficiaries GROUP BY status"
+);
+$housing_stmt->execute();
+$housing_status_raw = $housing_stmt->fetchAll(PDO::FETCH_ASSOC);
+$h_labels = [];
+$h_values = [];
+foreach ($housing_status_raw as $h) {
+    $h_labels[] = ucfirst($h['status']);
+    $h_values[] = (int)$h['count'];
+}
+
+// ─── AICS status colors ─────────────────────────────────────────────────────
 $status_colors = [
-    'submitted' => '#FFC107',
-    'reviewing' => '#42A5F5',
-    'approved' => '#66BB6A',
-    'rejected' => '#EF5350',
-    'released' => '#26A69A'
+    'submitted'  => '#FFC107',
+    'reviewing'  => '#42A5F5',
+    'approved'   => '#66BB6A',
+    'rejected'   => '#EF5350',
+    'released'   => '#26A69A'
 ];
+
+// Let's print out JSON encoded versions of our PHP data arrays to use in JS
+$js_chart_labels = json_encode($chart_labels);
+$js_chart_aics = json_encode($chart_aics);
+$js_chart_appts = json_encode($chart_appts);
+$js_cat_labels = json_encode($cat_labels);
+$js_cat_values = json_encode($cat_values);
+$js_h_labels = json_encode($h_labels);
+$js_h_values = json_encode($h_values);
+
+// Prepare AICS status datasets
+$status_labels = ['submitted' => 'Submitted', 'reviewing' => 'Reviewing', 'approved' => 'Approved', 'rejected' => 'Rejected', 'released' => 'Released'];
+$status_lbls = [];
+$status_vals = [];
+$status_cls = [];
+foreach ($status_labels as $key => $label) {
+    $count = 0;
+    foreach ($status_breakdown as $s) {
+        if ($s['status'] == $key) $count = $s['count'];
+    }
+    $status_lbls[] = $label;
+    $status_vals[] = (int)$count;
+    $status_cls[] = $status_colors[$key] ?? '#999';
+}
+$js_status_labels = json_encode($status_lbls);
+$js_status_values = json_encode($status_vals);
+$js_status_colors = json_encode($status_cls);
 
 // Check for dark mode preference
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
@@ -121,6 +179,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>Admin Dashboard - One Palayan-Kalinga Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
         /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
@@ -160,6 +219,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --recent-bg: #FFFFFF;
             --badge-bg: #F1F3F8;
             --divider: rgba(255,255,255,0.08);
+            
+            --stat-gradient-1: linear-gradient(135deg, #7F0303, #9a1515);
+            --stat-gradient-2: linear-gradient(135deg, #1a73e8, #4fc3f7);
+            --stat-gradient-3: linear-gradient(135deg, #2e7d32, #66bb6a);
+            --stat-gradient-4: linear-gradient(135deg, #e65100, #ff9800);
+            --stat-gradient-5: linear-gradient(135deg, #6a1b9a, #ab47bc);
+            --stat-gradient-6: linear-gradient(135deg, #00695c, #26a69a);
         }
 
         /* ========== DARK THEME ========== */
@@ -195,6 +261,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon: #8B1A1A;
             --maroon-light: #A82828;
             --maroon-dark: #5a0202;
+            
+            --stat-gradient-1: linear-gradient(135deg, #8B1A1A, #A82828);
+            --stat-gradient-2: linear-gradient(135deg, #1565c0, #42a5f5);
+            --stat-gradient-3: linear-gradient(135deg, #1b5e20, #43a047);
+            --stat-gradient-4: linear-gradient(135deg, #bf360c, #ff6f00);
+            --stat-gradient-5: linear-gradient(135deg, #4a148c, #8e24aa);
+            --stat-gradient-6: linear-gradient(135deg, #004d40, #00897b);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -236,16 +309,37 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             align-items: center;
             gap: 12px;
         }
+        .logo-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .logo-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            object-fit: contain;
+            background: rgba(255,255,255,0.10);
+            padding: 4px;
+            flex-shrink: 0;
+        }
         .logo-icon {
             width: 44px;
             height: 44px;
             background: rgba(255,255,255,0.10);
             border-radius: 12px;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             color: var(--maroon-light);
             font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        .logo-text {
+            flex: 1;
+            min-width: 0;
         }
         .logo-text h2 {
             color: var(--text-sidebar-active);
@@ -446,20 +540,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transform: translateY(-2px);
         }
 
-        /* ========== STATS GRID ========== */
+        /* ========== ENHANCED STATS GRID ========== */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 18px;
-            margin-bottom: 28px;
+            gap: 20px;
+            margin-bottom: 30px;
         }
         .stat-card {
             background: var(--stat-bg);
             border-radius: 20px;
-            padding: 18px 20px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
+            padding: 24px 22px;
             box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -467,79 +558,108 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             position: relative;
             overflow: hidden;
         }
-        .stat-card::after {
+        .stat-card::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, var(--maroon), transparent);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            border-radius: 20px;
+            height: 4px;
+            border-radius: 20px 20px 0 0;
+            transition: height 0.3s ease;
+        }
+        .stat-card:hover::before {
+            height: 6px;
         }
         .stat-card:hover {
             transform: translateY(-6px);
             box-shadow: var(--shadow-hover);
-            border-color: var(--maroon-light);
-        }
-        .stat-card:hover::after {
-            opacity: 0.03;
         }
         .stat-card:active {
             transform: translateY(-2px);
         }
 
-        .stat-icon {
-            width: 48px;
-            height: 48px;
+        .stat-card .stat-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .stat-icon-wrapper {
+            width: 52px;
+            height: 52px;
             border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             flex-shrink: 0;
-            position: relative;
-            z-index: 1;
             box-shadow: var(--shadow-sm);
         }
-        .stat-icon.maroon { background: rgba(127, 3, 3, 0.12); color: var(--maroon-light); }
-        .stat-icon.green { background: rgba(76, 175, 80, 0.12); color: #4CAF50; }
-        .stat-icon.blue { background: rgba(33, 150, 243, 0.12); color: #2196F3; }
-        .stat-icon.orange { background: rgba(255, 152, 0, 0.12); color: #FF9800; }
-        .stat-icon.purple { background: rgba(156, 39, 176, 0.12); color: #9C27B0; }
-        .stat-icon.teal { background: rgba(0, 150, 136, 0.12); color: #009688; }
+        .stat-icon-wrapper.maroon { background: rgba(127, 3, 3, 0.12); color: var(--maroon-light); }
+        .stat-icon-wrapper.green { background: rgba(76, 175, 80, 0.12); color: #4CAF50; }
+        .stat-icon-wrapper.blue { background: rgba(33, 150, 243, 0.12); color: #2196F3; }
+        .stat-icon-wrapper.orange { background: rgba(255, 152, 0, 0.12); color: #FF9800; }
+        .stat-icon-wrapper.purple { background: rgba(156, 39, 176, 0.12); color: #9C27B0; }
+        .stat-icon-wrapper.teal { background: rgba(0, 150, 136, 0.12); color: #009688; }
 
-        .stat-info {
-            position: relative;
-            z-index: 1;
+        .stat-badge {
+            font-size: 0.6rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 3px 10px;
+            border-radius: 50px;
+            background: var(--badge-bg);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
         }
-        .stat-info h3 {
-            font-size: 1.4rem;
+
+        .stat-number {
+            font-size: 2rem;
             font-weight: 800;
             color: var(--text-primary);
-            line-height: 1.2;
+            line-height: 1.1;
+            margin-bottom: 4px;
             transition: color 0.3s ease;
         }
-        .stat-info p {
-            font-size: 0.75rem;
+        .stat-label {
+            font-size: 0.8rem;
             color: var(--text-muted);
             font-weight: 500;
-            margin-top: 2px;
         }
-        .stat-info .trend {
-            font-size: 0.65rem;
-            margin-top: 4px;
-            font-weight: 600;
+        .stat-footer {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
         }
-        .stat-info .trend.up { color: #4CAF50; }
-        .stat-info .trend.down { color: #EF5350; }
+        .stat-footer .trend-up { color: #4CAF50; }
+        .stat-footer .trend-down { color: #EF5350; }
+        .stat-footer i { font-size: 0.65rem; }
+
+        /* Color variations for stat cards */
+        .stat-card.maroon::before { background: var(--stat-gradient-1); }
+        .stat-card.blue::before { background: var(--stat-gradient-2); }
+        .stat-card.green::before { background: var(--stat-gradient-3); }
+        .stat-card.orange::before { background: var(--stat-gradient-4); }
+        .stat-card.purple::before { background: var(--stat-gradient-5); }
+        .stat-card.teal::before { background: var(--stat-gradient-6); }
 
         /* ========== CHARTS SECTION ========== */
         .charts-grid {
             display: grid;
             grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .charts-row-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 24px;
             margin-bottom: 28px;
         }
@@ -611,6 +731,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--text-muted);
             font-weight: 600;
         }
+
+        /* Canvas wrapper gives Chart.js a defined height */
+        .canvas-wrap { position: relative; width: 100%; }
+        .canvas-wrap.h220 { height: 220px; }
+        .canvas-wrap.h240 { height: 240px; }
+        .canvas-wrap canvas { display: block; }
+
+        /* Chart toggle tabs */
+        .chart-tabs { display: flex; gap: 6px; }
+        .chart-tab {
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1.5px solid var(--border-color);
+            background: none;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+        .chart-tab.active { background: var(--maroon); border-color: var(--maroon); color: white; }
+
+        /* Chart legend */
+        .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--text-muted); font-weight: 500; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
         /* Status Breakdown */
         .status-list {
@@ -797,9 +943,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .search-box input { min-width: 120px; }
             .bottom-grid { grid-template-columns: 1fr; }
             .charts-grid { grid-template-columns: 1fr; }
-            .stat-card { padding: 14px 16px; }
-            .stat-icon { width: 40px; height: 40px; font-size: 1.1rem; }
-            .stat-info h3 { font-size: 1.2rem; }
+            .stat-card { padding: 18px 16px; }
+            .stat-number { font-size: 1.6rem; }
+            .stat-icon-wrapper { width: 44px; height: 44px; font-size: 1.2rem; }
         }
     </style>
 </head>
@@ -808,10 +954,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-crown"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Admin Panel</span>
+            <div class="logo-wrapper">
+                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
+                <div class="logo-text">
+                    <h2>One Palayan-Kalinga Hub</h2>
+                    <span>Admin Panel</span>
+                </div>
             </div>
         </div>
         
@@ -862,110 +1011,141 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </div>
 
-        <!-- Stats Grid -->
+        <!-- Enhanced Stats Grid -->
         <div class="stats-grid">
-            <div class="stat-card" onclick="window.location.href='manage-verifications.php'">
-                <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['pending_verifications']); ?></h3>
-                    <p>Pending Verifications</p>
+            <!-- Pending Verifications -->
+            <div class="stat-card orange" onclick="window.location.href='manage-verifications.php?status=pending'">
+                <div class="stat-top">
+                    <div class="stat-icon-wrapper orange"><i class="fas fa-clock"></i></div>
+                    <span class="stat-badge">Needs Review</span>
+                </div>
+                <div class="stat-number"><?php echo number_format($stats['pending_verifications']); ?></div>
+                <div class="stat-label">Pending Verifications</div>
+                <div class="stat-footer">
+                    <i class="fas fa-users"></i> 
+                    <?php echo number_format($stats['total_residents']); ?> total residents
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-verifications.php?status=verified'">
-                <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['verified_residents']); ?></h3>
-                    <p>Verified Residents</p>
+
+            <!-- Verified Residents -->
+            <div class="stat-card green" onclick="window.location.href='manage-verifications.php?status=verified'">
+                <div class="stat-top">
+                    <div class="stat-icon-wrapper green"><i class="fas fa-check-circle"></i></div>
+                    <span class="stat-badge">Active</span>
+                </div>
+                <div class="stat-number"><?php echo number_format($stats['verified_residents']); ?></div>
+                <div class="stat-label">Verified Residents</div>
+                <div class="stat-footer">
+                    <i class="fas fa-user-check"></i> 
+                    <?php echo $stats['total_residents'] > 0 ? round(($stats['verified_residents'] / $stats['total_residents']) * 100) : 0; ?>% verified
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-staff.php'">
-                <div class="stat-icon blue"><i class="fas fa-user-tie"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['total_staff']); ?></h3>
-                    <p>Staff Members</p>
+
+            <!-- Staff Members -->
+            <div class="stat-card blue" onclick="window.location.href='manage-staff.php'">
+                <div class="stat-top">
+                    <div class="stat-icon-wrapper blue"><i class="fas fa-user-tie"></i></div>
+                    <span class="stat-badge">Team</span>
+                </div>
+                <div class="stat-number"><?php echo number_format($stats['total_staff']); ?></div>
+                <div class="stat-label">Staff Members</div>
+                <div class="stat-footer">
+                    <i class="fas fa-building"></i> Active staff
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-residents.php'">
-                <div class="stat-icon purple"><i class="fas fa-user-friends"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['total_residents']); ?></h3>
-                    <p>Total Residents</p>
+
+            <!-- Total Residents -->
+            <div class="stat-card purple" onclick="window.location.href='manage-residents.php'">
+                <div class="stat-top">
+                    <div class="stat-icon-wrapper purple"><i class="fas fa-user-friends"></i></div>
+                    <span class="stat-badge">Community</span>
+                </div>
+                <div class="stat-number"><?php echo number_format($stats['total_residents']); ?></div>
+                <div class="stat-label">Total Residents</div>
+                <div class="stat-footer">
+                    <i class="fas fa-calendar-alt"></i> Registered users
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='../staff/manage-aics.php'">
-                <div class="stat-icon maroon"><i class="fas fa-hand-holding-heart"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['total_aics']); ?></h3>
-                    <p>AICS Requests</p>
-                    <?php if ($stats['pending_aics'] > 0): ?>
-                    <div class="trend up"><?php echo $stats['pending_aics']; ?> pending</div>
-                    <?php endif; ?>
+
+            <!-- AICS Requests -->
+            <div class="stat-card maroon" onclick="window.location.href='../staff/manage-aics.php'">
+                <div class="stat-top">
+                    <div class="stat-icon-wrapper maroon"><i class="fas fa-hand-holding-heart"></i></div>
+                    <span class="stat-badge"><?php echo $stats['pending_aics'] > 0 ? $stats['pending_aics'] . ' Pending' : 'All'; ?></span>
+                </div>
+                <div class="stat-number"><?php echo number_format($stats['total_aics']); ?></div>
+                <div class="stat-label">AICS Requests</div>
+                <div class="stat-footer">
+                    <i class="fas fa-hourglass-half"></i> 
+                    <?php echo number_format($stats['pending_aics']); ?> pending review
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='../staff/manage-housing.php'">
-                <div class="stat-icon teal"><i class="fas fa-home"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['total_housing']); ?></h3>
-                    <p>Housing Apps</p>
-                    <?php if ($stats['pending_housing'] > 0): ?>
-                    <div class="trend up"><?php echo $stats['pending_housing']; ?> pending</div>
-                    <?php endif; ?>
+
+            <!-- Housing Applications -->
+            <div class="stat-card teal" onclick="window.location.href='../staff/manage-housing.php'">
+                <div class="stat-top">
+                    <div class="stat-icon-wrapper teal"><i class="fas fa-home"></i></div>
+                    <span class="stat-badge"><?php echo $stats['pending_housing'] > 0 ? $stats['pending_housing'] . ' Pending' : 'All'; ?></span>
+                </div>
+                <div class="stat-number"><?php echo number_format($stats['total_housing']); ?></div>
+                <div class="stat-label">Housing Applications</div>
+                <div class="stat-footer">
+                    <i class="fas fa-hourglass-half"></i> 
+                    <?php echo number_format($stats['pending_housing']); ?> pending review
                 </div>
             </div>
         </div>
 
-        <!-- Charts -->
+        <!-- Charts Row 1 -->
         <div class="charts-grid">
-            <!-- Monthly Trend Chart -->
+            <!-- Monthly Trend Chart (AICS & Appointments Dual Chart) -->
             <div class="chart-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-chart-bar" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS Applications Trend</h3>
-                    <span class="badge">Last 6 months</span>
-                </div>
-                <div class="chart-container">
-                    <?php 
-                    $max_val = max($monthly_data) > 0 ? max($monthly_data) : 1;
-                    $month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    $start_month = date('n') - 5;
-                    if ($start_month < 1) $start_month += 12;
-                    for ($i = 0; $i < 6; $i++):
-                        $idx = ($start_month + $i - 1) % 12;
-                        $val = $monthly_data[$idx];
-                        $height = ($val / $max_val) * 170;
-                    ?>
-                    <div class="bar-wrapper">
-                        <div class="bar" style="height: <?php echo max($height, 4); ?>px;"></div>
-                        <span class="bar-label"><?php echo $month_names[$idx]; ?></span>
+                    <h3><i class="fas fa-chart-line" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS & Appointments Trend</h3>
+                    <div class="chart-tabs">
+                        <button class="chart-tab active" onclick="toggleTrendChart('all')">All</button>
+                        <button class="chart-tab" onclick="toggleTrendChart('aics')">AICS</button>
+                        <button class="chart-tab" onclick="toggleTrendChart('appts')">Appts</button>
                     </div>
-                    <?php endfor; ?>
+                </div>
+                <div class="canvas-wrap h240">
+                    <canvas id="trendChart"></canvas>
                 </div>
             </div>
 
-            <!-- Status Breakdown -->
+            <!-- AICS Status Pie/Doughnut Chart -->
             <div class="chart-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS Status</h3>
+                    <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS Status Breakdown</h3>
                     <span class="badge">Total: <?php echo $stats['total_aics']; ?></span>
                 </div>
-                <div class="status-list">
-                    <?php 
-                    $status_labels = ['submitted' => 'Submitted', 'reviewing' => 'Reviewing', 'approved' => 'Approved', 'rejected' => 'Rejected', 'released' => 'Released'];
-                    foreach ($status_labels as $key => $label):
-                        $count = 0;
-                        foreach ($status_breakdown as $s) {
-                            if ($s['status'] == $key) $count = $s['count'];
-                        }
-                        $pct = $stats['total_aics'] > 0 ? round(($count / $stats['total_aics']) * 100) : 0;
-                    ?>
-                    <div class="status-item">
-                        <span class="status-dot" style="background: <?php echo $status_colors[$key] ?? '#999'; ?>;"></span>
-                        <span class="status-label"><?php echo $label; ?></span>
-                        <div class="status-bar">
-                            <div class="fill" style="width: <?php echo $pct; ?>%; background: <?php echo $status_colors[$key] ?? '#999'; ?>;"></div>
-                        </div>
-                        <span class="status-count"><?php echo $count; ?></span>
-                    </div>
-                    <?php endforeach; ?>
+                <div class="canvas-wrap h240">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="charts-row-2">
+            <!-- AICS Category Breakdown Donut Chart -->
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS Category Breakdown</h3>
+                    <span class="badge">Categories Distribution</span>
+                </div>
+                <div class="canvas-wrap h240">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Housing Program Status Breakdown Bar Chart -->
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-home" style="color: var(--maroon-light); margin-right: 8px;"></i> Housing Status Breakdown</h3>
+                    <span class="badge">Beneficiary Statuses</span>
+                </div>
+                <div class="canvas-wrap h240">
+                    <canvas id="housingChart"></canvas>
                 </div>
             </div>
         </div>
@@ -1071,7 +1251,9 @@ setTheme(currentTheme);
 // Toggle on click
 themeToggle.addEventListener('click', () => {
     const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
+    const newTheme = current === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    setTimeout(updateChartsTheme, 50);
 });
 
 // ========== SEARCH FUNCTIONALITY ==========
@@ -1084,16 +1266,255 @@ document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
     }
 });
 
-// ========== ANIMATE BARS ON LOAD ==========
-document.addEventListener('DOMContentLoaded', function() {
-    const bars = document.querySelectorAll('.bar');
-    bars.forEach((bar, index) => {
-        const height = bar.style.height;
-        bar.style.height = '4px';
-        setTimeout(() => {
-            bar.style.height = height;
-        }, 200 + (index * 100));
+// ========== INITIALIZE CHARTS ==========
+let trendChartInstance = null;
+let statusChartInstance = null;
+let categoryChartInstance = null;
+let housingChartInstance = null;
+
+function getThemeColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+        text: isDark ? '#b0bec5' : '#37474f',
+        grid: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+        tooltipBg: isDark ? '#1a2332' : '#ffffff',
+        tooltipColor: isDark ? '#ffffff' : '#263238',
+        border: isDark ? '#2a3547' : '#e8ecf2',
+        cardBg: isDark ? '#1a2332' : '#ffffff'
+    };
+}
+
+function initTrendChart() {
+    const ctx = document.getElementById('trendChart')?.getContext('2d');
+    if (!ctx) return;
+    const colors = getThemeColors();
+    trendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: <?php echo $js_chart_labels; ?>,
+            datasets: [
+                {
+                    label: 'AICS Applications',
+                    data: <?php echo $js_chart_aics; ?>,
+                    borderColor: '#7F0303',
+                    backgroundColor: 'rgba(127, 3, 3, 0.06)',
+                    borderWidth: 3,
+                    tension: 0.35,
+                    fill: true,
+                    pointBackgroundColor: '#7F0303',
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'Appointments',
+                    data: <?php echo $js_chart_appts; ?>,
+                    borderColor: '#FFC107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.06)',
+                    borderWidth: 3,
+                    tension: 0.35,
+                    fill: true,
+                    pointBackgroundColor: '#FFC107',
+                    pointHoverRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: colors.text, font: { family: 'Inter', weight: 600 } }
+                },
+                tooltip: {
+                    backgroundColor: colors.tooltipBg,
+                    titleColor: colors.tooltipColor,
+                    bodyColor: colors.tooltipColor,
+                    borderColor: colors.border,
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: colors.text }
+                },
+                y: {
+                    grid: { color: colors.grid },
+                    ticks: { color: colors.text }
+                }
+            }
+        }
     });
+}
+
+function initStatusChart() {
+    const ctx = document.getElementById('statusChart')?.getContext('2d');
+    if (!ctx) return;
+    const colors = getThemeColors();
+    statusChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: <?php echo $js_status_labels; ?>,
+            datasets: [{
+                data: <?php echo $js_status_values; ?>,
+                backgroundColor: <?php echo $js_status_colors; ?>,
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { color: colors.text, font: { family: 'Inter', size: 11, weight: 600 } }
+                },
+                tooltip: {
+                    backgroundColor: colors.tooltipBg,
+                    titleColor: colors.tooltipColor,
+                    bodyColor: colors.tooltipColor,
+                    borderColor: colors.border,
+                    borderWidth: 1
+                }
+            }
+        }
+    });
+}
+
+function initCategoryChart() {
+    const ctx = document.getElementById('categoryChart')?.getContext('2d');
+    if (!ctx) return;
+    const colors = getThemeColors();
+    categoryChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: <?php echo $js_cat_labels; ?>,
+            datasets: [{
+                data: <?php echo $js_cat_values; ?>,
+                backgroundColor: [
+                    '#7F0303', '#b45309', '#6a1b9a', '#4a148c', '#00695c', '#1565c0', '#2e7d32'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { color: colors.text, font: { family: 'Inter', size: 11, weight: 600 } }
+                },
+                tooltip: {
+                    backgroundColor: colors.tooltipBg,
+                    titleColor: colors.tooltipColor,
+                    bodyColor: colors.tooltipColor,
+                    borderColor: colors.border,
+                    borderWidth: 1
+                }
+            }
+        }
+    });
+}
+
+function initHousingChart() {
+    const ctx = document.getElementById('housingChart')?.getContext('2d');
+    if (!ctx) return;
+    const colors = getThemeColors();
+    housingChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: <?php echo $js_h_labels; ?>,
+            datasets: [{
+                label: 'Housing Applications',
+                data: <?php echo $js_h_values; ?>,
+                backgroundColor: '#00695c',
+                borderRadius: 8,
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: colors.tooltipBg,
+                    titleColor: colors.tooltipColor,
+                    bodyColor: colors.tooltipColor,
+                    borderColor: colors.border,
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: colors.text }
+                },
+                y: {
+                    grid: { color: colors.grid },
+                    ticks: { color: colors.text, stepSize: 1 }
+                }
+            }
+        }
+    });
+}
+
+function toggleTrendChart(mode) {
+    const tabs = document.querySelectorAll('.chart-tab');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    
+    const btnMap = { 'all': 0, 'aics': 1, 'appts': 2 };
+    if (tabs[btnMap[mode]]) {
+        tabs[btnMap[mode]].classList.add('active');
+    }
+    
+    if (!trendChartInstance) return;
+    
+    if (mode === 'all') {
+        trendChartInstance.setDatasetVisibility(0, true);
+        trendChartInstance.setDatasetVisibility(1, true);
+    } else if (mode === 'aics') {
+        trendChartInstance.setDatasetVisibility(0, true);
+        trendChartInstance.setDatasetVisibility(1, false);
+    } else if (mode === 'appts') {
+        trendChartInstance.setDatasetVisibility(0, false);
+        trendChartInstance.setDatasetVisibility(1, true);
+    }
+    trendChartInstance.update();
+}
+
+function updateChartsTheme() {
+    const colors = getThemeColors();
+    const charts = [trendChartInstance, statusChartInstance, categoryChartInstance, housingChartInstance];
+    charts.forEach(chart => {
+        if (!chart) return;
+        if (chart.options.scales) {
+            Object.keys(chart.options.scales).forEach(scaleKey => {
+                const scale = chart.options.scales[scaleKey];
+                if (scale.grid) scale.grid.color = colors.grid;
+                if (scale.ticks) scale.ticks.color = colors.text;
+            });
+        }
+        if (chart.options.plugins?.legend?.labels) {
+            chart.options.plugins.legend.labels.color = colors.text;
+        }
+        if (chart.options.plugins?.tooltip) {
+            chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+            chart.options.plugins.tooltip.titleColor = colors.tooltipColor;
+            chart.options.plugins.tooltip.bodyColor = colors.tooltipColor;
+            chart.options.plugins.tooltip.borderColor = colors.border;
+        }
+        chart.update();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initTrendChart();
+    initStatusChart();
+    initCategoryChart();
+    initHousingChart();
 });
 </script>
 </body>

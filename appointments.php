@@ -79,10 +79,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Appointments - One Palayan-Kalinga Hub</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
+        /* ========== COLOR PALETTE & GLOBAL THEMING ========== */
         :root {
             --tan: #D8BA98;
             --maroon: #7F0303;
@@ -90,8 +91,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon-dark: #5a0202;
             --midnight: #0F414A;
             --white: #FFFFFF;
+            --gold: #C9A86C;
+            --gold-light: #E8D5A8;
+            --light-blue: #96C0CE;
+            --alabaster: #E3E7EB;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: #EFF1F4;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -102,12 +107,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --text-muted: #6B7A8A;
             --text-sidebar: rgba(255,255,255,0.7);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
+            --border-color: #D5DBE1;
             
             --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
+            --shadow-md: 0 10px 30px rgba(15, 65, 74, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 16px 40px rgba(15, 65, 74, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
+            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
             
             --card-bg: #FFFFFF;
             --badge-bg: #F1F3F8;
@@ -115,13 +120,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --input-bg: #FFFFFF;
             --hero-bg: #0F414A;
             
-            --radius-card: 20px;
-            --radius-element: 12px;
+            --radius-card: 24px;
+            --radius-element: 16px;
             
-            --color-success: #4CAF50;
-            --color-warning: #FF9800;
-            --color-danger: #EF5350;
-            --color-info: #2196F3;
+            --color-success: #2e7d32;
+            --color-warning: #ed6c02;
+            --color-danger: #d32f2f;
+            --color-info: #0288d1;
         }
 
         [data-theme="dark"] {
@@ -137,11 +142,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --text-sidebar: rgba(255,255,255,0.6);
             --text-sidebar-active: #FFFFFF;
             --border-color: #2a3a4f;
+            --alabaster: #161e2a;
             
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.20);
+            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.5);
+            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.15);
             
             --card-bg: #1a2332;
             --badge-bg: #2a3a4f;
@@ -153,10 +159,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon-light: #A82828;
             --maroon-dark: #5a0202;
             
-            --color-success: #66BB6A;
-            --color-warning: #FFA726;
-            --color-danger: #EF5350;
-            --color-info: #42A5F5;
+            --color-success: #4caf50;
+            --color-warning: #ff9800;
+            --color-danger: #f44336;
+            --color-info: #2196f3;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -169,55 +175,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease, color 0.3s ease;
         }
 
-        /* ========== HERO SECTION ========== */
-        .appointments-hero {
-            background: var(--hero-bg);
-            color: white;
-            padding: 40px 0 50px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-            transition: background 0.3s ease;
-        }
-        .appointments-hero::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-image: url('images/coverphoto.png');
-            background-size: cover;
-            background-position: center;
-            opacity: 0.06;
-            z-index: 0;
-        }
-        .appointments-hero .container { 
-            position: relative; 
-            z-index: 2; 
-            max-width: 1280px; 
-            margin: 0 auto; 
-            padding: 0 24px; 
-        }
-        .appointments-hero h1 { 
-            font-size: 2rem; 
-            font-weight: 800; 
-            margin-bottom: 12px; 
-            letter-spacing: -0.5px;
-        }
-        .appointments-hero p { 
-            font-size: 0.95rem; 
-            max-width: 700px; 
-            margin: 0 auto; 
-            opacity: 0.85; 
-        }
-
-        /* ========== LAYOUT ========== */
+        /* ========== SIDEBAR LAYOUT SYSTEM ========== */
         .dashboard-container { display: flex; min-height: 100vh; }
 
-        /* ========== SIDEBAR ========== */
         .sidebar {
-            width: 260px;
+            width: 280px;
             background: var(--bg-sidebar);
             position: fixed;
             height: 100vh;
@@ -230,10 +192,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease;
             box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
         }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
         .sidebar-header {
             padding: 28px 20px 20px;
             border-bottom: 1px solid var(--divider);
@@ -249,12 +207,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--maroon-light);
+            color: var(--white);
             font-size: 1.3rem;
         }
         .logo-text h2 {
             color: var(--text-sidebar-active);
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 800;
             letter-spacing: -0.5px;
             line-height: 1.2;
@@ -265,7 +223,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-
         .user-info-sidebar {
             padding: 16px 20px;
             border-bottom: 1px solid var(--divider);
@@ -287,32 +244,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             flex-shrink: 0;
             overflow: hidden;
         }
-        .user-avatar-sidebar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .user-info-sidebar h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .user-info-sidebar span {
-            color: rgba(255,255,255,0.5);
-            font-size: 0.65rem;
-        }
+        .user-avatar-sidebar img { width: 100%; height: 100%; object-fit: cover; }
+        .user-info-sidebar h4 { color: var(--text-sidebar-active); font-size: 0.85rem; font-weight: 600; }
+        .user-info-sidebar span { color: rgba(255,255,255,0.5); font-size: 0.65rem; }
 
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
+        .sidebar-menu { list-style: none; padding: 12px 14px; flex: 1; }
         .sidebar-menu li { margin-bottom: 2px; }
         .sidebar-menu li a {
             display: flex;
             align-items: center;
             gap: 14px;
-            padding: 10px 14px;
+            padding: 11px 14px;
             border-radius: 12px;
             color: var(--text-sidebar);
             text-decoration: none;
@@ -323,16 +265,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .sidebar-menu li a i { width: 20px; font-size: 0.95rem; color: rgba(255,255,255,0.4); }
         .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
         .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
+        .sidebar-menu li a.active { background: var(--bg-sidebar-active); color: var(--text-sidebar-active); }
         .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
 
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
+        .sidebar-footer { padding: 16px; border-top: 1px solid var(--divider); }
         .sidebar-footer a {
             display: flex;
             align-items: center;
@@ -351,41 +287,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         /* ========== MAIN CONTENT ========== */
         .main-content {
             flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
+            margin-left: 280px;
+            padding: 40px;
             min-height: 100vh;
             background: var(--bg-primary);
             transition: background 0.3s ease;
         }
-        .main-content.full-width {
-            margin-left: 0;
-        }
+        .main-content.full-width { margin-left: 0; padding: 40px 24px; }
 
         /* ========== TOP BAR ========== */
         .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 28px;
+            margin-bottom: 35px;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 15px;
         }
         .page-title h1 {
-            font-size: 1.5rem;
+            font-size: 1.8rem;
             color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
+            font-weight: 800;
+            letter-spacing: -0.5px;
         }
-        .page-title p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
-        }
-        .top-bar-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
+        .page-title p { color: var(--text-muted); font-size: 0.88rem; margin-top: 2px; }
+        
+        .top-bar-actions { display: flex; gap: 12px; align-items: center; }
         .theme-toggle {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -406,12 +333,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: white;
             border-color: var(--maroon);
             transform: scale(1.05);
-            box-shadow: var(--shadow-md);
         }
         .top-icon {
             color: var(--text-muted);
             font-size: 1.1rem;
-            transition: color 0.3s ease;
             text-decoration: none;
             background: var(--bg-card);
             width: 40px;
@@ -422,236 +347,400 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border-radius: 50%;
             border: 1px solid var(--border-color);
             box-shadow: var(--shadow-sm);
+            transition: all 0.3s;
         }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
+        .top-icon:hover { color: var(--text-primary); transform: translateY(-2px); }
 
-        /* ========== ALERTS ========== */
-        .alert {
-            padding: 16px 20px;
-            border-radius: var(--radius-element);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            box-shadow: var(--shadow-sm);
-            border-left: 4px solid transparent;
-        }
-        .alert-success {
-            background: rgba(76, 175, 80, 0.12);
-            color: var(--color-success);
-            border-left-color: var(--color-success);
-        }
-        .alert-error {
-            background: rgba(244, 67, 54, 0.12);
-            color: var(--color-danger);
-            border-left-color: var(--color-danger);
-        }
-        .alert i { font-size: 1.2rem; }
-
-        /* ========== APPOINTMENTS GRID ========== */
+        /* ========== LAYOUT GRID ========== */
         .appointments-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 28px;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 30px;
+            align-items: start;
         }
 
-        /* ========== BOOKING SECTION ========== */
-        .booking-section {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 24px 28px;
-            box-shadow: var(--shadow-md);
+        /* ========== STEPPER WIZARD HEADERS ========== */
+        .wizard-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            position: relative;
+            background: var(--bg-primary);
+            padding: 10px;
+            border-radius: 40px;
             border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
         }
-        .booking-section .section-header {
+        .wizard-step {
+            flex: 1;
+            text-align: center;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            border-radius: 30px;
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-        .booking-section .section-header h2 {
-            color: var(--text-primary);
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-        .booking-section .section-header i {
-            color: var(--maroon-light);
-            font-size: 1.2rem;
-        }
-        .section-subtitle {
-            color: var(--text-muted);
-            font-size: 0.82rem;
-            margin-bottom: 20px;
-        }
-
-        .booking-form .form-group {
-            margin-bottom: 18px;
-        }
-        .booking-form label {
-            display: block;
-            margin-bottom: 6px;
-            color: var(--text-secondary);
-            font-weight: 600;
-            font-size: 0.82rem;
-        }
-        .booking-form label i {
-            color: var(--maroon-light);
-            width: 20px;
-            margin-right: 4px;
-        }
-        .booking-form select,
-        .booking-form input,
-        .booking-form textarea {
-            width: 100%;
-            padding: 10px 14px;
-            border: 2px solid var(--border-color);
-            border-radius: var(--radius-element);
-            font-size: 0.85rem;
-            transition: all 0.3s;
-            font-family: inherit;
-            background: var(--input-bg);
-            color: var(--text-primary);
-        }
-        .booking-form select:focus,
-        .booking-form input:focus,
-        .booking-form textarea:focus {
-            outline: none;
-            border-color: var(--maroon-light);
-            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
-        }
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-        .time-slots {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            justify-content: center;
             gap: 8px;
-            margin-top: 10px;
         }
-        .time-slot {
-            padding: 8px 12px;
-            text-align: center;
-            background: var(--badge-bg);
-            border: 2px solid var(--border-color);
-            border-radius: var(--radius-element);
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.8rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-        .time-slot:hover:not(.disabled) {
+        .wizard-step.active {
             background: var(--maroon);
             color: white;
-            border-color: var(--maroon);
-            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
-        .time-slot.selected {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-        }
-        .time-slot.disabled {
-            background: rgba(244, 67, 54, 0.08);
-            color: var(--color-danger);
-            border-color: rgba(244, 67, 54, 0.15);
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
-        .time-slot.available {
-            background: rgba(76, 175, 80, 0.08);
+        .wizard-step.completed {
             color: var(--color-success);
-            border-color: rgba(76, 175, 80, 0.15);
         }
-
-        .btn-book {
-            width: 100%;
-            padding: 12px;
-            background: var(--maroon);
-            color: white;
-            border: none;
-            border-radius: 50px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-top: 16px;
+        .wizard-step-num {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.06);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            box-shadow: var(--shadow-sm);
+            font-size: 0.75rem;
         }
-        .btn-book:hover:not(:disabled) {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-        .btn-book:disabled {
-            background: var(--badge-bg);
-            cursor: not-allowed;
-            color: var(--text-muted);
+        .wizard-step.active .wizard-step-num {
+            background: rgba(255,255,255,0.2);
         }
 
-        .service-info-box {
-            margin: 12px 0;
-            padding: 12px 16px;
-            background: var(--badge-bg);
-            border-radius: var(--radius-element);
-            border-left: 3px solid var(--maroon-light);
-            display: none;
-        }
-        .service-info-box i {
-            color: var(--maroon-light);
-            margin-right: 6px;
-        }
-        .service-info-box small {
-            color: var(--text-muted);
-            font-size: 0.78rem;
-        }
-
-        /* ========== MY APPOINTMENTS SECTION ========== */
-        .my-appointments-section {
-            background: var(--card-bg);
+        /* ========== BOOKING WIZARD BOX ========== */
+        .booking-section {
+            background: var(--bg-card);
             border-radius: var(--radius-card);
-            padding: 24px 28px;
+            padding: 35px;
             box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
         }
-        .my-appointments-section .section-header {
+        .booking-section h2 {
+            color: var(--text-primary);
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin-bottom: 6px;
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
+            gap: 10px;
         }
-        .my-appointments-section .section-header h2 {
-            color: var(--text-primary);
-            font-size: 1.2rem;
-            font-weight: 700;
+        .booking-section h2 i { color: var(--maroon); }
+
+        .step-container {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
         }
-        .my-appointments-section .section-header i {
-            color: var(--maroon-light);
-            font-size: 1.2rem;
+        .step-container.active {
+            display: block;
         }
 
-        .appointments-list {
-            margin-top: 16px;
+        /* STEP 1: Visual Service Card Grid */
+        .services-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+            max-height: 380px;
+            overflow-y: auto;
+            padding: 5px;
         }
-        .appointment-card {
-            background: var(--badge-bg);
+        .service-select-card {
+            background: var(--bg-primary);
+            padding: 20px;
             border-radius: var(--radius-element);
-            padding: 14px 18px;
-            margin-bottom: 12px;
-            border-left: 4px solid var(--midnight);
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .service-select-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--maroon-light);
+            box-shadow: var(--shadow-sm);
+        }
+        .service-select-card.selected {
+            border-color: var(--maroon);
+            background: rgba(127, 3, 3, 0.05);
+        }
+        [data-theme="dark"] .service-select-card.selected {
+            border-color: var(--gold-light);
+            background: rgba(232, 213, 168, 0.05);
+        }
+        .service-select-card i {
+            font-size: 1.8rem;
+            color: var(--maroon);
+        }
+        [data-theme="dark"] .service-select-card i {
+            color: var(--gold-light);
+        }
+        .service-select-card h4 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+        .service-select-card .duration {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* Dynamic Requirements Alert */
+        .dynamic-requirements-box {
+            background: rgba(216, 186, 152, 0.12);
+            border-left: 4px solid var(--tan);
+            padding: 20px;
+            border-radius: var(--radius-element);
+            margin-bottom: 25px;
+            display: none;
+        }
+        .dynamic-requirements-box h4 {
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dynamic-requirements-box h4 i { color: var(--maroon); }
+        .dynamic-requirements-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        .dynamic-requirements-box li {
+            padding: 4px 0;
+            padding-left: 20px;
+            position: relative;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .dynamic-requirements-box li:before {
+            content: "•";
+            color: var(--maroon);
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        /* STEP 2: Date & Segregated Time Picker */
+        .calendar-picker-row {
+            margin-bottom: 25px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        .form-group input[type="date"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-element);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
             transition: all 0.3s;
+        }
+        .form-group input[type="date"]:focus {
+            outline: none;
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px rgba(127,3,3,0.08);
+        }
+
+        .time-slots-container-block {
+            display: none;
+            margin-top: 20px;
+        }
+        .slots-section-header {
+            font-size: 0.85rem;
+            font-weight: 750;
+            color: var(--text-primary);
+            margin: 15px 0 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .slots-section-header.am-header { color: var(--color-warning); }
+        .slots-section-header.pm-header { color: var(--color-info); }
+
+        .time-slots-segregated {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .time-slot-btn {
+            background: var(--bg-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-element);
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .time-slot-btn:hover:not(.disabled) {
+            transform: translateY(-2px);
+            border-color: var(--maroon-light);
+        }
+        .time-slot-btn.selected {
+            background: var(--maroon);
+            border-color: var(--maroon);
+            color: white !important;
+        }
+        .time-slot-btn.selected .slot-badge {
+            background: rgba(255,255,255,0.2) !important;
+            color: white !important;
+        }
+        .time-slot-btn.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: rgba(211,47,47,0.15);
+            background: rgba(211,47,47,0.02);
+        }
+        .time-slot-btn .slot-time {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .time-slot-btn.selected .slot-time { color: white; }
+        .time-slot-btn.disabled .slot-time { color: var(--color-danger); }
+        
+        .slot-badge {
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 700;
+        }
+        .slot-badge.badge-available { background: rgba(46,125,50,0.1); color: var(--color-success); }
+        .slot-badge.badge-warning { background: rgba(237,108,2,0.1); color: var(--color-warning); }
+        .slot-badge.badge-full { background: rgba(211,47,47,0.1); color: var(--color-danger); }
+
+        /* STEP 3: Summary & Submit Confirmation */
+        .summary-box {
+            background: var(--bg-primary);
+            padding: 25px;
+            border-radius: var(--radius-element);
+            border: 1px solid var(--border-color);
+            margin-bottom: 25px;
+        }
+        .summary-box h4 {
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 0.88rem;
+        }
+        .summary-row:last-child { margin-bottom: 0; }
+        .summary-label { color: var(--text-muted); font-weight: 500; }
+        .summary-value { color: var(--text-primary); font-weight: 700; }
+
+        .confirmation-checklist {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .confirmation-checklist input {
+            margin-top: 4px;
+            cursor: pointer;
+        }
+        .confirmation-checklist label {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            line-height: 1.4;
+            cursor: pointer;
+        }
+
+        /* Form Actions Buttons */
+        .wizard-actions {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        .btn-wizard-nav {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 40px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-wizard-nav.btn-prev {
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            border: 1.5px solid var(--border-color);
+        }
+        .btn-wizard-nav.btn-prev:hover { background: var(--border-color); }
+        .btn-wizard-nav.btn-next {
+            background: var(--maroon);
+            color: white;
+            margin-left: auto;
+        }
+        .btn-wizard-nav.btn-next:hover:not(:disabled) {
+            background: var(--maroon-light);
+            transform: translateY(-2px);
+        }
+        .btn-wizard-nav.btn-next:disabled {
+            background: var(--border-color);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        /* ========== MY APPOINTMENTS BOARD ========== */
+        .my-appointments-section {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            padding: 35px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+        }
+        .my-appointments-section h2 {
+            color: var(--text-primary);
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .my-appointments-section h2 i { color: var(--maroon); }
+
+        .appointment-card {
+            background: var(--bg-primary);
+            border-radius: var(--radius-element);
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+            border-left: 5px solid var(--midnight);
+            transition: all 0.3s ease;
+            position: relative;
         }
         .appointment-card:hover {
             transform: translateX(4px);
@@ -660,222 +749,154 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .appointment-card.status-pending { border-left-color: var(--color-warning); }
         .appointment-card.status-confirmed { border-left-color: var(--color-success); }
         .appointment-card.status-completed { border-left-color: var(--color-info); }
-        .appointment-card.status-cancelled { border-left-color: var(--color-danger); opacity: 0.7; }
+        .appointment-card.status-cancelled { border-left-color: var(--color-danger); opacity: 0.8; }
 
         .appointment-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
-            flex-wrap: wrap;
-            gap: 8px;
+            margin-bottom: 12px;
         }
         .appointment-service {
-            font-weight: 700;
+            font-weight: 800;
             color: var(--text-primary);
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
         .appointment-status {
-            padding: 3px 12px;
-            border-radius: 50px;
+            padding: 4px 12px;
+            border-radius: 30px;
             font-size: 0.65rem;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
-        .appointment-status.pending {
-            background: rgba(255, 152, 0, 0.15);
-            color: var(--color-warning);
-        }
-        .appointment-status.confirmed {
-            background: rgba(76, 175, 80, 0.15);
-            color: var(--color-success);
-        }
-        .appointment-status.completed {
-            background: rgba(33, 150, 243, 0.15);
-            color: var(--color-info);
-        }
-        .appointment-status.cancelled {
-            background: rgba(244, 67, 54, 0.15);
-            color: var(--color-danger);
-        }
+        .appointment-status.pending { background: rgba(237,108,2,0.1); color: var(--color-warning); }
+        .appointment-status.confirmed { background: rgba(46,125,50,0.1); color: var(--color-success); }
+        .appointment-status.completed { background: rgba(2,136,209,0.1); color: var(--color-info); }
+        .appointment-status.cancelled { background: rgba(211,47,47,0.1); color: var(--color-danger); }
 
         .appointment-details {
             display: flex;
-            gap: 16px;
+            gap: 20px;
+            margin-bottom: 15px;
             flex-wrap: wrap;
-            margin-bottom: 10px;
+            border-top: 1px dashed var(--border-color);
+            padding-top: 12px;
         }
         .detail-item {
             display: flex;
             align-items: center;
             gap: 6px;
-            color: var(--text-muted);
-            font-size: 0.75rem;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            font-weight: 600;
         }
-        .detail-item i {
-            color: var(--maroon-light);
-            width: 14px;
-            font-size: 0.7rem;
-        }
+        .detail-item i { color: var(--maroon); }
+        [data-theme="dark"] .detail-item i { color: var(--gold-light); }
 
         .appointment-actions {
             display: flex;
-            gap: 8px;
+            gap: 10px;
             justify-content: flex-end;
-            flex-wrap: wrap;
         }
         .btn-small {
-            padding: 5px 14px;
+            padding: 6px 16px;
             border: none;
-            border-radius: 50px;
+            border-radius: 30px;
+            font-size: 0.72rem;
+            font-weight: 700;
             cursor: pointer;
-            font-size: 0.7rem;
-            text-decoration: none;
+            transition: all 0.3s;
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            transition: all 0.3s;
-            font-weight: 600;
+            text-decoration: none;
         }
         .btn-view {
-            background: var(--badge-bg);
-            color: var(--text-secondary);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
         }
-        .btn-view:hover {
-            background: var(--maroon);
-            color: white;
-            transform: translateY(-2px);
-        }
+        .btn-view:hover { border-color: var(--maroon); color: var(--maroon); }
         .btn-cancel {
-            background: rgba(244, 67, 54, 0.12);
+            background: rgba(211,47,47,0.1);
             color: var(--color-danger);
         }
-        .btn-cancel:hover {
-            background: var(--color-danger);
-            color: white;
-            transform: translateY(-2px);
-        }
+        .btn-cancel:hover { background: var(--color-danger); color: white; }
 
-        .no-appointments {
-            text-align: center;
-            padding: 40px 20px;
-            background: var(--badge-bg);
-            border-radius: var(--radius-element);
-            color: var(--text-muted);
-        }
-        .no-appointments i {
-            font-size: 2.5rem;
-            color: var(--text-muted);
-            opacity: 0.3;
-            display: block;
-            margin-bottom: 12px;
-        }
-        .no-appointments p {
-            font-size: 0.85rem;
-        }
-        .no-appointments .hint {
-            font-size: 0.75rem;
-            margin-top: 8px;
-        }
-        .btn-login-prompt {
-            display: inline-block;
-            padding: 10px 24px;
-            background: var(--maroon);
-            color: white;
-            text-decoration: none;
-            border-radius: 50px;
-            font-weight: 600;
-            transition: all 0.3s;
-            margin-top: 12px;
-        }
-        .btn-login-prompt:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .view-all-link {
-            text-align: center;
-            margin-top: 16px;
-        }
-        .view-all-link a {
-            color: var(--maroon-light);
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.82rem;
-        }
-        .view-all-link a:hover {
-            text-decoration: underline;
-        }
-
-        /* ========== INFO SECTION ========== */
+        /* ========== INFO CARDS AT THE BOTTOM ========== */
         .info-section {
-            margin-top: 28px;
+            margin-top: 35px;
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 20px;
         }
         .info-card {
-            background: var(--card-bg);
-            padding: 18px 20px;
+            background: var(--bg-card);
+            padding: 24px;
             border-radius: var(--radius-element);
             text-align: center;
             box-shadow: var(--shadow-sm);
             border: 1px solid var(--border-color);
-            transition: all 0.3s;
+            transition: all 0.3s ease;
         }
         .info-card:hover {
             transform: translateY(-3px);
             box-shadow: var(--shadow-md);
         }
         .info-card i {
-            font-size: 1.6rem;
-            color: var(--maroon-light);
-            margin-bottom: 10px;
+            font-size: 1.8rem;
+            color: var(--maroon);
+            margin-bottom: 12px;
         }
+        [data-theme="dark"] .info-card i { color: var(--gold-light); }
         .info-card h3 {
             color: var(--text-primary);
-            margin-bottom: 6px;
-            font-size: 0.95rem;
-            font-weight: 700;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 8px;
         }
         .info-card p {
             color: var(--text-muted);
-            font-size: 0.78rem;
+            font-size: 0.8rem;
             line-height: 1.5;
+            font-weight: 500;
         }
 
-        /* ========== MODAL ========== */
+        /* ========== CONFIRMATION MODALS ========== */
         .modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.6);
+            background: rgba(10, 14, 23, 0.6);
+            backdrop-filter: blur(4px);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 2000;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.3s;
-            backdrop-filter: blur(4px);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .modal.show {
             opacity: 1;
             visibility: visible;
         }
         .modal-content {
-            background: var(--card-bg);
-            padding: 28px 32px;
+            background: var(--bg-card);
+            padding: 30px;
             border-radius: var(--radius-card);
-            max-width: 450px;
+            max-width: 460px;
             width: 90%;
-            transform: translateY(-20px);
-            transition: transform 0.3s;
-            box-shadow: var(--shadow-lg);
+            transform: translateY(20px);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
             border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-lg);
         }
         .modal.show .modal-content {
             transform: translateY(0);
@@ -884,95 +905,119 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
         }
         .modal-header h2 {
+            font-size: 1.25rem;
+            font-weight: 800;
             color: var(--text-primary);
-            margin: 0;
-            font-size: 1.2rem;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .modal-header h2 i {
-            color: var(--maroon-light);
-        }
+        .modal-header h2 i { color: var(--color-danger); }
         .close-btn {
             background: none;
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
             color: var(--text-muted);
-            transition: all 0.3s;
-            line-height: 1;
+            transition: transform 0.3s;
         }
-        .close-btn:hover {
-            color: var(--maroon);
-            transform: rotate(90deg);
-        }
-        .modal p {
+        .close-btn:hover { transform: rotate(90deg); color: var(--maroon); }
+
+        .modal-body p {
             color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-bottom: 8px;
-        }
-        .modal .text-danger {
-            color: var(--color-danger);
-            font-size: 0.8rem;
+            font-size: 0.92rem;
+            line-height: 1.6;
+            margin-bottom: 10px;
         }
         .modal-actions {
             display: flex;
             gap: 12px;
             justify-content: flex-end;
-            margin-top: 20px;
+            margin-top: 25px;
         }
 
-        /* ========== RESPONSIVE ========== */
+        .no-appointments {
+            text-align: center;
+            padding: 45px 20px;
+            background: var(--bg-primary);
+            border-radius: var(--radius-element);
+            color: var(--text-muted);
+            border: 2px dashed var(--border-color);
+        }
+        .no-appointments i {
+            font-size: 2.8rem;
+            opacity: 0.25;
+            margin-bottom: 15px;
+            display: block;
+            color: var(--text-primary);
+        }
+        .btn-login-prompt {
+            display: inline-block;
+            padding: 10px 28px;
+            background: var(--maroon);
+            color: white;
+            text-decoration: none;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 0.88rem;
+            margin-top: 15px;
+            transition: all 0.3s;
+        }
+        .btn-login-prompt:hover { background: var(--maroon-light); transform: translateY(-2px); }
+
+        .view-all-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .view-all-link a {
+            color: var(--maroon);
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.88rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        [data-theme="dark"] .view-all-link a { color: var(--gold-light); }
+        .view-all-link a:hover { text-decoration: underline; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== RESPONSIVE OVERRIDES ========== */
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
+            .sidebar { transform: translateX(-100%); display: none; }
+            .main-content { margin-left: 0; padding: 25px; }
             .appointments-grid { grid-template-columns: 1fr; }
-            .info-section { grid-template-columns: repeat(2, 1fr); }
+            .info-section { grid-template-columns: 1fr; }
         }
         @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
-            .form-row { grid-template-columns: 1fr; }
-            .time-slots { grid-template-columns: repeat(3, 1fr); }
-            .appointments-hero h1 { font-size: 1.5rem; }
-            .appointments-hero p { font-size: 0.85rem; }
-            .booking-section { padding: 18px 20px; }
-            .my-appointments-section { padding: 18px 20px; }
-            .info-section { grid-template-columns: 1fr; }
-            .appointment-header { flex-direction: column; align-items: flex-start; }
-        }
-        @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .time-slots { grid-template-columns: repeat(2, 1fr); }
-            .modal-content { padding: 20px; }
-            .appointment-card { padding: 12px 14px; }
+            .top-bar { flex-direction: column; align-items: stretch; text-align: center; }
+            .top-bar-actions { justify-content: center; }
+            .services-cards-grid { grid-template-columns: 1fr; }
+            .time-slots-segregated { grid-template-columns: repeat(2, 1fr); }
+            .wizard-steps { flex-direction: column; gap: 5px; border-radius: var(--radius-element); }
+            .wizard-step { padding: 10px; }
         }
     </style>
 </head>
 <body>
-    <!-- Hero Section -->
-    <section class="appointments-hero">
-        <div class="container">
-            <h1>📅 Appointments</h1>
-            <p>Schedule, manage, and track your appointments with CSWDO Palayan City. Choose a convenient time and service that fits your needs.</p>
-        </div>
-    </section>
-
     <div class="dashboard-container">
-        <!-- Sidebar - ONLY SHOWN FOR LOGGED IN RESIDENTS -->
+        <!-- Sidebar Menu -->
         <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
         <div class="sidebar">
             <div class="sidebar-header">
                 <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
                 <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Integrated Service Portal</span>
+                    <h2>One Palayan-Kalinga</h2>
+                    <span>Resident Portal</span>
                 </div>
             </div>
             
@@ -1012,13 +1057,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         </div>
         <?php endif; ?>
 
-        <!-- Main Content -->
+        <!-- Main Content Panel -->
         <div class="main-content <?php echo (!isLoggedIn() || isStaff() || isAdmin()) ? 'full-width' : ''; ?>">
-            <!-- Top Bar -->
+            <!-- Top Bar Actions -->
             <div class="top-bar">
                 <div class="page-title">
-                    <h1><i class="fas fa-calendar-check" style="color: var(--maroon-light); margin-right: 10px;"></i> Appointments</h1>
-                    <p>Book and manage your appointments with CSWDO</p>
+                    <h1>Appointments Scheduling</h1>
+                    <p>Schedule your resident support visit at CSWDO Palayan City.</p>
                 </div>
                 <div class="top-bar-actions">
                     <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
@@ -1040,104 +1085,171 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             <?php endif; ?>
 
             <div class="appointments-grid">
-                <!-- Booking Form Section -->
+                <!-- 3-Step Wizard Block -->
                 <div class="booking-section">
-                    <div class="section-header">
-                        <i class="fas fa-calendar-plus"></i>
-                        <h2>Book an Appointment</h2>
+                    <div class="wizard-steps">
+                        <div class="wizard-step active" id="stepHeader1">
+                            <span class="wizard-step-num">1</span> Service
+                        </div>
+                        <div class="wizard-step" id="stepHeader2">
+                            <span class="wizard-step-num">2</span> Date & Time
+                        </div>
+                        <div class="wizard-step" id="stepHeader3">
+                            <span class="wizard-step-num">3</span> Confirm
+                        </div>
                     </div>
-                    <p class="section-subtitle">Schedule your visit to CSWDO - it's quick and easy!</p>
 
                     <?php if (!isLoggedIn()): ?>
                     <div class="no-appointments">
-                        <i class="fas fa-sign-in-alt"></i>
-                        <p>Please log in to book an appointment</p>
-                        <a href="login.php" class="btn-login-prompt">Login to Continue</a>
+                        <i class="fas fa-right-to-bracket"></i>
+                        <p>Access Restricted: Resident Authentication Required</p>
+                        <a href="login.php" class="btn-login-prompt">Sign In Portal</a>
                     </div>
                     <?php elseif (isStaff() || isAdmin()): ?>
                     <div class="no-appointments">
                         <i class="fas fa-user-tie"></i>
-                        <p>Staff members cannot book appointments as residents.</p>
-                        <a href="staff-dashboard.php" class="btn-login-prompt">Go to Staff Dashboard</a>
+                        <p>Staff members cannot schedule appointments using the resident portal.</p>
+                        <a href="staff-dashboard.php" class="btn-login-prompt">Staff Area Dashboard</a>
                     </div>
                     <?php else: ?>
-                    <form id="bookingForm" class="booking-form" onsubmit="return bookAppointment(event)">
-                        <div class="form-group">
-                            <label><i class="fas fa-concierge-bell"></i> Select Service <span style="color: var(--color-danger);">*</span></label>
-                            <select id="service_id" name="service_id" required onchange="updateServiceInfo()">
-                                <option value="">-- Choose a service --</option>
-                                <?php foreach ($services as $service): ?>
-                                <option value="<?php echo $service['service_id']; ?>" data-processing="<?php echo htmlspecialchars($service['processing_time']); ?>">
-                                    <?php echo htmlspecialchars($service['service_name']); ?>
-                                </option>
+                    <form id="bookingForm" onsubmit="return bookAppointment(event)">
+                        <!-- Input triggers -->
+                        <input type="hidden" id="service_id" name="service_id" required>
+                        <input type="hidden" id="appointment_time" name="appointment_time" required>
+
+                        <!-- STEP 1: SERVICE SELECT GRID -->
+                        <div class="step-container active" id="step1">
+                            <h2 style="margin-bottom: 15px;"><i class="fas fa-concierge-bell"></i> Choose service category</h2>
+                            <div class="services-cards-grid">
+                                <?php foreach ($services as $service): 
+                                    // Assign distinct icons based on services names
+                                    $serviceName = strtolower($service['service_name']);
+                                    $iconClass = 'fa-circle-info';
+                                    if (strpos($serviceName, 'medical') !== false) {
+                                        $iconClass = 'fa-hand-holding-medical';
+                                    } elseif (strpos($serviceName, 'educational') !== false || strpos($serviceName, 'school') !== false) {
+                                        $iconClass = 'fa-graduation-cap';
+                                    } elseif (strpos($serviceName, 'burial') !== false || strpos($serviceName, 'funeral') !== false) {
+                                        $iconClass = 'fa-monument';
+                                    } elseif (strpos($serviceName, 'food') !== false || strpos($serviceName, 'relief') !== false) {
+                                        $iconClass = 'fa-basket-shopping';
+                                    } elseif (strpos($serviceName, 'housing') !== false || strpos($serviceName, 'relocation') !== false) {
+                                        $iconClass = 'fa-house-chimney';
+                                    } elseif (strpos($serviceName, 'transport') !== false || strpos($serviceName, 'cash') !== false) {
+                                        $iconClass = 'fa-bus-simple';
+                                    }
+                                ?>
+                                <div class="service-select-card" 
+                                     onclick="selectServiceCard(this, <?php echo $service['service_id']; ?>, '<?php echo htmlspecialchars($service['service_name']); ?>', '<?php echo htmlspecialchars($service['processing_time'] ?? 'Standard'); ?>')">
+                                    <i class="fas <?php echo $iconClass; ?>"></i>
+                                    <h4><?php echo htmlspecialchars($service['service_name']); ?></h4>
+                                    <span class="duration"><i class="fas fa-clock"></i> <?php echo htmlspecialchars($service['processing_time']); ?></span>
+                                </div>
                                 <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label><i class="fas fa-calendar-day"></i> Preferred Date <span style="color: var(--color-danger);">*</span></label>
-                                <input type="date" id="appointment_date" name="appointment_date" 
-                                       min="<?php echo $today; ?>" max="<?php echo $max_date; ?>" 
-                                       required onchange="loadAvailableSlots()">
                             </div>
 
-                            <div class="form-group">
-                                <label><i class="fas fa-clock"></i> Preferred Time <span style="color: var(--color-danger);">*</span></label>
-                                <select id="appointment_time" name="appointment_time" required disabled>
-                                    <option value="">-- Select date first --</option>
-                                </select>
+                            <!-- Prerequisite Alert display -->
+                            <div class="dynamic-requirements-box" id="requirementsAlert">
+                                <h4><i class="fas fa-file-circle-exclamation"></i> Documents to prepare:</h4>
+                                <ul id="requirementsList"></ul>
+                            </div>
+
+                            <div class="wizard-actions">
+                                <button type="button" class="btn-wizard-nav btn-next" id="btnNext1" disabled onclick="goToStep(2)">Next: Schedule <i class="fas fa-arrow-right"></i></button>
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label><i class="fas fa-pencil-alt"></i> Purpose / Notes (Optional)</label>
-                            <textarea id="purpose" name="purpose" rows="3" 
-                                      placeholder="Tell us more about your appointment needs..."></textarea>
+                        <!-- STEP 2: DATE AND SLOTS SELECTOR -->
+                        <div class="step-container" id="step2">
+                            <h2 style="margin-bottom: 15px;"><i class="fas fa-calendar-day"></i> Select appointment date & time</h2>
+                            
+                            <div class="calendar-picker-row">
+                                <div class="form-group">
+                                    <label for="appointment_date"><i class="fas fa-calendar-check"></i> Choose Date</label>
+                                    <input type="date" id="appointment_date" name="appointment_date" min="<?php echo $today; ?>" max="<?php echo $max_date; ?>" onchange="loadAvailableSlots()">
+                                </div>
+                            </div>
+
+                            <!-- Time Slots Segmented -->
+                            <div class="time-slots-container-block" id="slotsBlock">
+                                <div class="slots-section-header am-header"><i class="fas fa-sun"></i> Morning Slots (AM)</div>
+                                <div class="time-slots-segregated" id="amSlots"></div>
+
+                                <div class="slots-section-header pm-header"><i class="fas fa-cloud-sun"></i> Afternoon Slots (PM)</div>
+                                <div class="time-slots-segregated" id="pmSlots"></div>
+                            </div>
+
+                            <div class="wizard-actions">
+                                <button type="button" class="btn-wizard-nav btn-prev" onclick="goToStep(1)"><i class="fas fa-arrow-left"></i> Back</button>
+                                <button type="button" class="btn-wizard-nav btn-next" id="btnNext2" disabled onclick="goToStep(3)">Next: Review <i class="fas fa-arrow-right"></i></button>
+                            </div>
                         </div>
 
-                        <div id="timeSlotsContainer" style="display: none;">
-                            <label><i class="fas fa-clock"></i> Available Time Slots</label>
-                            <div class="time-slots" id="timeSlots"></div>
-                        </div>
+                        <!-- STEP 3: DETAILS AND CONFIRM -->
+                        <div class="step-container" id="step3">
+                            <h2 style="margin-bottom: 15px;"><i class="fas fa-clipboard-check"></i> Finalize appointment details</h2>
 
-                        <div class="service-info-box" id="serviceInfo">
-                            <i class="fas fa-info-circle"></i>
-                            <small>Processing time: <span id="processingTime"></span></small>
-                        </div>
+                            <div class="form-group" style="margin-bottom: 20px;">
+                                <label for="purpose"><i class="fas fa-pencil-alt"></i> Notes/Purpose (Optional)</label>
+                                <textarea id="purpose" name="purpose" rows="3" placeholder="Explain the main reason for your booking..."></textarea>
+                            </div>
 
-                        <button type="submit" class="btn-book" id="bookBtn" disabled>
-                            <i class="fas fa-calendar-check"></i> Book Appointment
-                        </button>
+                            <!-- Review Summary Box -->
+                            <div class="summary-box">
+                                <h4>Booking Summary</h4>
+                                <div class="summary-row">
+                                    <span class="summary-label">Selected Service:</span>
+                                    <span class="summary-value" id="summaryService">-</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label">Estimated processing:</span>
+                                    <span class="summary-value" id="summaryDuration">-</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label">Date:</span>
+                                    <span class="summary-value" id="summaryDate">-</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label">Time Slot:</span>
+                                    <span class="summary-value" id="summaryTime">-</span>
+                                </div>
+                            </div>
+
+                            <!-- Checklist Checkbox -->
+                            <div class="confirmation-checklist">
+                                <input type="checkbox" id="confirmDocsCheck" onchange="toggleBookingSubmit()">
+                                <label for="confirmDocsCheck">I confirm that I have prepared and will bring all the required documents listed in Step 1 to my appointment.</label>
+                            </div>
+
+                            <div class="wizard-actions">
+                                <button type="button" class="btn-wizard-nav btn-prev" onclick="goToStep(2)"><i class="fas fa-arrow-left"></i> Back</button>
+                                <button type="submit" class="btn-wizard-nav btn-next" id="bookBtn" disabled><i class="fas fa-calendar-check"></i> Confirm Booking</button>
+                            </div>
+                        </div>
                     </form>
                     <?php endif; ?>
                 </div>
 
-                <!-- My Appointments Section -->
+                <!-- My Appointments Column List -->
                 <div class="my-appointments-section">
-                    <div class="section-header">
-                        <i class="fas fa-calendar-alt"></i>
-                        <h2>My Appointments</h2>
-                    </div>
-                    <p class="section-subtitle">View and manage your scheduled appointments</p>
+                    <h2><i class="fas fa-calendar-check"></i> Active appointments</h2>
+                    <p class="section-subtitle" style="margin-bottom: 20px;">Manage and monitor your upcoming appointments.</p>
 
                     <?php if (!isLoggedIn()): ?>
                     <div class="no-appointments">
-                        <i class="fas fa-user-lock"></i>
-                        <p>Please log in to view your appointments</p>
-                        <a href="login.php" class="btn-login-prompt">Login to View</a>
+                        <i class="fas fa-lock"></i>
+                        <p>Authenticate your account to view your scheduled visits.</p>
                     </div>
                     <?php elseif (isStaff() || isAdmin()): ?>
                     <div class="no-appointments">
-                        <i class="fas fa-user-tie"></i>
-                        <p>Staff members do not have resident appointments.</p>
-                        <a href="staff/manage-appointments.php" class="btn-login-prompt">Manage Appointments</a>
+                        <i class="fas fa-list-check"></i>
+                        <p>Manage appointments inside the CSWDO Admin Portal.</p>
+                        <a href="staff/manage-appointments.php" class="btn-login-prompt">Staff Booking Portal</a>
                     </div>
                     <?php elseif (empty($user_appointments)): ?>
                     <div class="no-appointments">
-                        <i class="fas fa-calendar-times"></i>
-                        <p>You have no appointments scheduled yet</p>
-                        <p class="hint">Book your first appointment using the form above!</p>
+                        <i class="fas fa-calendar-xmark"></i>
+                        <p>No active scheduled appointments recorded yet.</p>
                     </div>
                     <?php else: ?>
                     <div class="appointments-list">
@@ -1148,8 +1260,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                                 <span class="appointment-status <?php echo $appointment['status']; ?>">
                                     <i class="fas fa-<?php 
                                         echo $appointment['status'] == 'pending' ? 'clock' : 
-                                            ($appointment['status'] == 'confirmed' ? 'check-circle' : 
-                                            ($appointment['status'] == 'completed' ? 'check-double' : 'times-circle')); 
+                                            ($appointment['status'] == 'confirmed' ? 'circle-check' : 
+                                            ($appointment['status'] == 'completed' ? 'check-double' : 'circle-xmark')); 
                                     ?>"></i>
                                     <?php echo ucfirst($appointment['status']); ?>
                                 </span>
@@ -1168,11 +1280,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
                             <div class="appointment-actions">
                                 <a href="view-appointment.php?id=<?php echo $appointment['appointment_id']; ?>" class="btn-small btn-view">
-                                    <i class="fas fa-eye"></i> View
+                                    <i class="fas fa-eye"></i> View details
                                 </a>
                                 <?php if ($appointment['status'] == 'pending' || $appointment['status'] == 'confirmed'): ?>
                                 <button onclick="cancelAppointment(<?php echo $appointment['appointment_id']; ?>)" class="btn-small btn-cancel">
-                                    <i class="fas fa-times"></i> Cancel
+                                    <i class="fas fa-xmark"></i> Cancel
                                 </button>
                                 <?php endif; ?>
                             </div>
@@ -1181,7 +1293,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     </div>
 
                     <div class="view-all-link">
-                        <a href="my-appointments.php"><i class="fas fa-arrow-right"></i> View All Appointments</a>
+                        <a href="my-appointments.php">View All Appointments History <i class="fas fa-arrow-right-long"></i></a>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -1195,50 +1307,119 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <p>Monday - Friday<br>8:00 AM - 5:00 PM</p>
                 </div>
                 <div class="info-card">
-                    <i class="fas fa-file-alt"></i>
-                    <h3>Document Preparation</h3>
-                    <p>Upload required documents before your appointment for faster processing</p>
+                    <i class="fas fa-file-pdf"></i>
+                    <h3>Verification</h3>
+                    <p>Prepare digital or original photocopies of all listed service documents before your scheduled visit.</p>
                 </div>
                 <div class="info-card">
                     <i class="fas fa-bell"></i>
-                    <h3>Reminders</h3>
-                    <p>You'll receive SMS and email reminders 24 hours before your appointment</p>
+                    <h3>Notifications</h3>
+                    <p>Automated reminders will be delivered to your registered phone number 24 hours prior to booking.</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Cancel Modal -->
+    <!-- Cancel Modal Dialog -->
     <div id="cancelModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2><i class="fas fa-exclamation-triangle"></i> Cancel Appointment</h2>
                 <button class="close-btn" onclick="closeModal('cancelModal')">&times;</button>
             </div>
-            <p>Are you sure you want to cancel this appointment?</p>
-            <p class="text-danger"><i class="fas fa-exclamation-circle"></i> This action cannot be undone.</p>
+            <div class="modal-body">
+                <p>Are you sure you want to cancel this appointment?</p>
+                <p class="text-danger" style="font-weight: 700;"><i class="fas fa-triangle-exclamation"></i> This action is permanent and cannot be undone.</p>
+            </div>
             <div class="modal-actions">
-                <button onclick="closeModal('cancelModal')" class="btn-small btn-view">No, Keep It</button>
-                <button id="confirmCancelBtn" class="btn-small btn-cancel">Yes, Cancel</button>
+                <button onclick="closeModal('cancelModal')" class="btn-small btn-view" style="padding: 10px 20px;">Keep appointment</button>
+                <button id="confirmCancelBtn" class="btn-small btn-cancel" style="padding: 10px 20px;">Yes, Cancel</button>
             </div>
         </div>
     </div>
 
-    <!-- Success Modal -->
+    <!-- Success Modal Dialog -->
     <div id="successModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2><i class="fas fa-check-circle" style="color: var(--color-success);"></i> Success!</h2>
+                <h2><i class="fas fa-check-circle" style="color: var(--color-success);"></i> Booked successfully</h2>
                 <button class="close-btn" onclick="closeModal('successModal')">&times;</button>
             </div>
-            <p id="successMessage">Your appointment has been booked successfully!</p>
+            <div class="modal-body">
+                <p id="successMessage">Your appointment has been successfully scheduled! You can review details inside your appointments menu.</p>
+            </div>
             <div class="modal-actions" style="justify-content: center;">
-                <button onclick="closeModal('successModal')" class="btn-book" style="width: auto; padding: 10px 30px;">OK</button>
+                <button onclick="closeModal('successModal')" class="btn-wizard-nav btn-next" style="margin-left:0; padding: 10px 30px;">Continue</button>
             </div>
         </div>
     </div>
 
     <script>
+    // ========== STATE VARIABLES ==========
+    let currentStep = 1;
+    let selectedServiceId = null;
+    let selectedServiceName = '';
+    let selectedServiceDuration = '';
+    let currentAppointmentId = null;
+
+    // ========== DYNAMIC SERVICE REQUIREMENTS DICTIONARY ==========
+    const serviceRequirementsMap = {
+        'medical assistance': [
+            'Medical Abstract/Certificate (Original, issued within the last 3 months)',
+            'Doctor Prescription or Treatment Protocol/Price Quotation',
+            'Barangay Certificate of Indigency (Original)',
+            'Valid Government ID of the patient & applicant'
+        ],
+        'educational assistance': [
+            'Certificate of Enrollment or Certificate of Registration (latest semester)',
+            'School ID photocopy (front and back)',
+            'Barangay Certificate of Indigency of parent/guardian (Original)',
+            'Tuition fee statement or Statement of Account'
+        ],
+        'burial assistance': [
+            'Registered Death Certificate (photocopy)',
+            'Funeral Contract / Funeral Service Invoice',
+            'Barangay Certificate of Indigency of the claimant (Original)',
+            'Valid Government ID of the claimant/applicant'
+        ],
+        'food assistance': [
+            'Barangay Certificate of Indigency (Original)',
+            'Valid Government ID of the applicant',
+            'Social Case Study Report (from municipal CSWDO social worker, if applicable)'
+        ],
+        'funeral assistance': [
+            'Registered Death Certificate (photocopy)',
+            'Funeral Contract / Funeral Service Invoice',
+            'Barangay Certificate of Indigency of the claimant (Original)',
+            'Valid Government ID of the claimant/applicant'
+        ],
+        'material assistance': [
+            'Barangay Certificate of Indigency (Original)',
+            'Valid Government ID of the applicant',
+            'Estimated cost quotation / materials description list'
+        ],
+        'transportation assistance': [
+            'Police Clearance or Travel Authority/Referral (if applicable)',
+            'Barangay Certificate of Indigency (Original)',
+            'Valid ID of the traveler',
+            'Referral Letter or Medical Abstract (if traveling for medical treatments)'
+        ],
+        'housing program': [
+            'Letter of Intent addressed to CSWDO committee',
+            'Barangay Clearance/Indigency (Original)',
+            'Government Valid ID',
+            'Photos of Current House condition',
+            'Utility Proof of Billing'
+        ],
+        'relocation': [
+            'Letter of Intent addressed to CSWDO committee',
+            'Barangay Clearance/Indigency (Original)',
+            'Government Valid ID',
+            'Photos of Current House condition',
+            'Utility Proof of Billing'
+        ]
+    };
+
     // ========== THEME TOGGLE ==========
     const themeToggle = document.getElementById('themeToggle');
     const html = document.documentElement;
@@ -1261,103 +1442,208 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         setTheme(current === 'dark' ? 'light' : 'dark');
     });
 
-    // ========== APPOINTMENT FUNCTIONS ==========
-    let currentAppointmentId = null;
+    // ========== STEP NAVIGATION WIZARD ==========
+    function goToStep(step) {
+        // Validation check
+        if (step === 2 && !selectedServiceId) return;
+        if (step === 3 && (!document.getElementById('appointment_date').value || !document.getElementById('appointment_time').value)) return;
 
+        // Reset step state styling
+        document.querySelectorAll('.step-container').forEach(cont => cont.classList.remove('active'));
+        document.querySelectorAll('.wizard-step').forEach(hdr => hdr.classList.remove('active'));
+
+        document.getElementById(`step${step}`).classList.add('active');
+        document.getElementById(`stepHeader${step}`).classList.add('active');
+
+        // Apply completion color state
+        for (let i = 1; i < step; i++) {
+            document.getElementById(`stepHeader${i}`).classList.add('completed');
+        }
+        for (let i = step; i <= 3; i++) {
+            document.getElementById(`stepHeader${i}`).classList.remove('completed');
+        }
+
+        currentStep = step;
+
+        // Compile Summary details if entering step 3
+        if (step === 3) {
+            document.getElementById('summaryService').textContent = selectedServiceName;
+            document.getElementById('summaryDuration').textContent = selectedServiceDuration;
+            
+            const rawDate = document.getElementById('appointment_date').value;
+            const dateObj = new Date(rawDate);
+            const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            document.getElementById('summaryDate').textContent = formattedDate;
+
+            const timeLabel = document.querySelector('.time-slot-btn.selected .slot-time')?.textContent || '-';
+            document.getElementById('summaryTime').textContent = timeLabel;
+            
+            toggleBookingSubmit();
+        }
+    }
+
+    // Select service card action
+    function selectServiceCard(cardElement, serviceId, name, duration) {
+        selectedServiceId = serviceId;
+        selectedServiceName = name;
+        selectedServiceDuration = duration;
+        document.getElementById('service_id').value = serviceId;
+
+        // Select highlights toggle
+        document.querySelectorAll('.service-select-card').forEach(card => card.classList.remove('selected'));
+        cardElement.classList.add('selected');
+
+        // Dynamic Document loading
+        const normName = name.toLowerCase();
+        let matchedReqs = [];
+        
+        // Find requirements matches
+        for (let key in serviceRequirementsMap) {
+            if (normName.indexOf(key) !== -1) {
+                matchedReqs = serviceRequirementsMap[key];
+                break;
+            }
+        }
+
+        const alertBox = document.getElementById('requirementsAlert');
+        const listContainer = document.getElementById('requirementsList');
+        listContainer.innerHTML = '';
+
+        if (matchedReqs.length > 0) {
+            matchedReqs.forEach(req => {
+                const li = document.createElement('li');
+                li.textContent = req;
+                listContainer.appendChild(li);
+            });
+            alertBox.style.display = 'block';
+        } else {
+            // Default generic requirement list
+            const defaults = serviceRequirementsMap['general consultation / case study / others'];
+            defaults.forEach(req => {
+                const li = document.createElement('li');
+                li.textContent = req;
+                listContainer.appendChild(li);
+            });
+            alertBox.style.display = 'block';
+        }
+
+        // Enable next step button
+        document.getElementById('btnNext1').removeAttribute('disabled');
+    }
+
+    // Grouping slots dynamically on API call
     function loadAvailableSlots() {
         const date = document.getElementById('appointment_date').value;
-        const timeSelect = document.getElementById('appointment_time');
-        const timeSlotsContainer = document.getElementById('timeSlotsContainer');
-        const timeSlotsDiv = document.getElementById('timeSlots');
-        const bookBtn = document.getElementById('bookBtn');
+        const slotsBlock = document.getElementById('slotsBlock');
+        const amSlotsDiv = document.getElementById('amSlots');
+        const pmSlotsDiv = document.getElementById('pmSlots');
+        const btnNext2 = document.getElementById('btnNext2');
 
         if (!date) {
-            timeSelect.disabled = true;
-            timeSelect.innerHTML = '<option value="">-- Select date first --</option>';
-            timeSlotsContainer.style.display = 'none';
-            bookBtn.disabled = true;
+            slotsBlock.style.display = 'none';
+            btnNext2.setAttribute('disabled', 'true');
             return;
         }
 
-        timeSlotsDiv.innerHTML = '<div class="time-slot">Loading...</div>';
-        timeSlotsContainer.style.display = 'block';
+        amSlotsDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">Loading slots...</div>';
+        pmSlotsDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">Loading slots...</div>';
+        slotsBlock.style.display = 'block';
 
         fetch(`get-available-slots.php?date=${date}`)
             .then(response => response.json())
             .then(data => {
-                timeSlotsDiv.innerHTML = '';
+                amSlotsDiv.innerHTML = '';
+                pmSlotsDiv.innerHTML = '';
+
                 if (data.slots && data.slots.length > 0) {
+                    let hasAm = false;
+                    let hasPm = false;
+
                     data.slots.forEach(slot => {
-                        const slotDiv = document.createElement('div');
-                        slotDiv.className = `time-slot ${slot.available ? 'available' : 'disabled'}`;
-                        slotDiv.textContent = slot.time;
-                        if (slot.available) {
-                            slotDiv.onclick = () => selectTimeSlot(slot.value, slot.time);
+                        const slotButton = document.createElement('div');
+                        slotButton.className = `time-slot-btn ${slot.available ? 'available' : 'disabled'}`;
+                        
+                        let badgeClass = 'badge-available';
+                        let badgeText = `${slot.remaining} left`;
+
+                        if (!slot.available || slot.remaining <= 0) {
+                            badgeClass = 'badge-full';
+                            badgeText = 'FULL';
+                            slotButton.classList.add('disabled');
+                        } else if (slot.remaining <= 2) {
+                            badgeClass = 'badge-warning';
                         }
-                        timeSlotsDiv.appendChild(slotDiv);
-                    });
-                    timeSelect.disabled = false;
-                    timeSelect.innerHTML = '<option value="">-- Select time --</option>';
-                    data.slots.forEach(slot => {
+
+                        slotButton.innerHTML = `
+                            <span class="slot-time">${slot.time}</span>
+                            <span class="slot-badge ${badgeClass}">${badgeText}</span>
+                        `;
+
                         if (slot.available) {
-                            const option = document.createElement('option');
-                            option.value = slot.value;
-                            option.textContent = slot.time;
-                            timeSelect.appendChild(option);
+                            slotButton.onclick = () => selectTimeSlotBtn(slot.value, slotButton);
+                        }
+
+                        // AM/PM classification
+                        const hour = parseInt(slot.value.split(':')[0]);
+                        if (hour < 12) {
+                            amSlotsDiv.appendChild(slotButton);
+                            hasAm = true;
+                        } else {
+                            pmSlotsDiv.appendChild(slotButton);
+                            hasPm = true;
                         }
                     });
+
+                    if (!hasAm) amSlotsDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">No morning slots</div>';
+                    if (!hasPm) pmSlotsDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem;">No afternoon slots</div>';
+
                 } else {
-                    timeSlotsDiv.innerHTML = '<div class="time-slot disabled">No available slots</div>';
-                    timeSelect.disabled = true;
-                    timeSelect.innerHTML = '<option value="">-- No slots available --</option>';
+                    amSlotsDiv.innerHTML = '<div style="color:var(--color-danger); font-size:0.8rem;">Fully booked today</div>';
+                    pmSlotsDiv.innerHTML = '<div style="color:var(--color-danger); font-size:0.8rem;">Fully booked today</div>';
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                timeSlotsDiv.innerHTML = '<div class="time-slot disabled">Error loading slots</div>';
+                console.error('Error loading time slots:', error);
+                amSlotsDiv.innerHTML = '<div style="color:var(--color-danger);">Load failed</div>';
+                pmSlotsDiv.innerHTML = '<div style="color:var(--color-danger);">Load failed</div>';
             });
     }
 
-    function selectTimeSlot(value, label) {
+    // Highlight slots buttons
+    function selectTimeSlotBtn(value, element) {
         document.getElementById('appointment_time').value = value;
-        document.getElementById('bookBtn').disabled = false;
-        document.querySelectorAll('.time-slot').forEach(slot => {
-            slot.classList.remove('selected');
-            if (slot.textContent === label) {
-                slot.classList.add('selected');
-            }
-        });
+        document.querySelectorAll('.time-slot-btn').forEach(btn => btn.classList.remove('selected'));
+        element.classList.add('selected');
+        document.getElementById('btnNext2').removeAttribute('disabled');
     }
 
-    function updateServiceInfo() {
-        const select = document.getElementById('service_id');
-        const selected = select.options[select.selectedIndex];
-        const serviceInfo = document.getElementById('serviceInfo');
-        const processingTime = document.getElementById('processingTime');
-        if (selected.value) {
-            const time = selected.getAttribute('data-processing') || 'Standard processing time';
-            processingTime.textContent = time;
-            serviceInfo.style.display = 'block';
+    // Toggle confirm submit
+    function toggleBookingSubmit() {
+        const checkbox = document.getElementById('confirmDocsCheck');
+        const submitBtn = document.getElementById('bookBtn');
+        if (checkbox.checked && selectedServiceId && document.getElementById('appointment_time').value) {
+            submitBtn.removeAttribute('disabled');
         } else {
-            serviceInfo.style.display = 'none';
+            submitBtn.setAttribute('disabled', 'true');
         }
     }
 
+    // Submit Booking logic
     function bookAppointment(event) {
         event.preventDefault();
         const serviceId = document.getElementById('service_id').value;
         const date = document.getElementById('appointment_date').value;
         const time = document.getElementById('appointment_time').value;
         const purpose = document.getElementById('purpose').value;
+        const submitBtn = document.getElementById('bookBtn');
 
         if (!serviceId || !date || !time) {
-            alert('Please fill in all required fields');
+            alert('Fill out all required scheduling parameters first');
             return false;
         }
 
-        const bookBtn = document.getElementById('bookBtn');
-        bookBtn.disabled = true;
-        bookBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking...';
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scheduling visit...';
 
         fetch('book-appointment-ajax.php', {
             method: 'POST',
@@ -1370,25 +1656,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 document.getElementById('successMessage').textContent = data.message || 'Appointment booked successfully!';
                 openModal('successModal');
                 document.getElementById('bookingForm').reset();
-                document.getElementById('bookBtn').disabled = true;
-                document.getElementById('timeSlotsContainer').style.display = 'none';
-                document.getElementById('serviceInfo').style.display = 'none';
-                setTimeout(() => location.reload(), 2000);
+                submitBtn.disabled = true;
+                
+                setTimeout(() => location.reload(), 2500);
             } else {
-                alert(data.message || 'Error booking appointment');
-                bookBtn.disabled = false;
-                bookBtn.innerHTML = '<i class="fas fa-calendar-check"></i> Book Appointment';
+                alert(data.message || 'Booking submission failed');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-calendar-check"></i> Book Appointment';
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred. Please try again.');
-            bookBtn.disabled = false;
-            bookBtn.innerHTML = '<i class="fas fa-calendar-check"></i> Book Appointment';
+            console.error('Error booking:', error);
+            alert('Network error occurred. Try booking again.');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-calendar-check"></i> Book Appointment';
         });
+
         return false;
     }
 
+    // Cancel appointment trigger
     function cancelAppointment(id) {
         currentAppointmentId = id;
         openModal('cancelModal');
@@ -1408,19 +1695,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 alert('Appointment cancelled successfully');
                 location.reload();
             } else {
-                alert(data.message || 'Error cancelling appointment');
+                alert(data.message || 'Failed to cancel appointment');
             }
         })
         .catch(error => {
-            console.error('Error:', error);
+            console.error('Error cancelling:', error);
             alert('An error occurred');
         });
     });
 
+    // Modal display scripts
     function openModal(modalId) {
         document.getElementById(modalId).classList.add('show');
     }
-
     function closeModal(modalId) {
         document.getElementById(modalId).classList.remove('show');
     }

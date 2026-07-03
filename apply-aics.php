@@ -13,6 +13,7 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    csrf_verify();
     $request_type = sanitize($_POST['request_type']);
     $amount_requested = sanitize($_POST['amount_requested']);
     $purpose = sanitize($_POST['purpose']);
@@ -143,6 +144,7 @@ $recent_stmt->execute();
             
             <div class="application-form">
                 <form method="POST" enctype="multipart/form-data" id="aicsForm" onsubmit="return validateForm()">
+                    <?php echo csrf_field(); ?>
                     <div class="form-section">
                         <h3>Request Details</h3>
                         

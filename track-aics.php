@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/config/database.php';
 
+// Check for dark mode preference from cookie
+$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+
 $tracking_number = isset($_GET['tracking']) ? htmlspecialchars(trim($_GET['tracking'])) : '';
 $request = null;
 $error = '';
@@ -14,7 +17,6 @@ if ($tracking_number) {
     } else {
         $id = intval(str_replace('AICS-', '', $tracking_number));
         
-        // FIXED: Select only columns that exist in your table
         $query = "SELECT a.aics_id, a.user_id, a.request_type, a.amount_requested, a.amount_approved, 
                          a.status, a.submission_date, a.review_date, a.approval_date, a.release_date, 
                          a.rejection_reason, a.purpose,
@@ -34,7 +36,7 @@ if ($tracking_number) {
     }
 }
 
-// Get recent stats
+// Get recent stats (last 30 days)
 $database = new Database();
 $db = $database->getConnection();
 $stats_query = "SELECT 
@@ -43,667 +45,1119 @@ $stats_query = "SELECT
     FROM aics_requests 
     WHERE submission_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
 $stats = $db->query($stats_query)->fetch(PDO::FETCH_ASSOC);
+
+// Timeline Stepper Progress calculation
+$status_timeline = 0;
+if ($request) {
+    if ($request['status'] == 'submitted') {
+        $status_timeline = 0;
+    } elseif ($request['status'] == 'reviewing') {
+        $status_timeline = 33.33;
+    } elseif ($request['status'] == 'approved' || $request['status'] == 'rejected') {
+        $status_timeline = 66.66;
+    } elseif ($request['status'] == 'released') {
+        $status_timeline = 100;
+    }
+}
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Track AICS Request - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ========== PROFESSIONAL COLOR PALETTE ========== */
+        /* ========== CORE VARIABLE OVERRIDES AND THEMING ========== */
         :root {
             --tan: #D8BA98;
             --maroon: #7F0303;
-            --alabaster: #EFE8DF;
-            --light-blue: #96C0CE;
-            --midnight: #0F414A;
-            --maroon-dark: #5a0202;
             --maroon-light: #9a1515;
-            --midnight-light: #1a6a78;
+            --maroon-dark: #5a0202;
+            --midnight: #0F414A;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-100: #F1F3F8;
-            --gray-200: #E4E7E9;
-            --gray-600: #6B7A8A;
-            --gray-700: #3A4A5A;
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08);
+            --gold: #C9A86C;
+            --gold-light: #E8D5A8;
+            --light-blue: #96C0CE;
+            --alabaster: #E3E7EB;
+            
+            --bg-primary: #EFF1F4;
+            --bg-card: #FFFFFF;
+            --text-primary: #263238;
+            --text-secondary: #3A4A5A;
+            --text-muted: #6B7A8A;
+            --border-color: #D5DBE1;
+            
+            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 10px 30px rgba(15, 65, 74, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 16px 40px rgba(15, 65, 74, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
+            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
+            
             --radius-card: 24px;
             --radius-element: 16px;
+            
+            --color-success: #2e7d32;
+            --color-warning: #ed6c02;
+            --color-danger: #d32f2f;
+            --color-info: #0288d1;
+            
+            --stepper-track-bg: #E4E7E9;
+            --stepper-track-active: #2e7d32;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        [data-theme="dark"] {
+            --bg-primary: #0a0e17;
+            --bg-card: #1a2332;
+            --text-primary: #E8EDF5;
+            --text-secondary: #B0C4DE;
+            --text-muted: #6B85A0;
+            --border-color: #2a3a4f;
+            --alabaster: #161e2a;
+            
+            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.5);
+            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.15);
+            
+            --maroon: #8B1A1A;
+            --maroon-light: #A82828;
+            --maroon-dark: #5a0202;
+            --gold: #B8953A;
+            --gold-light: #D4B86A;
+            
+            --color-success: #4caf50;
+            --color-warning: #ff9800;
+            --color-danger: #f44336;
+            --color-info: #2196f3;
+            
+            --stepper-track-bg: #2d3b4e;
+            --stepper-track-active: #4caf50;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--white);
-            color: var(--gray-700);
-            line-height: 1.5;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            transition: background 0.4s ease, color 0.4s ease;
         }
-        .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
 
-        /* ========== NAVBAR STYLES ========== */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* ========== HERO & HEADER ========== */
+        .tracking-page {
+            padding: 130px 0 80px;
+            min-height: 85vh;
+        }
+
+        .tracking-header {
+            text-align: center;
+            margin-bottom: 45px;
+            animation: fadeInDown 0.6s ease forwards;
+        }
+
+        .tracking-header h1 {
+            color: var(--text-primary);
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--maroon) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        [data-theme="dark"] .tracking-header h1 {
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--gold-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tracking-header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* ========== STATS CARDS ========== */
+        .stats-row {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            z-index: 1000;
-            transition: all 0.3s ease-in-out;
-            background: var(--midnight);
-            border-bottom: none;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 40px;
+            animation: fadeInUp 0.6s ease forwards;
+            animation-delay: 0.1s;
         }
 
-        .navbar.scrolled {
-            background: var(--white);
-            box-shadow: var(--shadow-md);
-            padding: 0.7rem 2rem;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .logo-area {
+        .stat-card {
+            background: var(--bg-card);
+            padding: 24px 30px;
+            border-radius: var(--radius-card);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            min-width: 220px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: var(--maroon);
-            border-radius: 12px;
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--maroon-light);
+        }
+
+        .stat-icon {
+            width: 54px;
+            height: 54px;
+            border-radius: 16px;
+            background: rgba(127, 3, 3, 0.08);
+            color: var(--maroon);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-size: 1.3rem;
-            transition: all 0.3s;
+            font-size: 1.5rem;
+            transition: all 0.3s ease;
         }
 
-        .logo-text h2 {
-            font-size: 1.3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, white 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            letter-spacing: -0.3px;
+        [data-theme="dark"] .stat-icon {
+            background: rgba(232, 213, 168, 0.1);
+            color: var(--gold-light);
         }
 
-        .logo-text span {
-            font-size: 0.7rem;
-            font-weight: 500;
-            background: var(--tan);
-            padding: 2px 10px;
-            border-radius: 40px;
-            margin-left: 8px;
-            color: #3b2a1f;
+        .stat-card:hover .stat-icon {
+            transform: scale(1.08) rotate(-5deg);
         }
 
-        .navbar.scrolled .logo-text h2 {
-            background: linear-gradient(135deg, var(--midnight) 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-        }
-
-        .navbar.scrolled .logo-icon {
-            background: var(--maroon);
-        }
-
-        .nav-links {
+        .stat-details {
             display: flex;
-            gap: 2rem;
-            align-items: center;
+            flex-direction: column;
         }
 
-        .nav-links a {
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.85);
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
             font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.2s;
+            margin-top: 2px;
+        }
+
+        /* ========== SEARCH CARD ========== */
+        .search-container {
+            max-width: 720px;
+            margin: 0 auto 40px;
+            animation: fadeInUp 0.6s ease forwards;
+            animation-delay: 0.2s;
+        }
+
+        .search-card {
+            background: var(--bg-card);
+            padding: 35px;
+            border-radius: var(--radius-card);
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .search-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+        }
+
+        .search-box-wrapper {
+            display: flex;
+            gap: 15px;
             position: relative;
         }
 
-        .nav-links a:hover {
+        .search-input-group {
+            position: relative;
+            flex: 1;
+        }
+
+        .search-input-group i {
+            position: absolute;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            transition: color 0.3s;
+        }
+
+        .search-input-group input {
+            width: 100%;
+            padding: 16px 16px 16px 50px;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-element);
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .search-input-group input:focus {
+            outline: none;
+            border-color: var(--maroon-light);
+            background: var(--bg-card);
+            box-shadow: 0 0 0 4px rgba(127, 3, 3, 0.08);
+        }
+
+        .search-input-group input:focus + i {
+            color: var(--maroon-light);
+        }
+
+        .btn-track {
+            padding: 16px 36px;
+            background: var(--maroon);
             color: white;
-        }
-
-        .navbar.scrolled .nav-links a {
-            color: var(--gray-700);
-        }
-
-        .navbar.scrolled .nav-links a:hover {
-            color: var(--maroon);
-        }
-
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .profile-icon {
+            border: none;
+            border-radius: var(--radius-element);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             gap: 10px;
-            background: rgba(255, 255, 255, 0.12);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            text-decoration: none;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.2);
+            white-space: nowrap;
         }
-        .profile-icon i {
-            font-size: 1.1rem;
-        }
-        .profile-icon span {
-            font-size: 0.85rem;
-        }
-        .profile-icon:hover {
-            background: rgba(255, 255, 255, 0.25);
+
+        .btn-track:hover {
+            background: var(--maroon-light);
             transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(127, 3, 3, 0.35);
         }
-        .logout-icon {
-            background: rgba(255, 255, 255, 0.1);
-            width: 40px;
-            height: 40px;
+
+        .btn-track:active {
+            transform: translateY(0);
+        }
+
+        .search-hint {
+            display: block;
+            text-align: center;
+            margin-top: 12px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        /* ========== ALERTS ========== */
+        .alert {
+            padding: 18px 24px;
+            border-radius: var(--radius-element);
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: var(--shadow-sm);
+            animation: fadeInScale 0.4s ease forwards;
+        }
+
+        .alert-error {
+            background: rgba(211, 47, 47, 0.08);
+            color: var(--color-danger);
+            border: 1px solid rgba(211, 47, 47, 0.15);
+        }
+
+        .alert-error i {
+            font-size: 1.3rem;
+        }
+
+        /* ========== RESULTS AREA ========== */
+        .result-container {
+            margin-top: 30px;
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .tracking-result {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            padding: 40px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding-bottom: 25px;
+            border-bottom: 2px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .result-header-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .result-header-title i {
+            font-size: 1.8rem;
+            color: var(--maroon);
+        }
+
+        [data-theme="dark"] .result-header-title i {
+            color: var(--gold-light);
+        }
+
+        .result-header-title h2 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .result-badge {
+            background: var(--bg-primary);
+            padding: 10px 24px;
+            border-radius: 50px;
+            font-family: 'Inter', monospace;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            font-weight: 700;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ========== STEPPER TIMELINE ========== */
+        .stepper-timeline-wrapper {
+            position: relative;
+            padding: 20px 0;
+            margin: 50px 0;
+        }
+
+        .stepper-timeline-progress {
+            position: absolute;
+            top: 38px;
+            left: 5%;
+            right: 5%;
+            height: 5px;
+            background: var(--stepper-track-bg);
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        .stepper-timeline-bar {
+            height: 100%;
+            background: var(--stepper-track-active);
+            width: 0%;
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 10px;
+            box-shadow: 0 0 12px rgba(46, 125, 50, 0.4);
+        }
+
+        [data-theme="dark"] .stepper-timeline-bar {
+            box-shadow: 0 0 12px rgba(76, 175, 80, 0.4);
+        }
+
+        .stepper-timeline {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+            list-style: none;
+        }
+
+        .step-item {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+
+        .step-icon-container {
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 4px solid var(--stepper-track-bg);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Completed Step Styles */
+        .step-item.completed .step-icon-container {
+            background: var(--color-success);
+            border-color: var(--color-success);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 6px 15px rgba(46, 125, 50, 0.3);
+        }
+
+        /* Active Step Styles */
+        .step-item.active .step-icon-container {
+            background: var(--color-warning);
+            border-color: var(--color-warning);
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 8px 24px rgba(237, 108, 2, 0.35);
+            animation: pulse-orange 2s infinite;
+        }
+
+        /* Rejected/Danger Active Step Styles */
+        .step-item.active.rejected-step .step-icon-container {
+            background: var(--color-danger);
+            border-color: var(--color-danger);
+            color: white;
+            box-shadow: 0 8px 24px rgba(211, 47, 47, 0.35);
+            animation: pulse-red 2s infinite;
+        }
+
+        .step-content h4 {
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .step-content p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(237, 108, 2, 0.5); }
+            70% { box-shadow: 0 0 0 12px rgba(237, 108, 2, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(237, 108, 2, 0); }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.5); }
+            70% { box-shadow: 0 0 0 12px rgba(211, 47, 47, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
+        }
+
+        /* ========== DETAILS GRID ========== */
+        .details-section {
+            margin-top: 50px;
+            background: var(--alabaster);
+            border-radius: var(--radius-element);
+            padding: 30px;
+            border: 1px solid var(--border-color);
+        }
+
+        .details-section h3 {
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px 30px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-value {
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 500;
+        }
+
+        .detail-value strong {
+            font-weight: 700;
+        }
+
+        .detail-value .amount-approved {
+            color: var(--color-success);
+            font-weight: 800;
+            font-size: 1.2rem;
+        }
+
+        /* Badge design */
+        .badge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 15px;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .badge-submitted { background: rgba(255, 193, 7, 0.15); color: #b78103; }
+        .badge-reviewing { background: rgba(33, 150, 243, 0.15); color: #0b69a3; }
+        .badge-approved { background: rgba(76, 175, 80, 0.15); color: #2e7d32; }
+        .badge-released { background: rgba(0, 150, 136, 0.15); color: #00796b; }
+        .badge-rejected { background: rgba(244, 67, 54, 0.15); color: #c62828; }
+
+        .rejection-reason-box {
+            grid-column: span 2;
+            background: rgba(244, 67, 54, 0.08);
+            border-left: 4px solid var(--color-danger);
+            padding: 16px 20px;
+            border-radius: 8px;
+            color: var(--color-danger);
+            font-weight: 500;
+            margin-top: 10px;
+        }
+
+        .rejection-reason-box i {
+            margin-right: 8px;
+        }
+
+        .btn-view-full {
+            margin-top: 30px;
+            text-align: right;
+        }
+
+        .btn-outline-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border: 2px solid var(--maroon);
+            color: var(--maroon);
+            background: transparent;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        [data-theme="dark"] .btn-outline-action {
+            border-color: var(--gold-light);
+            color: var(--gold-light);
+        }
+
+        .btn-outline-action:hover {
+            background: var(--maroon);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(127, 3, 3, 0.2);
+        }
+
+        [data-theme="dark"] .btn-outline-action:hover {
+            background: var(--gold-light);
+            color: var(--midnight);
+            box-shadow: 0 4px 15px rgba(232, 213, 168, 0.2);
+        }
+
+        /* ========== GUIDES ========== */
+        .info-section {
+            margin-top: 70px;
+            animation: fadeInUp 0.6s ease forwards;
+            animation-delay: 0.3s;
+        }
+
+        .info-section h3 {
+            text-align: center;
+            color: var(--text-primary);
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+        }
+
+        .step-card {
+            background: var(--bg-card);
+            padding: 30px;
+            border-radius: var(--radius-card);
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .step-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--maroon-light);
+        }
+
+        .step-number {
+            width: 44px;
+            height: 44px;
+            background: var(--maroon);
+            color: white;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            text-decoration: none;
-            color: white;
-            transition: all 0.3s;
+            margin: 0 auto 20px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 10px rgba(127, 3, 3, 0.25);
         }
-        .logout-icon:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-        .navbar.scrolled .profile-icon {
-            background: var(--alabaster);
+
+        [data-theme="dark"] .step-number {
+            background: var(--gold-light);
             color: var(--midnight);
-        }
-        .navbar.scrolled .profile-icon:hover {
-            background: var(--tan);
-        }
-        .navbar.scrolled .logout-icon {
-            background: var(--gray-100);
-            color: var(--maroon);
-        }
-        .navbar.scrolled .logout-icon:hover {
-            background: var(--gray-200);
+            box-shadow: 0 4px 10px rgba(232, 213, 168, 0.25);
         }
 
-        .login-btn {
-            background: var(--maroon);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .login-btn:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-        }
-
-        .navbar.scrolled .login-btn {
-            background: var(--maroon);
-            color: white !important;
-        }
-        .navbar.scrolled .login-btn:hover {
-            background: var(--maroon-light);
-        }
-
-        .register-btn {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .register-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-
-        .navbar.scrolled .register-btn {
-            background: var(--alabaster);
-            color: var(--midnight) !important;
-        }
-        .navbar.scrolled .register-btn:hover {
-            background: var(--tan);
-        }
-
-        .hamburger {
-            display: none;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 8px;
-        }
-
-        .hamburger span {
-            display: block;
-            width: 25px;
-            height: 2px;
-            margin: 5px 0;
-            background: white;
-            transition: all 0.3s;
-        }
-
-        .navbar.scrolled .hamburger span {
-            background: var(--midnight);
-        }
-
-        /* Tracking Page */
-        .tracking-page { 
-            padding: 140px 0 60px; 
-            background: var(--gray-50); 
-            min-height: 80vh; 
-        }
-        .tracking-header { text-align: center; margin-bottom: 40px; }
-        .tracking-header h1 { color: var(--midnight); font-size: 2.5rem; font-weight: 800; margin-bottom: 15px; }
-        .tracking-header p { color: var(--gray-600); font-size: 1rem; max-width: 600px; margin: 0 auto; }
-
-        .tracking-stats {
-            display: flex; justify-content: center; gap: 40px; margin-top: 20px;
-            padding: 20px; background: var(--white); border-radius: var(--radius-card);
-            box-shadow: var(--shadow-sm); max-width: 500px; margin: 20px auto;
-            border: 1px solid var(--gray-200);
-        }
-        .stat-item { text-align: center; }
-        .stat-value { font-size: 1.5rem; font-weight: 800; color: var(--midnight); }
-        .stat-label { color: var(--gray-600); font-size: 0.8rem; }
-
-        .tracking-search { max-width: 600px; margin: 30px auto; background: var(--white); padding: 30px; border-radius: var(--radius-card); box-shadow: var(--shadow-md); border: 1px solid var(--gray-200); }
-        .search-box { display: flex; gap: 10px; }
-        .search-box input { flex: 1; padding: 14px; border: 2px solid var(--gray-200); border-radius: var(--radius-element); font-size: 1rem; transition: all 0.3s; }
-        .search-box input:focus { outline: none; border-color: var(--midnight); box-shadow: 0 0 0 3px rgba(15,65,74,0.1); }
-        .btn-track { padding: 14px 30px; background: var(--maroon); color: white; border: none; border-radius: 40px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
-        .btn-track:hover { background: var(--maroon-light); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(127,3,3,0.3); }
-
-        .tracking-result { background: var(--white); border-radius: var(--radius-card); padding: 30px; margin-top: 30px; box-shadow: var(--shadow-md); border: 1px solid var(--gray-200); animation: slideIn 0.5s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        .request-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid var(--gray-200); flex-wrap: wrap; gap: 15px; }
-        .request-header h2 { color: var(--midnight); margin: 0; font-size: 1.3rem; }
-        .tracking-number { background: var(--gray-100); padding: 8px 20px; border-radius: 40px; font-family: monospace; font-size: 1rem; color: var(--midnight); font-weight: 700; }
-
-        .status-timeline { display: flex; justify-content: space-between; margin: 40px 0; position: relative; padding: 0 20px; flex-wrap: wrap; gap: 20px; }
-        .status-timeline::before { content: ''; position: absolute; top: 30px; left: 40px; right: 40px; height: 3px; background: linear-gradient(90deg, #4CAF50 0%, #4CAF50 var(--progress, 0%), var(--gray-200) var(--progress, 0%), var(--gray-200) 100%); z-index: 1; border-radius: 3px; }
-        .timeline-step { flex: 1; position: relative; z-index: 2; background: white; text-align: center; padding: 0 10px; }
-        .step-icon { width: 60px; height: 60px; background: var(--gray-200); color: var(--gray-600); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; font-weight: 700; font-size: 1.2rem; border: 3px solid white; box-shadow: var(--shadow-sm); transition: all 0.3s; }
-        .timeline-step.completed .step-icon { background: #4CAF50; color: white; transform: scale(1.05); }
-        .timeline-step.active .step-icon { background: #FF9800; color: white; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        .step-content h4 { color: var(--midnight); margin-bottom: 5px; font-size: 0.9rem; }
-        .step-content p { color: var(--gray-600); font-size: 0.8rem; }
-
-        .request-details { margin-top: 40px; padding: 20px; background: var(--gray-50); border-radius: var(--radius-element); }
-        .request-details h3 { color: var(--midnight); margin-bottom: 20px; font-size: 1.1rem; }
-        .details-table { width: 100%; border-collapse: collapse; }
-        .details-table tr { border-bottom: 1px solid var(--gray-200); }
-        .details-table tr:last-child { border-bottom: none; }
-        .details-table th { width: 180px; padding: 15px; color: var(--gray-600); font-weight: 500; text-align: left; }
-        .details-table td { padding: 15px; color: var(--gray-700); }
-        .status-badge { display: inline-block; padding: 6px 14px; border-radius: 30px; font-weight: 600; text-transform: uppercase; font-size: 0.8rem; }
-        .status-submitted { background: #FFF3CD; color: #856404; }
-        .status-reviewing { background: #CCE5FF; color: #004085; }
-        .status-approved { background: #D4EDDA; color: #155724; }
-        .status-rejected { background: #F8D7DA; color: #721C24; }
-        .status-released { background: #D1ECF1; color: #0C5460; }
-
-        .alert { padding: 15px 20px; border-radius: var(--radius-element); margin: 20px 0; }
-        .alert-error { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
-
-        .info-section { margin-top: 50px; }
-        .info-section h3 { text-align: center; color: var(--midnight); margin-bottom: 30px; font-size: 1.5rem; font-weight: 700; }
-        .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; margin-top: 20px; }
-        .step-card { background: var(--white); padding: 25px; border-radius: var(--radius-card); text-align: center; box-shadow: var(--shadow-sm); border: 1px solid var(--gray-200); transition: all 0.3s; }
-        .step-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); }
-        .step-number { width: 40px; height: 40px; background: var(--maroon); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; font-weight: 700; }
-        .step-card h4 { color: var(--midnight); margin-bottom: 10px; }
-        .step-card p { color: var(--gray-600); font-size: 0.85rem; line-height: 1.5; }
-
-        .need-help { text-align: center; margin-top: 40px; padding: 30px; background: var(--white); border-radius: var(--radius-card); border: 1px solid var(--gray-200); }
-        .need-help i { font-size: 2rem; color: var(--maroon); margin-bottom: 10px; }
-        .need-help h4 { color: var(--midnight); margin-bottom: 10px; }
-        .need-help p { color: var(--gray-600); margin-bottom: 5px; }
-        .btn-login { display: inline-block; padding: 12px 28px; background: var(--maroon); color: white; text-decoration: none; border-radius: 40px; margin-top: 15px; font-weight: 600; transition: all 0.3s; }
-        .btn-login:hover { background: var(--maroon-light); transform: translateY(-2px); }
-
-        /* Footer */
-        .footer {
-            background: var(--midnight);
-            color: white;
-            padding: 60px 0 20px;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1.5fr;
-            gap: 40px;
-            margin-bottom: 40px;
-        }
-
-        .footer-section h3,
-        .footer-section h4 {
-            margin-bottom: 20px;
+        .step-card h4 {
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-size: 1.1rem;
             font-weight: 700;
         }
 
-        .footer-section h3 {
-            color: var(--tan);
-            font-size: 1.2rem;
+        .step-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
         }
 
-        .footer-section h4 {
-            color: var(--light-blue);
-            font-size: 1rem;
+        /* ========== ASSISTANCE HELP ========== */
+        .need-help {
+            text-align: center;
+            margin-top: 50px;
+            padding: 40px;
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
 
-        .footer-section p {
-            color: rgba(255,255,255,0.7);
+        .need-help i.headset-icon {
+            font-size: 2.5rem;
+            color: var(--maroon);
             margin-bottom: 15px;
-            font-size: 0.85rem;
+            display: block;
         }
 
-        .footer-section ul {
-            list-style: none;
+        [data-theme="dark"] .need-help i.headset-icon {
+            color: var(--gold-light);
         }
 
-        .footer-section ul li {
-            margin-bottom: 10px;
+        .need-help h4 {
+            color: var(--text-primary);
+            font-size: 1.3rem;
+            font-weight: 800;
+            margin-bottom: 12px;
         }
 
-        .footer-section a {
-            color: rgba(255,255,255,0.6);
-            text-decoration: none;
-            transition: color 0.3s;
-            font-size: 0.85rem;
+        .need-help p {
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            font-size: 0.95rem;
         }
 
-        .footer-section a:hover {
-            color: var(--tan);
+        .contact-info-row {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
         }
 
-        .contact-number, .email {
+        .contact-info-row span {
             display: flex;
             align-items: center;
             gap: 8px;
-            color: rgba(255,255,255,0.7);
-            font-size: 0.85rem;
         }
 
-        .footer-bottom {
-            text-align: center;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.5);
-            font-size: 0.75rem;
+        .contact-info-row i {
+            color: var(--maroon);
         }
 
-        .status-timeline { --progress: <?php 
-            $progress_map = ['submitted' => 25, 'reviewing' => 50, 'approved' => 75, 'released' => 100];
-            echo $request ? ($progress_map[$request['status']] ?? 0) : 0;
-        ?>%; }
+        [data-theme="dark"] .contact-info-row i {
+            color: var(--gold-light);
+        }
 
-        @media (max-width: 968px) {
-            .tracking-page { padding: 120px 0 60px; }
-            .tracking-header h1 { font-size: 2rem; }
-            .search-box { flex-direction: column; }
+        .btn-login-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 30px;
+            background: var(--maroon);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 700;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.2);
+        }
+
+        .btn-login-cta:hover {
+            background: var(--maroon-light);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(127, 3, 3, 0.35);
+        }
+
+        /* ========== ANIMATIONS ========== */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-25px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(25px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* ========== RESPONSIVE OVERRIDES ========== */
+        @media (max-width: 992px) {
+            .tracking-page { padding: 110px 0 60px; }
+            .tracking-header h1 { font-size: 2.2rem; }
+            .stats-row { flex-direction: column; align-items: center; gap: 15px; }
+            .stat-card { width: 100%; max-width: 400px; }
+            
+            .stepper-timeline-progress { display: none; }
+            .stepper-timeline { flex-direction: column; gap: 30px; align-items: flex-start; padding-left: 20px; }
+            .step-item { display: flex; text-align: left; gap: 20px; width: 100%; }
+            .step-icon-container { margin: 0; flex-shrink: 0; width: 64px; height: 64px; font-size: 1.3rem; }
+            .step-content { display: flex; flex-direction: column; justify-content: center; }
+            
+            .details-grid { grid-template-columns: 1fr; }
+            .rejection-reason-box { grid-column: span 1; }
+            .steps-grid { grid-template-columns: 1fr; gap: 20px; }
+        }
+
+        @media (max-width: 600px) {
+            .search-box-wrapper { flex-direction: column; }
             .btn-track { width: 100%; justify-content: center; }
-            .status-timeline { flex-direction: column; }
-            .status-timeline::before { display: none; }
-            .timeline-step { display: flex; align-items: center; text-align: left; gap: 20px; }
-            .step-icon { margin: 0; }
-            .request-header { flex-direction: column; text-align: center; }
-            .steps-grid { grid-template-columns: 1fr; }
-            .details-table th { display: block; width: 100%; padding-bottom: 0; }
-            .details-table td { display: block; width: 100%; padding-top: 0; }
-            .nav-links {
-                display: none;
-                width: 100%;
-                flex-direction: column;
-                padding: 20px 0;
-                gap: 15px;
-            }
-            .nav-links.active { display: flex; }
-            .hamburger { display: block; }
-            .footer-grid { grid-template-columns: 1fr; gap: 30px; }
-        }
-
-        @media (max-width: 768px) {
-            .navbar { padding: 0.8rem 1.5rem; }
-            .navbar.scrolled { padding: 0.6rem 1.5rem; }
+            .tracking-result { padding: 25px; }
+            .result-header { flex-direction: column; align-items: flex-start; }
+            .badge-status { margin-top: 5px; }
         }
     </style>
 </head>
 <body>
-    <!-- Navbar - Same as index.php -->
-    <nav class="navbar" id="navbar">
-        <div class="logo-area">
-            <div class="logo-icon">
-                <i class="fas fa-hand-holding-heart"></i>
-            </div>
-            <div class="logo-text">
-                <h2>ONE PALAYAN-KALINGA HUB</h2>
-                <span>CSWDO Palayan City</span>
-            </div>
-        </div>
-        <div class="nav-links" id="navLinks">
-            <a href="index.php">Home</a>
-            <a href="services.php">Services</a>
-            <a href="about.php">About</a>
-            <a href="contact.php">Contact</a>
-            
-            <?php if(function_exists('isLoggedIn') && isLoggedIn()): ?>
-                <div class="user-menu">
-                    <a href="dashboard.php" class="profile-icon">
-                        <i class="fas fa-user-circle"></i>
-                        <span><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></span>
-                    </a>
-                    <a href="logout.php" class="logout-icon"><i class="fas fa-sign-out-alt"></i></a>
-                </div>
-            <?php else: ?>
-                <a href="login.php" class="login-btn">Login</a>
-                <a href="register.php" class="register-btn">Register</a>
-            <?php endif; ?>
-        </div>
-        <button class="hamburger" id="hamburger">
-            <span></span>
-            <span></span>
-            <span></span>
-        </button>
-    </nav>
+    <!-- Navbar Include -->
+    <?php include 'includes/navbar.php'; ?>
     
     <div class="tracking-page">
         <div class="container">
+            <!-- Header section -->
             <div class="tracking-header">
                 <h1>Track Your AICS Request</h1>
-                <p>Enter your tracking number to check the real-time status of your assistance request</p>
+                <p>Enter your tracking number below to verify the real-time processing status of your crisis intervention request.</p>
             </div>
 
-            <div class="tracking-stats">
-                <div class="stat-item"><div class="stat-value"><?php echo number_format($stats['total_tracked'] ?? 0); ?></div><div class="stat-label">Requests This Month</div></div>
-                <div class="stat-item"><div class="stat-value"><?php echo number_format($stats['unique_users'] ?? 0); ?></div><div class="stat-label">Beneficiaries</div></div>
-            </div>
-            
-            <div class="tracking-search">
-                <form method="GET" action="" id="trackingForm">
-                    <div class="search-box">
-                        <input type="text" name="tracking" id="trackingInput" placeholder="Enter Tracking Number (e.g., AICS-000001)" value="<?php echo htmlspecialchars($tracking_number); ?>" pattern="AICS-\d{6}" title="Please enter in format: AICS-000001" required>
-                        <button type="submit" class="btn-track"><i class="fas fa-search"></i> Track Request</button>
+            <!-- Stats section -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+                    <div class="stat-details">
+                        <div class="stat-value"><?php echo number_format($stats['total_tracked'] ?? 0); ?></div>
+                        <div class="stat-label">Requests This Month</div>
                     </div>
-                    <small style="display: block; text-align: center; margin-top: 10px; color: var(--gray-600);">Format: AICS-000001 (AICS followed by 6 digits)</small>
-                </form>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
+                    <div class="stat-details">
+                        <div class="stat-value"><?php echo number_format($stats['unique_users'] ?? 0); ?></div>
+                        <div class="stat-label">Beneficiaries Assisted</div>
+                    </div>
+                </div>
             </div>
             
+            <!-- Search bar card -->
+            <div class="search-container">
+                <div class="search-card">
+                    <form method="GET" action="" id="trackingForm">
+                        <div class="search-box-wrapper">
+                            <div class="search-input-group">
+                                <input type="text" name="tracking" id="trackingInput" placeholder="Enter Tracking Number (e.g., AICS-000001)" value="<?php echo htmlspecialchars($tracking_number); ?>" pattern="AICS-\d{6}" title="Please enter in format: AICS-000001" required autocomplete="off">
+                                <i class="fas fa-search"></i>
+                            </div>
+                            <button type="submit" class="btn-track"><i class="fas fa-magnifying-glass"></i> Track Request</button>
+                        </div>
+                        <span class="search-hint">Format: AICS-000001 (AICS followed by 6 digits)</span>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Error feedback -->
             <?php if($error): ?>
-            <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> <?php echo $error; ?></div>
+            <div class="alert alert-error">
+                <i class="fas fa-circle-exclamation"></i>
+                <div>
+                    <strong>Unable to Track:</strong> <?php echo $error; ?>
+                </div>
+            </div>
             <?php endif; ?>
             
+            <!-- Results Block -->
             <?php if($tracking_number && $request): ?>
-            <div class="tracking-result">
-                <div class="request-header">
-                    <h2><i class="fas fa-clipboard-list"></i> Request Status</h2>
-                    <span class="tracking-number"><i class="fas fa-hashtag"></i> AICS-<?php echo str_pad($request['aics_id'], 6, '0', STR_PAD_LEFT); ?></span>
-                </div>
-                
-                <div class="status-timeline">
-                    <div class="timeline-step <?php echo in_array($request['status'], ['submitted', 'reviewing', 'approved', 'released']) ? 'completed' : ''; ?> <?php echo $request['status'] == 'submitted' ? 'active' : ''; ?>">
-                        <div class="step-icon">01</div><div class="step-content"><h4>Submitted</h4><p><?php echo date('M d, Y', strtotime($request['submission_date'])); ?></p></div>
+            <div class="result-container" id="resultContainer">
+                <div class="tracking-result">
+                    <div class="result-header">
+                        <div class="result-header-title">
+                            <i class="fas fa-circle-nodes"></i>
+                            <h2>Assistance Request Progress</h2>
+                        </div>
+                        <span class="result-badge">
+                            <i class="fas fa-hashtag"></i>
+                            AICS-<?php echo str_pad($request['aics_id'], 6, '0', STR_PAD_LEFT); ?>
+                        </span>
                     </div>
-                    <div class="timeline-step <?php echo in_array($request['status'], ['reviewing', 'approved', 'released']) ? 'completed' : ''; ?> <?php echo $request['status'] == 'reviewing' ? 'active' : ''; ?>">
-                        <div class="step-icon">02</div><div class="step-content"><h4>Under Review</h4><p><?php echo $request['review_date'] ? date('M d, Y', strtotime($request['review_date'])) : 'Pending'; ?></p></div>
+                    
+                    <!-- Stepper Timeline -->
+                    <div class="stepper-timeline-wrapper">
+                        <div class="stepper-timeline-progress">
+                            <div class="stepper-timeline-bar" style="width: <?php echo $status_timeline; ?>%;"></div>
+                        </div>
+                        <ul class="stepper-timeline">
+                            <!-- Step 1: Submitted -->
+                            <li class="step-item <?php echo in_array($request['status'], ['submitted', 'reviewing', 'approved', 'released', 'rejected']) ? 'completed' : ''; ?> <?php echo $request['status'] == 'submitted' ? 'active' : ''; ?>">
+                                <div class="step-icon-container">
+                                    <i class="fas fa-file-arrow-up"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h4>Submitted</h4>
+                                    <p><?php echo date('M d, Y', strtotime($request['submission_date'])); ?></p>
+                                </div>
+                            </li>
+                            <!-- Step 2: Under Review -->
+                            <li class="step-item <?php echo in_array($request['status'], ['reviewing', 'approved', 'released', 'rejected']) ? 'completed' : ''; ?> <?php echo $request['status'] == 'reviewing' ? 'active' : ''; ?>">
+                                <div class="step-icon-container">
+                                    <i class="fas fa-magnifying-glass-chart"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h4>Under Review</h4>
+                                    <p><?php echo $request['review_date'] ? date('M d, Y', strtotime($request['review_date'])) : 'Pending Review'; ?></p>
+                                </div>
+                            </li>
+                            
+                            <!-- Step 3: Approval / Rejection Decision -->
+                            <?php if ($request['status'] == 'rejected'): ?>
+                            <li class="step-item active rejected-step">
+                                <div class="step-icon-container">
+                                    <i class="fas fa-circle-xmark"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h4 style="color: var(--color-danger);">Rejected</h4>
+                                    <p><?php echo $request['review_date'] ? date('M d, Y', strtotime($request['review_date'])) : 'Rejected'; ?></p>
+                                </div>
+                            </li>
+                            <?php else: ?>
+                            <li class="step-item <?php echo in_array($request['status'], ['approved', 'released']) ? 'completed' : ''; ?> <?php echo $request['status'] == 'approved' ? 'active' : ''; ?>">
+                                <div class="step-icon-container">
+                                    <i class="fas fa-file-shield"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h4>Approved</h4>
+                                    <p><?php echo $request['approval_date'] ? date('M d, Y', strtotime($request['approval_date'])) : 'Pending Approval'; ?></p>
+                                </div>
+                            </li>
+                            <?php endif; ?>
+                            
+                            <!-- Step 4: Released -->
+                            <li class="step-item <?php echo $request['status'] == 'released' ? 'completed active' : ''; ?>">
+                                <div class="step-icon-container">
+                                    <i class="fas fa-hand-holding-dollar"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h4>Released</h4>
+                                    <p><?php echo $request['release_date'] ? date('M d, Y', strtotime($request['release_date'])) : 'Pending Release'; ?></p>
+                                </div>
+                            </li>
+                        </ul>
                     </div>
-                    <div class="timeline-step <?php echo in_array($request['status'], ['approved', 'released']) ? 'completed' : ''; ?> <?php echo $request['status'] == 'approved' ? 'active' : ''; ?>">
-                        <div class="step-icon">03</div><div class="step-content"><h4>Approved</h4><p><?php echo $request['approval_date'] ? date('M d, Y', strtotime($request['approval_date'])) : 'Pending'; ?></p></div>
+                    
+                    <!-- Request Details Section -->
+                    <div class="details-section">
+                        <h3><i class="fas fa-circle-info"></i> Request Details</h3>
+                        <div class="details-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Applicant Name</span>
+                                <span class="detail-value"><?php echo htmlspecialchars($request['first_name'] . ' ' . $request['last_name']); ?></span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Assistance Type</span>
+                                <span class="detail-value"><?php echo ucfirst($request['request_type'] ?? 'N/A'); ?></span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Amount Requested</span>
+                                <span class="detail-value"><strong>₱<?php echo number_format($request['amount_requested'] ?? 0, 2); ?></strong></span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Approved Benefit</span>
+                                <span class="detail-value">
+                                    <?php if(isset($request['amount_approved']) && $request['amount_approved'] > 0): ?>
+                                        <span class="amount-approved">₱<?php echo number_format($request['amount_approved'], 2); ?></span>
+                                    <?php else: ?>
+                                        <span style="color: var(--text-muted);">Not yet approved / ---</span>
+                                    <?php endif; ?>
+                                </span>
+                            </div>
+                            <div class="detail-item" style="grid-column: span 2;">
+                                <span class="detail-label">Purpose</span>
+                                <span class="detail-value"><?php echo nl2br(htmlspecialchars($request['purpose'] ?? 'Not specified')); ?></span>
+                            </div>
+                            <div class="detail-item" style="grid-column: span 2; border-bottom: none; padding-bottom: 0;">
+                                <span class="detail-label">Status</span>
+                                <div>
+                                    <span class="badge-status badge-<?php echo $request['status']; ?>">
+                                        <i class="fas fa-<?php echo $request['status'] == 'submitted' ? 'clock' : ($request['status'] == 'reviewing' ? 'magnifying-glass' : ($request['status'] == 'approved' ? 'check-circle' : ($request['status'] == 'released' ? 'hand-holding-dollar' : 'circle-xmark'))); ?>"></i>
+                                        <?php echo ucfirst($request['status']); ?>
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <?php if(isset($request['rejection_reason']) && $request['rejection_reason'] && $request['status'] == 'rejected'): ?>
+                            <div class="rejection-reason-box">
+                                <i class="fas fa-triangle-exclamation"></i>
+                                <strong>Reason for Rejection:</strong> <?php echo htmlspecialchars($request['rejection_reason']); ?>
+                            </div>
+                            <?php endif; ?>
+                        </div>
                     </div>
-                    <div class="timeline-step <?php echo $request['status'] == 'released' ? 'completed active' : ''; ?>">
-                        <div class="step-icon">04</div><div class="step-content"><h4>Released</h4><p><?php echo $request['release_date'] ? date('M d, Y', strtotime($request['release_date'])) : 'Pending'; ?></p></div>
-                    </div>
-                </div>
-                
-                <div class="request-details">
-                    <h3><i class="fas fa-info-circle"></i> Request Details</h3>
-                    <table class="details-table">
-                        <tr><th>Applicant Name:</th><td><?php echo htmlspecialchars($request['first_name'] . ' ' . $request['last_name']); ?></td></tr>
-                        <tr><th>Type of Assistance:</th><td><?php echo ucfirst($request['request_type'] ?? 'N/A'); ?></td></tr>
-                        <tr><th>Amount Requested:</th><td><strong>₱<?php echo number_format($request['amount_requested'] ?? 0, 2); ?></strong></td></tr>
-                        <?php if(isset($request['amount_approved']) && $request['amount_approved'] > 0): ?>
-                        <tr><th>Amount Approved:</th><td><strong style="color: #4CAF50;">₱<?php echo number_format($request['amount_approved'], 2); ?></strong></td></tr>
-                        <?php endif; ?>
-                        <tr><th>Purpose:</th><td><?php echo nl2br(htmlspecialchars($request['purpose'] ?? 'Not specified')); ?></td></tr>
-                        <tr><th>Current Status:</th><td><span class="status-badge status-<?php echo $request['status']; ?>"><i class="fas fa-<?php echo $request['status'] == 'submitted' ? 'clock' : ($request['status'] == 'reviewing' ? 'search' : ($request['status'] == 'approved' ? 'check-circle' : ($request['status'] == 'released' ? 'gift' : 'times-circle'))); ?>"></i> <?php echo ucfirst($request['status']); ?></span></td></tr>
-                        <?php if(isset($request['rejection_reason']) && $request['rejection_reason']): ?>
-                        <tr><th>Rejection Reason:</th><td style="color: #f44336;"><i class="fas fa-exclamation-triangle"></i> <?php echo htmlspecialchars($request['rejection_reason']); ?></td></tr>
-                        <?php endif; ?>
-                    </table>
-                </div>
 
-                <?php if(function_exists('isLoggedIn') && isLoggedIn() && isset($_SESSION['user_id']) && $_SESSION['user_id'] == $request['user_id']): ?>
-                <div style="margin-top: 20px; text-align: right;">
-                    <a href="view-aics.php?id=<?php echo $request['aics_id']; ?>" class="btn-track" style="display: inline-block; text-decoration: none;"><i class="fas fa-eye"></i> View Full Details</a>
+                    <!-- Direct View details logic if logged in -->
+                    <?php if(function_exists('isLoggedIn') && isLoggedIn() && isset($_SESSION['user_id']) && $_SESSION['user_id'] == $request['user_id']): ?>
+                    <div class="btn-view-full">
+                        <a href="view-aics.php?id=<?php echo $request['aics_id']; ?>" class="btn-outline-action">
+                            <i class="fas fa-eye"></i> View Full Application Details
+                        </a>
+                    </div>
+                    <?php endif; ?>
                 </div>
-                <?php endif; ?>
             </div>
             <?php endif; ?>
             
+            <!-- Steppers Guide Section -->
             <div class="info-section">
-                <h3><i class="fas fa-question-circle"></i> How to Track Your Request</h3>
+                <h3><i class="fas fa-circle-question"></i> How to Track Your Request</h3>
                 <div class="steps-grid">
-                    <div class="step-card"><div class="step-number">1</div><h4>Submit Application</h4><p>After submitting your AICS request, you'll receive a tracking number via email and SMS</p></div>
-                    <div class="step-card"><div class="step-number">2</div><h4>Enter Tracking Number</h4><p>Type or paste your tracking number in the format AICS-000001 in the search box above</p></div>
-                    <div class="step-card"><div class="step-number">3</div><h4>View Status</h4><p>See real-time updates on your request including review, approval, and release dates</p></div>
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <h4>Get Tracking Code</h4>
+                        <p>Retrieve the unique AICS tracking number sent via your SMS/email notification or dashboard.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <h4>Enter in Search Bar</h4>
+                        <p>Input the code (e.g. AICS-000001) in the tracking search box above and submit request.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <h4>Monitor Status</h4>
+                        <p>View real-time progress steps showing application logs and CSWDO approval approvals.</p>
+                    </div>
                 </div>
             </div>
 
+            <!-- Support / Assistance Widget -->
             <div class="need-help">
-                <i class="fas fa-headset"></i>
+                <i class="fas fa-headset headset-icon"></i>
                 <h4>Need Assistance?</h4>
-                <p>If you've lost your tracking number or need help, please contact our office</p>
-                <p><i class="fas fa-phone"></i> (044) 123-4567 | <i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</p>
+                <p>If you've lost your tracking code or encounter issues with tracking, please get in touch with our support desk.</p>
+                <div class="contact-info-row">
+                    <span><i class="fas fa-phone"></i> (044) 123-4567</span>
+                    <span><i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</span>
+                </div>
                 <?php if(!function_exists('isLoggedIn') || !isLoggedIn()): ?>
-                <a href="login.php" class="btn-login"><i class="fas fa-sign-in-alt"></i> Login to View All Requests</a>
+                <a href="login.php" class="btn-login-cta"><i class="fas fa-right-to-bracket"></i> Login to View Dashboard</a>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-section">
-                    <h3>ONE PALAYAN-KALINGA HUB</h3>
-                    <p>CSWDO Palayan City — Integrated Social Services Platform</p>
-                    <div>
-                        <h4>SERVICES</h4>
-                        <ul>
-                            <li><a href="appointments.php">Appointment Booking</a></li>
-                            <li><a href="aics.php">AICS Application</a></li>
-                            <li><a href="housing.php">Housing Programs</a></li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="footer-section">
-                    <h4>RESOURCES</h4>
-                    <ul>
-                        <li><a href="user-guide.php">User Guide</a></li>
-                        <li><a href="faqs.php">FAQs</a></li>
-                        <li><a href="privacy-policy.php">Privacy Policy</a></li>
-                        <li><a href="terms.php">Terms of Service</a></li>
-                    </ul>
-                </div>
-
-                <div class="footer-section">
-                    <h4>CONTACT US</h4>
-                    <p>City Social Welfare and Development Office<br>
-                    Palayan City, Nueva Ecija, Philippines</p>
-                    <p class="contact-number"><i class="fas fa-phone"></i> +63 (44) 123 4567</p>
-                    <p class="email"><i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</p>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 One Palayan-Kalinga Hub. All rights reserved. | A project of CSWDO Palayan City</p>
-            </div>
-        </div>
-    </footer>
+    <!-- Footer Include -->
+    <?php include 'includes/footer.php'; ?>
 
     <script>
-    // Navbar scroll effect
-    window.addEventListener('scroll', function() {
-        const navbar = document.getElementById('navbar');
-        if (window.scrollY > 50) {
-            navbar.classList.add('scrolled');
-        } else {
-            navbar.classList.remove('scrolled');
-        }
-    });
-
-    // Mobile menu toggle
-    const hamburger = document.getElementById('hamburger');
-    const navLinks = document.getElementById('navLinks');
-
-    if (hamburger) {
-        hamburger.addEventListener('click', () => {
-            hamburger.classList.toggle('active');
-            navLinks.classList.toggle('active');
-        });
-    }
-
+    // Live input helper - dynamically formats input as AICS-XXXXXX
     document.getElementById('trackingInput')?.addEventListener('input', function(e) {
         let value = e.target.value.toUpperCase();
         value = value.replace(/[^AICS0-9]/g, '');
-        if (value.startsWith('AICS') && value.length > 4) value = 'AICS-' + value.substring(4);
+        if (value.startsWith('AICS') && value.length > 4) {
+            value = 'AICS-' + value.substring(4);
+        }
         e.target.value = value;
     });
+
+    // Form validation check
     document.getElementById('trackingForm')?.addEventListener('submit', function(e) {
-        if (!/^AICS-\d{6}$/.test(document.getElementById('trackingInput').value)) {
+        const val = document.getElementById('trackingInput').value;
+        if (!/^AICS-\d{6}$/.test(val)) {
             e.preventDefault();
-            alert('Please enter a valid tracking number (e.g., AICS-000001)');
+            alert('Please enter a valid tracking number in the format AICS-000001');
         }
     });
+
+    // Smooth scroll to results
     <?php if($request): ?>
-    document.addEventListener('DOMContentLoaded', function() { document.querySelector('.tracking-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('resultContainer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     <?php endif; ?>
     </script>
-    
-    <script src="js/main.js"></script>
 </body>
 </html>

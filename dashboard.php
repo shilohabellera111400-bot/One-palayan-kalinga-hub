@@ -106,6 +106,11 @@ $avatar_url = !empty($profile_picture) && file_exists($profile_picture)
 
 // Check for dark mode preference
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+
+// Get greeting based on time
+$hour = date('H');
+$greeting = $hour < 12 ? 'Morning' : ($hour < 18 ? 'Afternoon' : 'Evening');
+$greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
@@ -124,6 +129,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon-dark: #5a0202;
             --midnight: #0F414A;
             --white: #FFFFFF;
+            --gold: #C9A86C;
+            --gold-light: #E8D5A8;
             
             --bg-primary: #F8F9FC;
             --bg-secondary: #FFFFFF;
@@ -192,6 +199,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --maroon: #8B1A1A;
             --maroon-light: #A82828;
             --maroon-dark: #5a0202;
+            --gold: #B8953A;
+            --gold-light: #D4B86A;
             
             --color-success: #66BB6A;
             --color-warning: #FFA726;
@@ -201,12 +210,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-secondary);
-            line-height: 1.5;
+            line-height: 1.6;
             min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
+            transition: background 0.4s ease, color 0.4s ease;
         }
 
         /* ========== LAYOUT ========== */
@@ -221,10 +230,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             left: 0;
             top: 0;
             overflow-y: auto;
-            z-index: 100;
+            z-index: 1000;
             display: flex;
             flex-direction: column;
-            transition: background 0.3s ease;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease;
             box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
         }
         .sidebar::-webkit-scrollbar { width: 4px; }
@@ -237,6 +246,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             align-items: center;
             gap: 12px;
+            animation: fadeInDown 0.6s ease;
         }
         .logo-icon {
             width: 44px;
@@ -246,8 +256,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--maroon-light);
+            color: var(--gold);
             font-size: 1.3rem;
+            transition: transform 0.3s ease;
+        }
+        .logo-icon:hover {
+            transform: rotate(-10deg) scale(1.05);
         }
         .logo-text h2 {
             color: var(--text-sidebar-active);
@@ -262,6 +276,20 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             text-transform: uppercase;
             letter-spacing: 1px;
         }
+        .sidebar-close {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-sidebar);
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 4px;
+            margin-left: auto;
+            transition: transform 0.3s ease;
+        }
+        .sidebar-close:hover {
+            transform: rotate(90deg);
+        }
 
         .user-info-sidebar {
             padding: 16px 20px;
@@ -269,12 +297,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             align-items: center;
             gap: 14px;
+            animation: fadeInDown 0.7s ease;
         }
         .user-avatar-sidebar {
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            background: var(--maroon-light);
+            background: linear-gradient(135deg, var(--maroon-light), var(--maroon-dark));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -283,6 +312,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: white;
             flex-shrink: 0;
             overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        .user-avatar-sidebar:hover {
+            transform: scale(1.05);
         }
         .user-avatar-sidebar img {
             width: 100%;
@@ -315,16 +348,37 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             text-decoration: none;
             font-weight: 500;
             font-size: 0.82rem;
-            transition: all 0.25s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
         }
-        .sidebar-menu li a i { width: 20px; font-size: 0.95rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
+        .sidebar-menu li a i { 
+            width: 20px; 
+            font-size: 0.95rem; 
+            color: rgba(255,255,255,0.4);
+            transition: color 0.3s ease;
+        }
+        .sidebar-menu li a:hover { 
+            background: var(--bg-sidebar-hover); 
+            color: var(--text-sidebar-active);
+            transform: translateX(4px);
+        }
         .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
         .sidebar-menu li a.active {
             background: var(--bg-sidebar-active);
             color: var(--text-sidebar-active);
         }
         .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
+        .sidebar-menu li a.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 24px;
+            background: var(--gold);
+            border-radius: 0 4px 4px 0;
+        }
         .menu-divider {
             border-top: 1px solid var(--divider);
             margin: 10px 0;
@@ -339,6 +393,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .sidebar-footer {
             padding: 16px;
             border-top: 1px solid var(--divider);
+            animation: fadeInUp 0.8s ease;
         }
         .sidebar-footer a {
             display: flex;
@@ -351,9 +406,64 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.82rem;
             font-weight: 500;
             background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
+            transition: all 0.3s ease;
         }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
+        .sidebar-footer a:hover { 
+            background: rgba(255,255,255,0.10); 
+            color: var(--text-sidebar-active);
+            transform: translateX(4px);
+        }
+
+        /* ========== SIDEBAR OVERLAY (Mobile) ========== */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* ========== MOBILE HAMBURGER ========== */
+        .hamburger-btn {
+            display: none;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 8px 12px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow-sm);
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        .hamburger-btn:hover {
+            background: var(--maroon);
+            color: white;
+            border-color: var(--maroon);
+            transform: scale(1.02);
+            box-shadow: var(--shadow-md);
+        }
+        .hamburger-btn span {
+            font-size: 0.75rem;
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .hamburger-btn span {
+                display: inline;
+            }
+        }
 
         /* ========== MAIN CONTENT ========== */
         .main-content {
@@ -362,8 +472,77 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 28px 36px 40px;
             min-height: 100vh;
             background: var(--bg-primary);
-            transition: background 0.3s ease;
+            transition: background 0.4s ease, margin-left 0.3s ease;
         }
+
+        /* ========== ANIMATIONS ========== */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .animate-fade-down {
+            animation: fadeInDown 0.6s ease forwards;
+        }
+        .animate-fade-up {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+        .animate-fade-scale {
+            animation: fadeInScale 0.6s ease forwards;
+        }
+        .animate-slide-right {
+            animation: slideInRight 0.5s ease forwards;
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
 
         /* ========== TOP BAR ========== */
         .top-bar {
@@ -373,12 +552,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             margin-bottom: 28px;
             flex-wrap: wrap;
             gap: 12px;
+            animation: fadeInDown 0.5s ease;
+        }
+        .top-bar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
         .welcome-text h1 {
-            font-size: 1.5rem;
+            font-size: 1.6rem;
             color: var(--text-primary);
-            font-weight: 700;
+            font-weight: 800;
             transition: color 0.3s ease;
+            letter-spacing: -0.5px;
+        }
+        .welcome-text h1 .greeting-emoji {
+            display: inline-block;
+            animation: float 3s ease-in-out infinite;
         }
         .welcome-text p {
             color: var(--text-muted);
@@ -401,15 +591,29 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             justify-content: center;
             cursor: pointer;
             color: var(--text-secondary);
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             font-size: 1.1rem;
             box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+        }
+        .theme-toggle::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: var(--maroon);
+            opacity: 0;
+            transform: scale(0);
+            transition: all 0.3s ease;
+        }
+        .theme-toggle:hover::after {
+            opacity: 0.1;
+            transform: scale(1);
         }
         .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
+            color: var(--maroon);
+            transform: rotate(30deg) scale(1.05);
             box-shadow: var(--shadow-md);
         }
         .notification-bell {
@@ -424,13 +628,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             justify-content: center;
             color: var(--text-secondary);
             text-decoration: none;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: var(--shadow-sm);
         }
         .notification-bell:hover {
             color: var(--text-primary);
             box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
+            transform: translateY(-2px) scale(1.02);
         }
         .notification-bell .badge {
             position: absolute;
@@ -446,11 +650,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             align-items: center;
             justify-content: center;
+            animation: pulse 2s ease-in-out infinite;
         }
         .top-icon {
             color: var(--text-muted);
             font-size: 1.1rem;
-            transition: color 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             text-decoration: none;
             background: var(--bg-card);
             width: 40px;
@@ -465,7 +670,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .top-icon:hover { 
             color: var(--text-primary);
             box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
+            transform: translateY(-2px) scale(1.02);
         }
 
         /* ========== PROFILE HEADER ========== */
@@ -477,6 +682,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             position: relative;
             overflow: hidden;
             box-shadow: var(--shadow-md);
+            animation: fadeInScale 0.6s ease;
         }
         .profile-header::before {
             content: '';
@@ -520,9 +726,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             box-shadow: 0 12px 30px rgba(0,0,0,0.2);
             border: 3px solid rgba(255,255,255,0.25);
             overflow: hidden;
-            background: linear-gradient(135deg, var(--tan), var(--light-blue));
-            color: var(--midnight);
+            background: linear-gradient(135deg, var(--gold-light), var(--gold));
+            color: var(--maroon);
             flex-shrink: 0;
+            transition: transform 0.3s ease;
+        }
+        .large-avatar:hover {
+            transform: scale(1.02);
         }
         .large-avatar img {
             width: 100%;
@@ -531,21 +741,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
         .profile-info h1 {
             color: white;
-            font-size: 1.6rem;
-            font-weight: 700;
+            font-size: 1.7rem;
+            font-weight: 800;
             margin-bottom: 6px;
+            letter-spacing: -0.5px;
         }
         .profile-info .details {
-            color: rgba(255,255,255,0.7);
+            color: rgba(255,255,255,0.8);
             font-size: 0.85rem;
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 18px;
             flex-wrap: wrap;
         }
         .profile-info .details i {
             width: 18px;
-            color: var(--light-blue);
+            color: var(--gold-light);
         }
         .profile-stats {
             display: flex;
@@ -561,6 +772,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             align-items: center;
             gap: 8px;
+            transition: all 0.3s ease;
+        }
+        .profile-stat:hover {
+            background: rgba(255,255,255,0.15);
+            transform: translateY(-2px);
         }
         .profile-stat span {
             color: white;
@@ -593,7 +809,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-weight: 600;
             font-size: 0.82rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -602,7 +818,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
         .edit-profile-btn:hover {
             background: rgba(255,255,255,0.25);
-            transform: translateY(-2px);
+            transform: translateY(-2px) scale(1.02);
             box-shadow: var(--shadow-sm);
         }
 
@@ -616,18 +832,24 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .stat-card {
             background: var(--stat-bg);
             border-radius: var(--radius-card);
-            padding: 18px 20px;
+            padding: 20px 24px;
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 18px;
             box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
             position: relative;
             overflow: hidden;
+            animation: fadeInUp 0.6s ease both;
         }
-        .stat-card::after {
+        .stat-card:nth-child(1) { animation-delay: 0.1s; }
+        .stat-card:nth-child(2) { animation-delay: 0.2s; }
+        .stat-card:nth-child(3) { animation-delay: 0.3s; }
+        .stat-card:nth-child(4) { animation-delay: 0.4s; }
+
+        .stat-card::before {
             content: '';
             position: absolute;
             top: 0;
@@ -636,29 +858,50 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             bottom: 0;
             background: linear-gradient(135deg, var(--maroon), transparent);
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.4s ease;
             border-radius: var(--radius-card);
         }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+        }
         .stat-card:hover {
-            transform: translateY(-4px);
+            transform: translateY(-6px) scale(1.01);
             box-shadow: var(--shadow-hover);
             border-color: var(--maroon-light);
         }
+        .stat-card:hover::before {
+            opacity: 0.04;
+        }
         .stat-card:hover::after {
-            opacity: 0.03;
+            opacity: 1;
+        }
+        .stat-card:active {
+            transform: scale(0.97);
         }
         .stat-icon {
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             flex-shrink: 0;
             position: relative;
             z-index: 1;
-            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover .stat-icon {
+            transform: scale(1.05) rotate(-5deg);
         }
         .stat-icon.appointments { background: rgba(33, 150, 243, 0.12); color: var(--color-info); }
         .stat-icon.aics { background: rgba(127, 3, 3, 0.12); color: var(--maroon-light); }
@@ -669,7 +912,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             z-index: 1;
         }
         .stat-info h3 {
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             font-weight: 800;
             color: var(--text-primary);
             line-height: 1.2;
@@ -680,6 +923,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--text-muted);
             font-weight: 500;
             margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
 
         /* ========== QUICK ACTIONS ========== */
@@ -689,8 +934,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 20px 24px;
             margin-bottom: 28px;
             border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
+            transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.3s ease;
             box-shadow: var(--shadow-sm);
+            animation: fadeInUp 0.7s ease;
+        }
+        .quick-section:hover {
+            box-shadow: var(--shadow-md);
         }
         .quick-section h3 {
             color: var(--text-primary);
@@ -702,7 +951,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 10px;
         }
         .quick-section h3 i {
-            color: var(--maroon-light);
+            color: var(--gold);
         }
         .action-buttons {
             display: flex;
@@ -711,7 +960,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
         .action-btn {
             background: var(--bg-card);
-            padding: 10px 20px;
+            padding: 10px 22px;
             border-radius: 50px;
             text-decoration: none;
             color: var(--text-secondary);
@@ -721,17 +970,41 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             align-items: center;
             gap: 8px;
             border: 1px solid var(--border-color);
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+        }
+        .action-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--maroon);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
         .action-btn:hover {
             background: var(--maroon);
             color: white;
-            transform: translateY(-2px);
+            transform: translateY(-3px) scale(1.02);
             box-shadow: var(--shadow-md);
             border-color: var(--maroon);
         }
-        .action-btn:hover i { color: white; }
+        .action-btn:hover::after {
+            opacity: 0.05;
+        }
+        .action-btn:hover i { 
+            color: white;
+        }
+        .action-btn i {
+            position: relative;
+            z-index: 1;
+            transition: color 0.3s ease;
+        }
+        .action-btn span {
+            position: relative;
+            z-index: 1;
+        }
 
         /* ========== TWO COLUMNS ========== */
         .two-columns {
@@ -746,10 +1019,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 20px 24px;
             box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeInUp 0.7s ease both;
         }
+        .dashboard-card:nth-child(1) { animation-delay: 0.1s; }
+        .dashboard-card:nth-child(2) { animation-delay: 0.2s; }
         .dashboard-card:hover {
             box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+            border-color: var(--maroon-light);
         }
         .card-header {
             display: flex;
@@ -768,17 +1046,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 8px;
         }
         .card-header h3 i {
-            color: var(--maroon-light);
+            color: var(--gold);
         }
         .card-header a {
             color: var(--maroon-light);
             font-size: 0.7rem;
             text-decoration: none;
             font-weight: 600;
-            transition: all 0.3s;
+            transition: all 0.3s ease;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(127, 3, 3, 0.05);
         }
         .card-header a:hover {
-            text-decoration: underline;
+            background: var(--maroon);
+            color: white;
+            transform: translateX(4px);
         }
 
         .item-list {
@@ -792,7 +1075,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             align-items: center;
             padding: 10px 0;
             border-bottom: 1px solid var(--border-color);
-            transition: all 0.2s;
+            transition: all 0.3s ease;
         }
         .list-item:last-child {
             border-bottom: none;
@@ -802,6 +1085,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             margin: 0 -8px;
             padding: 10px 8px;
             border-radius: var(--radius-element);
+            transform: translateX(4px);
         }
         .item-info h4 {
             font-size: 0.82rem;
@@ -818,6 +1102,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border-radius: 50px;
             font-size: 0.6rem;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            transition: all 0.3s ease;
+        }
+        .status-badge:hover {
+            transform: scale(1.05);
         }
         .status-badge.pending {
             background: rgba(255, 152, 0, 0.15);
@@ -863,6 +1153,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-weight: 700;
             color: var(--maroon-light);
             font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+        .list-item:hover .amount-tag {
+            transform: scale(1.05);
+            color: var(--maroon);
         }
 
         .empty-state {
@@ -870,15 +1165,30 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 30px 20px;
         }
         .empty-state i {
-            font-size: 32px;
+            font-size: 36px;
             color: var(--text-muted);
             opacity: 0.3;
             display: block;
             margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+        .empty-state:hover i {
+            opacity: 0.5;
+            transform: scale(1.05) rotate(-5deg);
         }
         .empty-state p {
             color: var(--text-muted);
             font-size: 0.82rem;
+        }
+        .empty-state a {
+            color: var(--maroon-light);
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        .empty-state a:hover {
+            color: var(--maroon);
+            text-decoration: underline;
         }
 
         /* ========== NOTIFICATIONS ========== */
@@ -888,10 +1198,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 20px 24px;
             box-shadow: var(--shadow-md);
             border: 1px solid var(--border-color);
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeInUp 0.8s ease;
         }
         .notification-card:hover {
             box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
         }
         .notification-card .card-header {
             display: flex;
@@ -910,13 +1222,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 8px;
         }
         .notification-card .card-header h3 i {
-            color: var(--maroon-light);
+            color: var(--gold);
         }
         .notification-card .card-header a {
             color: var(--maroon-light);
             font-size: 0.7rem;
             text-decoration: none;
             font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(127, 3, 3, 0.05);
+            transition: all 0.3s ease;
+        }
+        .notification-card .card-header a:hover {
+            background: var(--maroon);
+            color: white;
+            transform: translateX(4px);
         }
         .notif-list {
             display: flex;
@@ -927,27 +1248,53 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 12px 16px;
             background: var(--badge-bg);
             border-radius: var(--radius-element);
-            border-left: 3px solid var(--maroon-light);
-            transition: all 0.2s;
+            border-left: 3px solid var(--gold);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .notif-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--maroon), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: var(--radius-element);
         }
         .notif-item:hover {
-            transform: translateX(4px);
+            transform: translateX(6px);
             box-shadow: var(--shadow-sm);
+        }
+        .notif-item:hover::before {
+            opacity: 0.03;
         }
         .notif-item h4 {
             font-size: 0.8rem;
             font-weight: 600;
             color: var(--text-primary);
+            position: relative;
+            z-index: 1;
         }
         .notif-item p {
             font-size: 0.72rem;
             color: var(--text-muted);
             margin-top: 4px;
+            position: relative;
+            z-index: 1;
         }
         .notif-item .time {
             font-size: 0.6rem;
             color: var(--text-muted);
             margin-top: 4px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         /* ========== RESPONSIVE ========== */
@@ -955,8 +1302,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
+            .sidebar {
+                transform: translateX(-100%);
+                width: 280px;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-close {
+                display: block;
+            }
+            .main-content { 
+                margin-left: 0; 
+                padding: 20px;
+            }
+            .hamburger-btn {
+                display: flex;
+            }
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
             .two-columns { grid-template-columns: 1fr; }
             .profile-row { flex-direction: column; text-align: center; }
@@ -964,39 +1326,70 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .edit-profile-btn { margin-left: 0; }
         }
         @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
+            .top-bar { 
+                flex-direction: column; 
+                align-items: stretch; 
+                gap: 16px;
+            }
+            .top-bar-left {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .welcome-text h1 { font-size: 1.3rem; }
+            .top-bar-actions { 
+                justify-content: stretch; 
+                flex-wrap: wrap;
+                width: 100%;
+            }
             .stats-grid { grid-template-columns: 1fr; }
             .profile-header { padding: 24px; }
             .large-avatar { width: 80px; height: 80px; font-size: 2rem; }
             .profile-info h1 { font-size: 1.3rem; }
+            .profile-info .details { 
+                font-size: 0.75rem; 
+                gap: 10px; 
+                flex-direction: column; 
+                align-items: center; 
+            }
             .action-buttons { flex-direction: column; }
             .action-btn { width: 100%; justify-content: center; }
             .dashboard-card { padding: 16px; }
             .notification-card { padding: 16px; }
+            .stat-card { padding: 16px 18px; }
+            .stat-icon { width: 44px; height: 44px; font-size: 1.1rem; }
+            .hamburger-btn span { display: inline; }
         }
         @media (max-width: 480px) {
-            .main-content { padding: 16px; }
+            .main-content { padding: 14px; }
             .profile-header { padding: 16px; }
-            .profile-info .details { font-size: 0.75rem; gap: 10px; }
             .profile-stat { padding: 4px 12px; }
             .profile-stat span { font-size: 0.75rem; }
             .stat-card { padding: 14px 16px; }
-            .stat-icon { width: 40px; height: 40px; font-size: 1rem; }
             .stat-info h3 { font-size: 1.1rem; }
+            .hamburger-btn { 
+                padding: 6px 10px;
+                font-size: 1rem;
+            }
+            .hamburger-btn span { font-size: 0.65rem; }
         }
     </style>
 </head>
 <body>
 <div class="app-container">
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <!-- Sidebar -->
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
             <div class="logo-text">
                 <h2>One Palayan-Kalinga Hub</h2>
                 <span>Integrated Service Portal</span>
             </div>
+            <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
         
         <div class="user-info-sidebar">
@@ -1040,9 +1433,18 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <div class="main-content">
         <!-- Top Bar -->
         <div class="top-bar">
-            <div class="welcome-text">
-                <h1>👋 Good <?php echo date('H') < 12 ? 'Morning' : (date('H') < 18 ? 'Afternoon' : 'Evening'); ?>, <?php echo explode(' ', $_SESSION['full_name'])[0]; ?>!</h1>
-                <p><?php echo date('l, F d, Y'); ?></p>
+            <div class="top-bar-left">
+                <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
+                    <i class="fas fa-bars"></i>
+                    <span>Menu</span>
+                </button>
+                <div class="welcome-text">
+                    <h1>
+                        <span class="greeting-emoji"><?php echo $greeting_emoji; ?></span>
+                        Good <?php echo $greeting; ?>, <?php echo explode(' ', $_SESSION['full_name'])[0]; ?>!
+                    </h1>
+                    <p><?php echo date('l, F d, Y'); ?></p>
+                </div>
             </div>
             <div class="top-bar-actions">
                 <a href="notifications.php" class="notification-bell">
@@ -1134,11 +1536,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <div class="quick-section">
             <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
             <div class="action-buttons">
-                <a href="track-aics.php" class="action-btn"><i class="fas fa-chart-line"></i> Track AICS</a>
-                <a href="my-housing.php" class="action-btn"><i class="fas fa-home"></i> My Housing Status</a>
-                <a href="aics-requests.php" class="action-btn"><i class="fas fa-list"></i> My AICS Requests</a>
-                <a href="documents.php" class="action-btn"><i class="fas fa-upload"></i> Upload Document</a>
-                <a href="notifications.php" class="action-btn"><i class="fas fa-bell"></i> Notifications</a>
+                <a href="track-aics.php" class="action-btn"><i class="fas fa-chart-line"></i> <span>Track AICS</span></a>
+                <a href="my-housing.php" class="action-btn"><i class="fas fa-home"></i> <span>My Housing Status</span></a>
+                <a href="aics-requests.php" class="action-btn"><i class="fas fa-list"></i> <span>My AICS Requests</span></a>
+                <a href="documents.php" class="action-btn"><i class="fas fa-upload"></i> <span>Upload Document</span></a>
+                <a href="notifications.php" class="action-btn"><i class="fas fa-bell"></i> <span>Notifications</span></a>
             </div>
         </div>
 
@@ -1167,7 +1569,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <?php else: ?>
                     <div class="empty-state">
                         <i class="fas fa-calendar-times"></i>
-                        <p>No appointments yet. <a href="appointments.php" style="color: var(--maroon-light); font-weight: 600;">Book one now</a></p>
+                        <p>No appointments yet. <a href="appointments.php">Book one now</a></p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -1195,7 +1597,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <?php else: ?>
                     <div class="empty-state">
                         <i class="fas fa-inbox"></i>
-                        <p>No AICS requests yet. <a href="aics.php" style="color: var(--maroon-light); font-weight: 600;">Apply now</a></p>
+                        <p>No AICS requests yet. <a href="aics.php">Apply now</a></p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -1234,6 +1636,35 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 </div>
 
 <script>
+// ========== MOBILE SIDEBAR TOGGLE ==========
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const sidebarClose = document.getElementById('sidebarClose');
+
+function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+hamburgerBtn.addEventListener('click', openSidebar);
+sidebarClose.addEventListener('click', closeSidebar);
+sidebarOverlay.addEventListener('click', closeSidebar);
+
+// Close sidebar on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeSidebar();
+    }
+});
+
 // ========== THEME TOGGLE ==========
 const themeToggle = document.getElementById('themeToggle');
 const html = document.documentElement;
@@ -1247,14 +1678,157 @@ function setTheme(theme) {
     const icon = themeToggle.querySelector('i');
     icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
     document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
+    
+    document.body.style.transition = 'background 0.4s ease, color 0.4s ease';
 }
 
 setTheme(currentTheme);
 
 themeToggle.addEventListener('click', () => {
     const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
+    const newTheme = current === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    
+    themeToggle.style.transform = 'scale(0.9)';
+    setTimeout(() => {
+        themeToggle.style.transform = '';
+    }, 200);
 });
+
+// ========== ANIMATED COUNTERS ==========
+document.addEventListener('DOMContentLoaded', function() {
+    const statNumbers = document.querySelectorAll('.stat-info h3');
+    
+    statNumbers.forEach((el, index) => {
+        const target = parseInt(el.textContent);
+        if (target > 0) {
+            let current = 0;
+            const increment = Math.ceil(target / 40);
+            const duration = 800;
+            const stepTime = Math.floor(duration / 40);
+            
+            const counter = setInterval(() => {
+                current += increment;
+                if (current >= target) {
+                    el.textContent = target;
+                    clearInterval(counter);
+                } else {
+                    el.textContent = current;
+                }
+            }, stepTime);
+        }
+    });
+});
+
+// ========== SMOOTH SCROLL ANIMATIONS ==========
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.stat-card, .dashboard-card, .notification-card');
+    
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry, index) => {
+            if (entry.isIntersecting) {
+                setTimeout(() => {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }, index * 100);
+            }
+        });
+    }, observerOptions);
+    
+    cards.forEach(card => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(30px)';
+        card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(card);
+    });
+});
+
+// ========== STAT CARD CLICK FEEDBACK ==========
+document.querySelectorAll('.stat-card').forEach(card => {
+    card.addEventListener('click', function(e) {
+        const ripple = document.createElement('span');
+        ripple.style.cssText = `
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(127, 3, 3, 0.3);
+            width: 100px;
+            height: 100px;
+            margin-left: -50px;
+            margin-top: -50px;
+            top: ${e.offsetY}px;
+            left: ${e.offsetX}px;
+            transform: scale(0);
+            animation: ripple 0.6s ease-out;
+            pointer-events: none;
+        `;
+        this.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+    });
+});
+
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes ripple {
+        to {
+            transform: scale(4);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);
+
+// ========== LIVE CLOCK UPDATE ==========
+function updateClock() {
+    const now = new Date();
+    const options = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    };
+    const dateStr = now.toLocaleDateString('en-US', options);
+    const dateElement = document.querySelector('.welcome-text p');
+    if (dateElement) {
+        dateElement.textContent = dateStr;
+    }
+}
+
+setInterval(updateClock, 1000);
+
+// ========== KEYBOARD SHORTCUTS ==========
+document.addEventListener('keydown', function(e) {
+    // Ctrl + D for dashboard
+    if (e.ctrlKey && e.key === 'd') {
+        e.preventDefault();
+        window.location.href = 'dashboard.php';
+    }
+    // Ctrl + P for profile
+    if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        window.location.href = 'profile.php';
+    }
+    // Ctrl + N for notifications
+    if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        window.location.href = 'notifications.php';
+    }
+    // Escape to close sidebar on mobile
+    if (e.key === 'Escape') {
+        closeSidebar();
+    }
+});
+
+console.log('🚀 One Palayan-Kalinga Hub Dashboard loaded successfully!');
+console.log('💡 Keyboard shortcuts: Ctrl+D (Dashboard), Ctrl+P (Profile), Ctrl+N (Notifications)');
+console.log('📱 Mobile navigation: Click the hamburger menu (☰) to open sidebar');
 </script>
 </body>
 </html>

@@ -4,6 +4,9 @@ require_once __DIR__ . '/config/database.php';
 $database = new Database();
 $db = $database->getConnection();
 
+// Check for dark mode preference from cookie
+$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+
 // Get all housing programs
 $programs_query = "SELECT * FROM housing_programs WHERE status = 'active' ORDER BY program_name";
 $programs_stmt = $db->prepare($programs_query);
@@ -32,36 +35,73 @@ $beneficiaries_stmt->execute();
 $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Housing Programs - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ========== PROFESSIONAL COLOR PALETTE ========== */
+        /* ========== COLOR PALETTE & GLOBAL THEMING ========== */
         :root {
             --tan: #D8BA98;
             --maroon: #7F0303;
-            --alabaster: #EFE8DF;
-            --light-blue: #96C0CE;
-            --midnight: #0F414A;
-            --maroon-dark: #5a0202;
             --maroon-light: #9a1515;
-            --midnight-light: #1a6a78;
+            --maroon-dark: #5a0202;
+            --midnight: #0F414A;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-100: #F1F3F8;
-            --gray-200: #E4E7E9;
-            --gray-600: #6B7A8A;
-            --gray-700: #3A4A5A;
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08);
+            --gold: #C9A86C;
+            --gold-light: #E8D5A8;
+            --light-blue: #96C0CE;
+            --alabaster: #E3E7EB;
+            
+            --bg-primary: #EFF1F4;
+            --bg-card: #FFFFFF;
+            --text-primary: #263238;
+            --text-secondary: #3A4A5A;
+            --text-muted: #6B7A8A;
+            --border-color: #D5DBE1;
+            
+            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 10px 30px rgba(15, 65, 74, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 16px 40px rgba(15, 65, 74, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
+            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
+            
             --radius-card: 24px;
             --radius-element: 16px;
+            
+            --color-success: #2e7d32;
+            --color-warning: #ed6c02;
+            --color-danger: #d32f2f;
+            --color-info: #0288d1;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #0a0e17;
+            --bg-card: #1a2332;
+            --text-primary: #E8EDF5;
+            --text-secondary: #B0C4DE;
+            --text-muted: #6B85A0;
+            --border-color: #2a3a4f;
+            --alabaster: #161e2a;
+            
+            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.5);
+            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.15);
+            
+            --maroon: #8B1A1A;
+            --maroon-light: #A82828;
+            --maroon-dark: #5a0202;
+            --gold: #B8953A;
+            --gold-light: #D4B86A;
+            
+            --color-success: #4caf50;
+            --color-warning: #ff9800;
+            --color-danger: #f44336;
+            --color-info: #2196f3;
         }
 
         * {
@@ -72,9 +112,10 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--white);
-            color: var(--gray-700);
-            line-height: 1.5;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            transition: background 0.4s ease, color 0.4s ease;
         }
 
         .container {
@@ -83,387 +124,245 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             padding: 0 24px;
         }
 
-        /* ========== NAVBAR STYLES - SAME AS INDEX.PHP ========== */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            z-index: 1000;
-            transition: all 0.3s ease-in-out;
-            background: var(--midnight);
-            border-bottom: none;
-        }
-
-        .navbar.scrolled {
-            background: var(--white);
-            box-shadow: var(--shadow-md);
-            padding: 0.7rem 2rem;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: var(--maroon);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.3rem;
-            transition: all 0.3s;
-        }
-
-        .logo-text h2 {
-            font-size: 1.3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, white 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            letter-spacing: -0.3px;
-        }
-
-        .logo-text span {
-            font-size: 0.7rem;
-            font-weight: 500;
-            background: var(--tan);
-            padding: 2px 10px;
-            border-radius: 40px;
-            margin-left: 8px;
-            color: #3b2a1f;
-        }
-
-        .navbar.scrolled .logo-text h2 {
-            background: linear-gradient(135deg, var(--midnight) 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-        }
-
-        .navbar.scrolled .logo-icon {
-            background: var(--maroon);
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-
-        .nav-links a {
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.85);
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .nav-links a:hover {
-            color: white;
-        }
-
-        .navbar.scrolled .nav-links a {
-            color: var(--gray-700);
-        }
-
-        .navbar.scrolled .nav-links a:hover {
-            color: var(--maroon);
-        }
-
-        /* User Menu */
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .profile-icon {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.12);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            text-decoration: none;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        .profile-icon i {
-            font-size: 1.1rem;
-        }
-        .profile-icon span {
-            font-size: 0.85rem;
-        }
-        .profile-icon:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-        .logout-icon {
-            background: rgba(255, 255, 255, 0.1);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            color: white;
-            transition: all 0.3s;
-        }
-        .logout-icon:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-        .navbar.scrolled .profile-icon {
-            background: var(--alabaster);
-            color: var(--midnight);
-        }
-        .navbar.scrolled .profile-icon:hover {
-            background: var(--tan);
-        }
-        .navbar.scrolled .logout-icon {
-            background: var(--gray-100);
-            color: var(--maroon);
-        }
-        .navbar.scrolled .logout-icon:hover {
-            background: var(--gray-200);
-        }
-
-        .login-btn {
-            background: var(--maroon);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .login-btn:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-        }
-
-        .navbar.scrolled .login-btn {
-            background: var(--maroon);
-            color: white !important;
-        }
-        .navbar.scrolled .login-btn:hover {
-            background: var(--maroon-light);
-        }
-
-        .register-btn {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .register-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-
-        .navbar.scrolled .register-btn {
-            background: var(--alabaster);
-            color: var(--midnight) !important;
-        }
-        .navbar.scrolled .register-btn:hover {
-            background: var(--tan);
-        }
-
-        .hamburger {
-            display: none;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 8px;
-        }
-
-        .hamburger span {
-            display: block;
-            width: 25px;
-            height: 2px;
-            margin: 5px 0;
-            background: white;
-            transition: all 0.3s;
-        }
-
-        .navbar.scrolled .hamburger span {
-            background: var(--midnight);
-        }
-
-        /* Housing Hero */
+        /* ========== HERO SECTION ========== */
         .housing-hero {
             background: var(--midnight);
             color: white;
-            padding: 140px 0 80px;
+            padding: 170px 0 95px;
             text-align: center;
             position: relative;
             overflow: hidden;
+            margin-top: 0;
         }
 
         .housing-hero::before {
-            content: '🏠';
-            font-size: 15rem;
+            content: '';
             position: absolute;
-            right: -50px;
-            bottom: -50px;
-            opacity: 0.06;
-            transform: rotate(15deg);
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url('images/coverphoto.png');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.15;
             z-index: 0;
+            animation: slowZoom 20s ease-in-out infinite alternate;
+        }
+
+        .housing-hero::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(15, 65, 74, 0.88), rgba(15, 65, 74, 0.75));
+            z-index: 0;
+        }
+
+        @keyframes slowZoom {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.05); }
         }
 
         .housing-hero .container {
             position: relative;
             z-index: 2;
+            animation: fadeInDown 0.6s ease forwards;
         }
 
         .housing-hero h1 {
-            font-size: 2.8rem;
+            font-size: 3.2rem;
             font-weight: 800;
             margin-bottom: 20px;
+            letter-spacing: -1px;
+        }
+
+        .housing-hero h1 span {
+            color: var(--gold-light);
         }
 
         .housing-hero p {
-            font-size: 1.1rem;
-            max-width: 800px;
+            font-size: 1.2rem;
+            max-width: 750px;
             margin: 0 auto;
-            opacity: 0.9;
+            opacity: 0.95;
+            line-height: 1.7;
+            color: var(--alabaster);
         }
 
-        /* Stats Section */
-        .stats-section {
-            padding: 60px 0;
-            background: var(--white);
-            margin-top: -40px;
-        }
-
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 30px;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        .stat-item {
-            text-align: center;
-            padding: 30px 20px;
-            background: var(--white);
-            border-radius: var(--radius-card);
-            box-shadow: var(--shadow-md);
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
-        }
-
-        .stat-item:hover {
-            transform: translateY(-6px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .stat-icon {
-            font-size: 2.5rem;
-            color: var(--maroon);
-            margin-bottom: 15px;
-        }
-
-        .stat-number {
-            font-size: 2.2rem;
-            font-weight: 800;
-            color: var(--midnight);
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            color: var(--gray-600);
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        /* Quick Links Bar */
+        /* ========== QUICK LINKS PILL BAR ========== */
         .quick-links-bar {
-            background: var(--white);
-            padding: 20px 0;
-            border-bottom: 1px solid var(--gray-200);
+            background: var(--bg-card);
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 76px;
+            z-index: 99;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
         }
 
         .quick-links-container {
             display: flex;
             justify-content: center;
-            gap: 30px;
+            gap: 20px;
             flex-wrap: wrap;
         }
 
         .quick-link-item {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             padding: 10px 24px;
-            background: var(--gray-50);
+            background: var(--bg-primary);
             border-radius: 40px;
-            color: var(--gray-700);
+            color: var(--text-secondary);
             text-decoration: none;
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-color);
         }
 
         .quick-link-item:hover {
-            background: var(--midnight);
+            background: var(--maroon);
             color: white;
-            transform: translateY(-3px);
-            border-color: var(--midnight);
+            border-color: var(--maroon);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.2);
         }
 
         .quick-link-item i {
             color: var(--maroon);
-            font-size: 1rem;
+            transition: color 0.3s;
         }
 
         .quick-link-item:hover i {
             color: white;
         }
 
-        /* Requirements Banner */
+        /* ========== STATISTICS CARDS ========== */
+        .stats-section {
+            padding: 60px 0;
+            background: var(--bg-primary);
+            position: relative;
+            z-index: 10;
+        }
+
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 30px 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-color);
+            animation: fadeInUp 0.6s ease both;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--maroon-light);
+        }
+
+        .stat-item:nth-child(1) { animation-delay: 0.05s; }
+        .stat-item:nth-child(2) { animation-delay: 0.1s; }
+        .stat-item:nth-child(3) { animation-delay: 0.15s; }
+        .stat-item:nth-child(4) { animation-delay: 0.2s; }
+
+        .stat-item .stat-icon-wrapper {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(127, 3, 3, 0.08);
+            color: var(--maroon);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            margin: 0 auto 15px;
+            transition: transform 0.3s ease;
+        }
+
+        [data-theme="dark"] .stat-item .stat-icon-wrapper {
+            background: rgba(232, 213, 168, 0.1);
+            color: var(--gold-light);
+        }
+
+        .stat-item:hover .stat-icon-wrapper {
+            transform: scale(1.08) rotate(-5deg);
+        }
+
+        .stat-number {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+            line-height: 1.1;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ========== REQUIREMENTS BANNER ========== */
         .requirements-banner {
             background: linear-gradient(135deg, var(--maroon) 0%, var(--maroon-light) 100%);
             color: white;
-            padding: 40px 0;
+            padding: 45px 0;
             text-align: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .requirements-banner::before {
+            content: '';
+            position: absolute;
+            top: -40%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
         }
 
         .requirements-banner h2 {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 15px;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .requirements-banner p {
-            font-size: 1rem;
+            font-size: 1.05rem;
             max-width: 700px;
-            margin: 0 auto 25px;
+            margin: 0 auto 28px;
             opacity: 0.9;
         }
 
         .banner-buttons {
             display: flex;
-            gap: 20px;
+            gap: 16px;
             justify-content: center;
             flex-wrap: wrap;
+            position: relative;
+            z-index: 2;
         }
 
         .btn-light {
@@ -472,14 +371,19 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             padding: 12px 30px;
             border-radius: 40px;
             text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .btn-light:hover {
             background: var(--alabaster);
             transform: translateY(-3px);
-            box-shadow: var(--shadow-md);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
         }
 
         .btn-outline-light {
@@ -488,78 +392,104 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             padding: 12px 30px;
             border-radius: 40px;
             text-decoration: none;
-            font-weight: 600;
+            font-weight: 700;
+            font-size: 0.9rem;
             border: 2px solid white;
-            transition: all 0.3s;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .btn-outline-light:hover {
             background: white;
             color: var(--maroon);
             transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
         }
 
-        /* Programs Section */
+        /* ========== PROGRAMS SECTION ========== */
         .programs-section {
-            padding: 60px 0;
-            background: var(--gray-50);
+            padding: 80px 0;
+            background: var(--bg-primary);
         }
 
         .section-header {
             text-align: center;
-            margin-bottom: 50px;
+            margin-bottom: 55px;
+            animation: fadeInDown 0.6s ease both;
         }
 
         .section-header h2 {
-            color: var(--midnight);
-            font-size: 2.2rem;
+            color: var(--text-primary);
+            font-size: 2.4rem;
             font-weight: 800;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
         }
 
         .section-header p {
-            color: var(--gray-600);
-            font-size: 1rem;
-            max-width: 700px;
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            max-width: 650px;
             margin: 0 auto;
         }
 
         .programs-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
             gap: 30px;
         }
 
         .program-card {
-            background: var(--white);
+            background: var(--bg-card);
             border-radius: var(--radius-card);
             overflow: hidden;
             box-shadow: var(--shadow-sm);
-            transition: all 0.3s;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             height: 100%;
             display: flex;
             flex-direction: column;
-            border: 1px solid var(--gray-200);
+            border: 1px solid var(--border-color);
+            animation: fadeInUp 0.6s ease both;
         }
 
         .program-card:hover {
             transform: translateY(-8px);
-            box-shadow: var(--shadow-lg);
-            border-color: var(--light-blue);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--maroon-light);
         }
 
         .program-image {
-            height: 160px;
-            background: linear-gradient(135deg, var(--midnight), var(--midnight-light));
+            height: 180px;
+            background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-light) 100%);
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
+        }
+
+        .program-image::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url('images/palayan-bg.png');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.12;
         }
 
         .program-image i {
-            font-size: 4rem;
-            color: rgba(255,255,255,0.2);
+            font-size: 4.5rem;
+            color: rgba(255, 255, 255, 0.15);
+            position: relative;
+            z-index: 2;
+            transition: transform 0.4s ease;
+        }
+
+        .program-card:hover .program-image i {
+            transform: scale(1.08) rotate(-3deg);
         }
 
         .program-badge {
@@ -570,55 +500,69 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             color: white;
             padding: 6px 14px;
             border-radius: 30px;
-            font-size: 0.7rem;
-            font-weight: 600;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 10px rgba(127, 3, 3, 0.3);
+            z-index: 3;
         }
 
         .program-content {
-            padding: 25px;
+            padding: 30px;
             flex: 1;
+            display: flex;
+            flex-direction: column;
         }
 
         .program-content h3 {
-            color: var(--midnight);
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin-bottom: 10px;
+            color: var(--text-primary);
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            line-height: 1.3;
         }
 
         .program-location {
             display: flex;
             align-items: center;
-            gap: 8px;
-            color: var(--gray-600);
-            margin-bottom: 15px;
-            font-size: 0.85rem;
+            gap: 6px;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            font-size: 0.88rem;
+            font-weight: 500;
         }
 
         .program-location i {
             color: var(--maroon);
         }
 
+        [data-theme="dark"] .program-location i {
+            color: var(--gold-light);
+        }
+
         .program-description {
-            color: var(--gray-600);
+            color: var(--text-secondary);
             line-height: 1.6;
             margin-bottom: 20px;
-            font-size: 0.9rem;
+            font-size: 0.92rem;
+            flex-grow: 1;
         }
 
         .program-details {
-            background: var(--gray-50);
-            padding: 15px;
+            background: var(--bg-primary);
+            padding: 16px 20px;
             border-radius: var(--radius-element);
             margin-bottom: 20px;
+            border: 1px solid var(--border-color);
         }
 
         .detail-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px dashed var(--gray-200);
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed var(--border-color);
+            font-size: 0.88rem;
         }
 
         .detail-row:last-child {
@@ -628,17 +572,17 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         .detail-label {
-            color: var(--gray-600);
+            color: var(--text-muted);
             font-weight: 500;
         }
 
         .detail-value {
-            color: var(--midnight);
+            color: var(--text-primary);
             font-weight: 700;
         }
 
         .program-requirements h4 {
-            color: var(--midnight);
+            color: var(--text-primary);
             margin-bottom: 10px;
             font-size: 0.9rem;
             font-weight: 700;
@@ -651,26 +595,27 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
 
         .requirements-list li {
             padding: 5px 0;
-            padding-left: 25px;
+            padding-left: 24px;
             position: relative;
-            color: var(--gray-600);
-            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            font-weight: 500;
         }
 
         .requirements-list li:before {
             content: "✓";
-            color: var(--maroon);
+            color: var(--color-success);
             position: absolute;
             left: 0;
             font-weight: bold;
         }
 
         .program-footer {
-            padding: 20px 25px;
-            background: var(--gray-50);
-            border-top: 1px solid var(--gray-200);
+            padding: 20px 30px 28px;
+            background: var(--bg-primary);
+            border-top: 1px solid var(--border-color);
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
 
         .btn-apply {
@@ -678,69 +623,90 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             padding: 12px;
             background: var(--midnight);
             color: white;
-            text-decoration: none;
+            border: none;
             border-radius: 40px;
             text-align: center;
-            font-weight: 600;
-            font-size: 0.85rem;
-            transition: all 0.3s;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.88rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(15, 65, 74, 0.2);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
         .btn-apply:hover {
-            background: var(--midnight-light);
+            background: var(--maroon);
             transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(127, 3, 3, 0.25);
         }
 
         .btn-details {
             flex: 1;
             padding: 12px;
-            background: var(--maroon);
-            color: white;
+            background: var(--bg-card);
+            color: var(--text-primary);
             text-decoration: none;
             border-radius: 40px;
             text-align: center;
-            font-weight: 600;
-            font-size: 0.85rem;
-            transition: all 0.3s;
-            border: none;
+            font-weight: 700;
+            font-size: 0.88rem;
+            transition: all 0.3s ease;
+            border: 1.5px solid var(--border-color);
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
         .btn-details:hover {
-            background: var(--maroon-light);
+            border-color: var(--maroon);
+            color: var(--maroon);
             transform: translateY(-2px);
         }
 
-        /* Success Stories */
+        [data-theme="dark"] .btn-details:hover {
+            border-color: var(--gold-light);
+            color: var(--gold-light);
+        }
+
+        /* ========== SUCCESS STORIES ========== */
         .stories-section {
-            padding: 60px 0;
-            background: var(--white);
+            padding: 80px 0;
+            background: var(--bg-card);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .stories-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 30px;
-            margin-top: 40px;
+            margin-top: 45px;
         }
 
         .story-card {
-            background: var(--gray-50);
+            background: var(--bg-primary);
             border-radius: var(--radius-card);
-            padding: 25px;
+            padding: 35px 30px;
             text-align: center;
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
+            transition: all 0.3s ease;
+            border: 1px solid var(--border-color);
+            position: relative;
         }
 
         .story-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-6px);
             box-shadow: var(--shadow-md);
+            border-color: var(--maroon-light);
         }
 
         .story-avatar {
-            width: 80px;
-            height: 80px;
+            width: 76px;
+            height: 76px;
             background: var(--midnight);
             border-radius: 50%;
             display: flex;
@@ -749,45 +715,63 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             margin: 0 auto 20px;
             color: white;
             font-size: 2rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        [data-theme="dark"] .story-avatar {
+            background: var(--maroon);
         }
 
         .story-card h4 {
-            color: var(--midnight);
-            margin-bottom: 5px;
-            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            font-size: 1.15rem;
             font-weight: 700;
         }
 
         .story-location {
             color: var(--maroon);
             font-size: 0.85rem;
-            margin-bottom: 15px;
+            font-weight: 600;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        [data-theme="dark"] .story-location {
+            color: var(--gold-light);
         }
 
         .story-quote {
-            color: var(--gray-600);
+            color: var(--text-secondary);
             font-style: italic;
-            line-height: 1.6;
-            font-size: 0.9rem;
+            line-height: 1.7;
+            font-size: 0.92rem;
         }
 
         .story-quote i {
             color: var(--maroon);
-            font-size: 0.8rem;
-            margin: 0 5px;
+            opacity: 0.3;
+            margin: 0 4px;
         }
 
-        /* Process Section */
+        [data-theme="dark"] .story-quote i {
+            color: var(--gold-light);
+        }
+
+        /* ========== PROCESS SECTION ========== */
         .process-section {
-            padding: 60px 0;
-            background:  var(--alabaster);
+            padding: 80px 0;
+            background: var(--bg-primary);
         }
 
         .process-steps {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 30px;
-            margin-top: 40px;
+            margin-top: 45px;
         }
 
         .process-step {
@@ -799,12 +783,13 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             content: "→";
             position: absolute;
             right: -20px;
-            top: 30px;
+            top: 25px;
             font-size: 1.8rem;
-            color: var(--midnight);
+            color: var(--text-muted);
+            opacity: 0.5;
         }
 
-        .step-number {
+        .process-step-number {
             width: 60px;
             height: 60px;
             background: var(--maroon);
@@ -813,55 +798,78 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
-            font-weight: 700;
+            font-size: 1.4rem;
+            font-weight: 800;
             margin: 0 auto 20px;
+            box-shadow: 0 4px 10px rgba(127, 3, 3, 0.25);
+        }
+
+        [data-theme="dark"] .process-step-number {
+            background: var(--gold-light);
+            color: var(--midnight);
+            box-shadow: 0 4px 10px rgba(232, 213, 168, 0.25);
         }
 
         .process-step h4 {
-            color: var(--midnight);
+            color: var(--text-primary);
             margin-bottom: 10px;
             font-weight: 700;
+            font-size: 1.05rem;
         }
 
         .process-step p {
-            color: var(--gray-600);
-            font-size: 0.85rem;
-            line-height: 1.5;
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            line-height: 1.6;
+            font-weight: 500;
         }
 
-        /* FAQ Section */
+        /* ========== FAQ SECTION ========== */
         .faq-section {
-            padding: 60px 0;
-            background: var(--white);
+            padding: 80px 0;
+            background: var(--bg-card);
         }
 
         .faq-container {
             max-width: 800px;
-            margin: 40px auto 0;
+            margin: 45px auto 0;
         }
 
         .faq-item {
-            background: var(--gray-50);
+            background: var(--bg-primary);
             border-radius: var(--radius-element);
-            margin-bottom: 15px;
+            margin-bottom: 16px;
             overflow: hidden;
-            border: 1px solid var(--gray-200);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
         }
 
         .faq-question {
-            padding: 20px;
+            padding: 20px 24px;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-weight: 600;
-            color: var(--midnight);
+            font-weight: 700;
+            color: var(--text-primary);
+            font-size: 1rem;
         }
 
         .faq-question i {
-            transition: transform 0.3s;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             color: var(--maroon);
+        }
+
+        [data-theme="dark"] .faq-question i {
+            color: var(--gold-light);
+        }
+
+        .faq-question.active {
+            background: var(--alabaster);
+        }
+
+        [data-theme="dark"] .faq-question.active {
+            background: var(--border-color);
         }
 
         .faq-question.active i {
@@ -869,64 +877,74 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         .faq-answer {
-            padding: 0 20px;
             max-height: 0;
             overflow: hidden;
-            transition: all 0.3s;
-            color: var(--gray-600);
-            line-height: 1.6;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-size: 0.92rem;
+            padding: 0 24px;
         }
 
         .faq-answer.show {
-            padding: 0 20px 20px 20px;
-            max-height: 200px;
+            padding: 8px 24px 24px 24px;
+            max-height: 250px;
         }
 
-        /* CTA Section */
+        /* ========== CTA SECTION ========== */
         .cta-section {
-            padding: 80px 0;
+            padding: 85px 0;
             background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-light) 100%);
             color: white;
             text-align: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
         }
 
         .cta-section h2 {
-            font-size: 2.2rem;
+            font-size: 2.4rem;
             font-weight: 800;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            letter-spacing: -0.5px;
         }
 
         .cta-section p {
-            font-size: 1rem;
+            font-size: 1.1rem;
             max-width: 600px;
-            margin: 0 auto 30px;
+            margin: 0 auto 32px;
             opacity: 0.9;
+            line-height: 1.6;
         }
 
         .cta-buttons {
             display: flex;
-            gap: 20px;
+            gap: 16px;
             justify-content: center;
             flex-wrap: wrap;
         }
 
         .cta-btn {
-            padding: 14px 32px;
+            padding: 14px 36px;
             border-radius: 40px;
             text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s;
+            font-weight: 700;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .cta-btn.primary {
             background: var(--maroon);
             color: white;
+            box-shadow: 0 4px 15px rgba(127, 3, 3, 0.3);
         }
 
         .cta-btn.primary:hover {
             background: var(--maroon-light);
             transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(127,3,3,0.3);
+            box-shadow: 0 8px 24px rgba(127, 3, 3, 0.45);
         }
 
         .cta-btn.secondary {
@@ -941,92 +959,22 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             transform: translateY(-3px);
         }
 
-        /* Footer */
-        .footer {
-            background: var(--midnight);
-            color: white;
-            padding: 60px 0 20px;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1.5fr;
-            gap: 40px;
-            margin-bottom: 40px;
-        }
-
-        .footer-section h3,
-        .footer-section h4 {
-            margin-bottom: 20px;
-            font-weight: 700;
-        }
-
-        .footer-section h3 {
-            color: var(--tan);
-            font-size: 1.2rem;
-        }
-
-        .footer-section h4 {
-            color: var(--light-blue);
-            font-size: 1rem;
-        }
-
-        .footer-section p {
-            color: rgba(255,255,255,0.7);
-            margin-bottom: 15px;
-            font-size: 0.85rem;
-        }
-
-        .footer-section ul {
-            list-style: none;
-        }
-
-        .footer-section ul li {
-            margin-bottom: 10px;
-        }
-
-        .footer-section a {
-            color: rgba(255,255,255,0.6);
-            text-decoration: none;
-            transition: color 0.3s;
-            font-size: 0.85rem;
-        }
-
-        .footer-section a:hover {
-            color: var(--tan);
-        }
-
-        .contact-number, .email {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255,255,255,0.7);
-            font-size: 0.85rem;
-        }
-
-        .footer-bottom {
-            text-align: center;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.5);
-            font-size: 0.75rem;
-        }
-
-        /* Modal */
+        /* ========== DETAILS MODAL ========== */
         .modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(10, 14, 23, 0.6);
+            backdrop-filter: blur(4px);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 2000;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.3s;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .modal.show {
@@ -1035,150 +983,136 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         .modal-content {
-            background: var(--white);
-            padding: 30px;
+            background: var(--bg-card);
+            padding: 35px;
             border-radius: var(--radius-card);
-            max-width: 600px;
+            max-width: 640px;
             width: 90%;
-            max-height: 90vh;
+            max-height: 85vh;
             overflow-y: auto;
-            transform: translateY(-20px);
-            transition: transform 0.3s;
+            transform: scale(0.95) translateY(20px);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-lg);
         }
 
         .modal.show .modal-content {
-            transform: translateY(0);
+            transform: scale(1) translateY(0);
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid var(--gray-200);
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border-color);
         }
 
         .modal-header h2 {
-            color: var(--midnight);
+            color: var(--text-primary);
             margin: 0;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .modal-header i {
+        .modal-header h2 i {
             color: var(--maroon);
-            margin-right: 8px;
+        }
+
+        [data-theme="dark"] .modal-header h2 i {
+            color: var(--gold-light);
         }
 
         .close-btn {
-            background: none;
+            background: var(--bg-primary);
             border: none;
-            font-size: 1.5rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 1.3rem;
             cursor: pointer;
-            color: var(--gray-600);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
         }
 
         .close-btn:hover {
-            color: var(--maroon);
+            background: var(--color-danger);
+            color: white;
         }
 
-        @media (max-width: 968px) {
-            .housing-hero h1 { font-size: 2rem; }
-            .housing-hero { padding: 120px 0 60px; }
-            .stats-container { grid-template-columns: repeat(2, 1fr); }
-            .nav-links {
-                display: none;
-                width: 100%;
-                flex-direction: column;
-                padding: 20px 0;
-                gap: 15px;
-            }
-            .nav-links.active { display: flex; }
-            .hamburger { display: block; }
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== RESPONSIVE OVERRIDES ========== */
+        @media (max-width: 992px) {
+            .housing-hero h1 { font-size: 2.5rem; }
+            .stats-container { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+            .process-steps { grid-template-columns: repeat(2, 1fr); gap: 30px; }
+            .process-step:nth-child(2):after { display: none; }
+            .process-step:not(:last-child):after { right: -15px; }
         }
 
         @media (max-width: 768px) {
-            .navbar { padding: 0.8rem 1.5rem; }
-            .navbar.scrolled { padding: 0.6rem 1.5rem; }
+            .housing-hero { padding: 130px 0 60px; }
+            .housing-hero h1 { font-size: 2rem; }
             .stats-container { grid-template-columns: 1fr; }
-            .quick-links-container { flex-direction: column; align-items: center; }
-            .quick-link-item { width: 80%; justify-content: center; }
-            .banner-buttons { flex-direction: column; align-items: center; }
+            .quick-links-container { flex-direction: column; align-items: stretch; gap: 10px; }
+            .quick-link-item { justify-content: center; }
+            .banner-buttons { flex-direction: column; align-items: stretch; }
             .programs-grid { grid-template-columns: 1fr; }
             .program-footer { flex-wrap: wrap; }
             .btn-apply, .btn-details { flex: 1 1 100%; }
-            .process-steps { grid-template-columns: 1fr; }
+            .process-steps { grid-template-columns: 1fr; gap: 20px; }
             .process-step:not(:last-child):after { display: none; }
-            .cta-buttons { flex-direction: column; align-items: center; }
+            .cta-buttons { flex-direction: column; align-items: stretch; }
             .stories-grid { grid-template-columns: 1fr; }
-            .footer-grid { grid-template-columns: 1fr; gap: 30px; }
         }
     </style>
 </head>
 <body>
-    <!-- Navbar - Same as other pages -->
-    <nav class="navbar" id="navbar">
-        <div class="logo-area">
-            <div class="logo-icon">
-                <i class="fas fa-hand-holding-heart"></i>
-            </div>
-            <div class="logo-text">
-                <h2>ONE PALAYAN-KALINGA HUB</h2>
-                <span>CSWDO Palayan City</span>
-            </div>
-        </div>
-        <div class="nav-links" id="navLinks">
-            <a href="index.php">Home</a>
-            <a href="services.php">Services</a>
-            <a href="about.php">About</a>
-            <a href="contact.php">Contact</a>
-            
-            <?php if(isLoggedIn()): ?>
-                <div class="user-menu">
-                    <a href="dashboard.php" class="profile-icon">
-                        <i class="fas fa-user-circle"></i>
-                        <span><?php echo htmlspecialchars($_SESSION['full_name']); ?></span>
-                    </a>
-                   
-                </div>
-            <?php else: ?>
-                <a href="login.php" class="login-btn">Login</a>
-                <a href="register.php" class="register-btn">Register</a>
-            <?php endif; ?>
-        </div>
-        <button class="hamburger" id="hamburger">
-            <span></span>
-            <span></span>
-            <span></span>
-        </button>
-    </nav>
+    <!-- Navbar Include -->
+    <?php include 'includes/navbar.php'; ?>
 
     <!-- Hero Section -->
     <section class="housing-hero">
         <div class="container">
-            <h1>Housing Programs</h1>
-            <p>Providing safe, affordable, and quality housing for every Palayan resident. Your dream home starts here.</p>
+            <h1>CSWDO <span>Housing Programs</span></h1>
+            <p>Providing secure, high-quality, and affordable resettlement opportunities for low-income and qualified families in Palayan City. Invest in your family's future today.</p>
         </div>
     </section>
 
-    <!-- Quick Links Bar -->
+    <!-- Quick Links Floating Pill Bar -->
     <div class="quick-links-bar">
         <div class="container">
             <div class="quick-links-container">
                 <a href="#programs" class="quick-link-item">
-                    <i class="fas fa-home"></i>
+                    <i class="fas fa-house"></i>
                     <span>Available Programs</span>
                 </a>
                 <a href="housing-requirements.php" class="quick-link-item">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Requirements</span>
+                    <i class="fas fa-file-shield"></i>
+                    <span>Requirements Guide</span>
                 </a>
                 <a href="#process" class="quick-link-item">
-                    <i class="fas fa-list-ol"></i>
+                    <i class="fas fa-bars-staggered"></i>
                     <span>How to Apply</span>
                 </a>
                 <a href="#faq" class="quick-link-item">
-                    <i class="fas fa-question-circle"></i>
+                    <i class="fas fa-circle-question"></i>
                     <span>FAQs</span>
                 </a>
             </div>
@@ -1190,24 +1124,24 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="container">
             <div class="stats-container">
                 <div class="stat-item">
-                    <div class="stat-icon"><i class="fas fa-home"></i></div>
-                    <div class="stat-number"><?php echo number_format($stats['total_units'] ?? 0); ?></div>
-                    <div class="stat-label">Total Units</div>
+                    <div class="stat-icon-wrapper"><i class="fas fa-city"></i></div>
+                    <div class="stat-number" data-target="<?php echo $stats['total_units'] ?? 0; ?>">0</div>
+                    <div class="stat-label">Total Subdivisions</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                    <div class="stat-number"><?php echo number_format($stats['available_units'] ?? 0); ?></div>
-                    <div class="stat-label">Available Units</div>
+                    <div class="stat-icon-wrapper"><i class="fas fa-circle-check"></i></div>
+                    <div class="stat-number" data-target="<?php echo $stats['available_units'] ?? 0; ?>">0</div>
+                    <div class="stat-label">Active Sites</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon"><i class="fas fa-users"></i></div>
-                    <div class="stat-number"><?php echo number_format($stats['approved_beneficiaries'] ?? 0); ?></div>
-                    <div class="stat-label">Beneficiaries</div>
+                    <div class="stat-icon-wrapper"><i class="fas fa-users-viewfinder"></i></div>
+                    <div class="stat-number" data-target="<?php echo $stats['approved_beneficiaries'] ?? 0; ?>">0</div>
+                    <div class="stat-label">Families Relocated</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                    <div class="stat-number"><?php echo number_format($stats['pending_applications'] ?? 0); ?></div>
-                    <div class="stat-label">Pending Apps</div>
+                    <div class="stat-icon-wrapper"><i class="fas fa-hourglass-half"></i></div>
+                    <div class="stat-number" data-target="<?php echo $stats['pending_applications'] ?? 0; ?>">0</div>
+                    <div class="stat-label">Pending Reviews</div>
                 </div>
             </div>
         </div>
@@ -1216,51 +1150,51 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Requirements Banner -->
     <section class="requirements-banner">
         <div class="container">
-            <h2><i class="fas fa-file-alt"></i> Housing Program Requirements</h2>
-            <p>Before applying, make sure you have all the necessary documents ready. View the complete list of requirements in Filipino and English.</p>
+            <h2><i class="fas fa-clipboard-list"></i> Application Requirements Checklist</h2>
+            <p>Ensure you have all the necessary legal and civil documentation prepared before submitting your housing application.</p>
             <div class="banner-buttons">
                 <a href="housing-requirements.php" class="btn-light">
-                    <i class="fas fa-eye"></i> View Requirements
+                    <i class="fas fa-circle-info"></i> View Requirements Guide
                 </a>
-                <a href="housing-requirements.php#print" class="btn-outline-light">
-                    <i class="fas fa-print"></i> Printable Version
+                <a href="housing-requirements.php?print=1" class="btn-outline-light">
+                    <i class="fas fa-print"></i> Printable Checklist
                 </a>
             </div>
         </div>
     </section>
 
-    <!-- Housing Programs Section -->
+    <!-- Available Housing Programs Grid -->
     <section id="programs" class="programs-section">
         <div class="container">
             <div class="section-header">
-                <h2>Available Housing Programs</h2>
-                <p>Choose from our various housing programs designed to meet different needs and qualifications</p>
+                <h2>Available Programs & Communities</h2>
+                <p>Browse active housing and subdivision development projects managed by the CSWDO Palayan City.</p>
             </div>
 
             <div class="programs-grid">
                 <?php foreach ($programs as $program): ?>
                 <div class="program-card">
                     <div class="program-image">
-                        <i class="fas fa-home"></i>
+                        <i class="fas fa-hotel"></i>
                         <span class="program-badge"><?php echo htmlspecialchars($program['program_code']); ?></span>
                     </div>
                     <div class="program-content">
                         <h3><?php echo htmlspecialchars($program['program_name']); ?></h3>
                         <div class="program-location">
-                            <i class="fas fa-map-marker-alt"></i>
+                            <i class="fas fa-map-location-dot"></i>
                             <?php echo htmlspecialchars($program['location']); ?>
                         </div>
                         <p class="program-description"><?php echo htmlspecialchars($program['description']); ?></p>
                         
                         <div class="program-details">
                             <div class="detail-row">
-                                <span class="detail-label">Total Units:</span>
-                                <span class="detail-value"><?php echo $program['total_units']; ?></span>
+                                <span class="detail-label">Total Allocation:</span>
+                                <span class="detail-value"><?php echo $program['total_units']; ?> Units</span>
                             </div>
                             <div class="detail-row">
-                                <span class="detail-label">Status:</span>
+                                <span class="detail-label">Program Status:</span>
                                 <span class="detail-value">
-                                    <span style="color: <?php echo $program['status'] == 'active' ? '#4CAF50' : '#f44336'; ?>">
+                                    <span style="color: <?php echo $program['status'] == 'active' ? 'var(--color-success)' : 'var(--color-danger)'; ?>">
                                         <?php echo ucfirst($program['status']); ?>
                                     </span>
                                 </span>
@@ -1269,7 +1203,7 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
 
                         <?php if (!empty($program['requirements'])): ?>
                         <div class="program-requirements">
-                            <h4>Key Requirements:</h4>
+                            <h4>Prerequisites:</h4>
                             <ul class="requirements-list">
                                 <?php 
                                 $reqs = explode("\n", $program['requirements']);
@@ -1283,7 +1217,7 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 endforeach; 
                                 ?>
                                 <?php if (count($reqs) > 3): ?>
-                                <li><em>+<?php echo count($reqs) - 3; ?> more</em></li>
+                                <li><em>+<?php echo count($reqs) - 3; ?> more requirements</em></li>
                                 <?php endif; ?>
                             </ul>
                         </div>
@@ -1293,15 +1227,15 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="program-footer">
                         <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
                             <a href="apply-housing.php?program_id=<?php echo $program['program_id']; ?>" class="btn-apply">
-                                <i class="fas fa-paper-plane"></i> Apply Now
+                                <i class="fas fa-paper-plane"></i> Apply Online
                             </a>
                         <?php else: ?>
                             <a href="login.php" class="btn-apply">
-                                <i class="fas fa-sign-in-alt"></i> Login to Apply
+                                <i class="fas fa-right-to-bracket"></i> Login to Apply
                             </a>
                         <?php endif; ?>
                         <button class="btn-details" onclick="showProgramDetails(<?php echo htmlspecialchars(json_encode($program)); ?>)">
-                            <i class="fas fa-info-circle"></i> Details
+                            <i class="fas fa-circle-info"></i> Full Details
                         </button>
                     </div>
                 </div>
@@ -1315,24 +1249,24 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     <section class="stories-section">
         <div class="container">
             <div class="section-header">
-                <h2>Success Stories</h2>
-                <p>Meet some of our housing beneficiaries who now have a place to call home</p>
+                <h2>Families Welcomed Home</h2>
+                <p>Read experiences from residents relocated under CSWDO housing initiatives.</p>
             </div>
 
             <div class="stories-grid">
                 <?php foreach ($beneficiaries as $beneficiary): ?>
                 <div class="story-card">
                     <div class="story-avatar">
-                        <i class="fas fa-user"></i>
+                        <i class="fas fa-house-user"></i>
                     </div>
                     <h4><?php echo htmlspecialchars($beneficiary['first_name'] . ' ' . $beneficiary['last_name']); ?></h4>
                     <div class="story-location">
-                        <i class="fas fa-map-marker-alt"></i>
-                        <?php echo htmlspecialchars($beneficiary['program_name']); ?>
+                        <i class="fas fa-location-dot"></i>
+                        Resettled in <?php echo htmlspecialchars($beneficiary['program_name']); ?>
                     </div>
                     <div class="story-quote">
                         <i class="fas fa-quote-left"></i>
-                        Thank you CSWDO for helping us find a home. My family now has a safe place to live.
+                        Lubos kaming nagpapasalamat sa CSWDO Palayan City sa pagkakaroon namin ng ligtas at sariling tahanan. Isang malaking tulong ito para sa kinabukasan ng aking mga anak.
                         <i class="fas fa-quote-right"></i>
                     </div>
                 </div>
@@ -1342,34 +1276,34 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     </section>
     <?php endif; ?>
 
-    <!-- Application Process Section -->
+    <!-- Application Process Steps Grid -->
     <section id="process" class="process-section">
         <div class="container">
             <div class="section-header">
-                <h2>How to Apply</h2>
-                <p>Simple steps to start your housing application</p>
+                <h2>How the Application Works</h2>
+                <p>Follow these structured steps to file your residential housing request.</p>
             </div>
 
             <div class="process-steps">
                 <div class="process-step">
-                    <div class="step-number">1</div>
-                    <h4>Check Eligibility</h4>
-                    <p>Review program requirements and ensure you meet the qualifications</p>
+                    <div class="process-step-number">1</div>
+                    <h4>Verify Eligibility</h4>
+                    <p>Review standard requirements and confirm your qualifications and household status.</p>
                 </div>
                 <div class="process-step">
-                    <div class="step-number">2</div>
+                    <div class="process-step-number">2</div>
                     <h4>Prepare Documents</h4>
-                    <p>Gather all required documents listed in the program details</p>
+                    <p>Assemble clearances, identity IDs, billing histories, and intent letters in digital formats.</p>
                 </div>
                 <div class="process-step">
-                    <div class="step-number">3</div>
+                    <div class="process-step-number">3</div>
                     <h4>Submit Application</h4>
-                    <p>Fill out the online form and upload your documents</p>
+                    <p>File details through our secure resident portal and upload legal files.</p>
                 </div>
                 <div class="process-step">
-                    <div class="step-number">4</div>
-                    <h4>Wait for Evaluation</h4>
-                    <p>Your application will be reviewed and you'll be notified of the status</p>
+                    <div class="process-step-number">4</div>
+                    <h4>Social Assessment</h4>
+                    <p>Complete interview evaluations conducted by social workers to finalize site selection.</p>
                 </div>
             </div>
         </div>
@@ -1380,58 +1314,48 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="container">
             <div class="section-header">
                 <h2>Frequently Asked Questions</h2>
-                <p>Find answers to common questions about housing programs</p>
+                <p>Have questions? Review the general guidelines for Palayan City housing services.</p>
             </div>
 
             <div class="faq-container">
                 <div class="faq-item">
                     <div class="faq-question" onclick="toggleFAQ(this)">
-                        <span>Who can apply for housing programs?</span>
+                        <span>Who qualifies for low-income housing resettlement?</span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="faq-answer">
-                        Housing programs are open to all qualified residents of Palayan City. Eligibility criteria may vary per program and typically include factors such as income level, family size, and current housing situation.
+                        Applications are open to registered indigent families, residents residing in disaster-prone hazard zones, and individuals meeting household income assessments defined by municipal social guidelines.
                     </div>
                 </div>
 
                 <div class="faq-item">
                     <div class="faq-question" onclick="toggleFAQ(this)">
-                        <span>What documents are required?</span>
+                        <span>What are the key civil document requirements?</span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="faq-answer">
-                        Common requirements include: Valid ID, Barangay Certificate of Residency, Proof of Income, Birth Certificates of family members, and Current housing situation documentation. 
-                        <a href="housing-requirements.php" style="color: var(--maroon); text-decoration: none; font-weight: 600;">View complete requirements →</a>
+                        Core prerequisites consist of: Letter of Intent, Barangay Clearance or Indigency Cert, Valid Identity Card, House conditions photos, Utility billing proofs, and land permission letters if building on relative properties.
+                        <a href="housing-requirements.php" style="color: var(--maroon); text-decoration: none; font-weight: 700; display: block; margin-top: 10px;">View Full Checklist Requirements →</a>
                     </div>
                 </div>
 
                 <div class="faq-item">
                     <div class="faq-question" onclick="toggleFAQ(this)">
-                        <span>How long is the application process?</span>
+                        <span>How long does the evaluation process take?</span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="faq-answer">
-                        The application process typically takes 7-10 working days from submission to initial evaluation. This includes document verification, interview scheduling, and final approval.
+                        Once filed, evaluations, background checks, and household visits are finalized within 7 to 14 business days. The applicant receives direct SMS notification updates inside the portal.
                     </div>
                 </div>
 
                 <div class="faq-item">
                     <div class="faq-question" onclick="toggleFAQ(this)">
-                        <span>Can I apply for multiple programs?</span>
+                        <span>Can I request relocation for multiple properties?</span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="faq-answer">
-                        Yes, you can apply for multiple housing programs, but you can only be approved for one. We recommend applying for the program that best matches your needs and qualifications.
-                    </div>
-                </div>
-
-                <div class="faq-item">
-                    <div class="faq-question" onclick="toggleFAQ(this)">
-                        <span>How are beneficiaries selected?</span>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                    <div class="faq-answer">
-                        Beneficiaries are selected based on a points system considering factors such as income level, family size, current housing conditions, and urgency of need. The selection process is transparent and documented.
+                        While multiple applications are allowed, approvals are restricted to one resettlement lot or housing project per eligible household unit to ensure equitable allocation.
                     </div>
                 </div>
             </div>
@@ -1441,71 +1365,33 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Call to Action Section -->
     <section class="cta-section">
         <div class="container">
-            <h2>Ready to Find Your New Home?</h2>
-            <p>Start your application today and take the first step towards owning a home in Palayan City.</p>
+            <h2>Ready to Secure Your Community Home?</h2>
+            <p>Take the first step today. Register, verify your residency, and submit your application online.</p>
             <div class="cta-buttons">
                 <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
                     <a href="apply-housing.php" class="cta-btn primary">
-                        <i class="fas fa-paper-plane"></i> Apply Now
+                        <i class="fas fa-paper-plane"></i> Apply for Housing
                     </a>
                 <?php else: ?>
                     <a href="register.php" class="cta-btn primary">
-                        <i class="fas fa-user-plus"></i> Register to Apply
+                        <i class="fas fa-user-plus"></i> Register Portal Account
                     </a>
                 <?php endif; ?>
                 <a href="housing-requirements.php" class="cta-btn secondary">
-                    <i class="fas fa-file-alt"></i> View Requirements
+                    <i class="fas fa-file-shield"></i> Read Requirements
                 </a>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-section">
-                    <h3>ONE PALAYAN-KALINGA HUB</h3>
-                    <p>CSWDO Palayan City — Integrated Social Services Platform</p>
-                    <div>
-                        <h4>SERVICES</h4>
-                        <ul>
-                            <li><a href="appointments.php">Appointment Booking</a></li>
-                            <li><a href="aics.php">AICS Application</a></li>
-                            <li><a href="housing.php">Housing Programs</a></li>
-                        </ul>
-                    </div>
-                </div>
+    <!-- Footer Include -->
+    <?php include 'includes/footer.php'; ?>
 
-                <div class="footer-section">
-                    <h4>RESOURCES</h4>
-                    <ul>
-                        <li><a href="user-guide.php">User Guide</a></li>
-                        <li><a href="faqs.php">FAQs</a></li>
-                        <li><a href="privacy-policy.php">Privacy Policy</a></li>
-                        <li><a href="terms.php">Terms of Service</a></li>
-                    </ul>
-                </div>
-
-                <div class="footer-section">
-                    <h4>CONTACT US</h4>
-                    <p>City Social Welfare and Development Office<br>
-                    Palayan City, Nueva Ecija, Philippines</p>
-                    <p class="contact-number"><i class="fas fa-phone"></i> +63 (44) 123 4567</p>
-                    <p class="email"><i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</p>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 One Palayan-Kalinga Hub. All rights reserved. | A project of CSWDO Palayan City</p>
-            </div>
-        </div>
-    </footer>
-
-    <!-- Program Details Modal -->
+    <!-- Program Details Modal Dialog -->
     <div id="programModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2><i class="fas fa-home"></i> <span id="modalProgramName"></span></h2>
+                <h2><i class="fas fa-hotel"></i> <span id="modalProgramName"></span></h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
             <div id="modalContent"></div>
@@ -1513,33 +1399,14 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <script>
-    // Navbar scroll effect
-    window.addEventListener('scroll', function() {
-        const navbar = document.getElementById('navbar');
-        if (window.scrollY > 50) {
-            navbar.classList.add('scrolled');
-        } else {
-            navbar.classList.remove('scrolled');
-        }
-    });
-
-    // Mobile menu toggle
-    const hamburger = document.getElementById('hamburger');
-    const navLinks = document.getElementById('navLinks');
-
-    if (hamburger) {
-        hamburger.addEventListener('click', () => {
-            hamburger.classList.toggle('active');
-            navLinks.classList.toggle('active');
-        });
-    }
-
+    // Toggle Accordion FAQs
     function toggleFAQ(element) {
         element.classList.toggle('active');
         const answer = element.nextElementSibling;
         answer.classList.toggle('show');
     }
 
+    // Modal display scripts
     function showProgramDetails(program) {
         const modal = document.getElementById('programModal');
         const modalName = document.getElementById('modalProgramName');
@@ -1550,32 +1417,32 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         let requirementsHtml = '';
         if (program.requirements) {
             const reqs = program.requirements.split('\n');
-            requirementsHtml = '<h4 style="color: var(--midnight); margin: 20px 0 10px;">Complete Requirements:</h4><ul style="list-style: none; padding: 0;">';
+            requirementsHtml = '<h4 style="color: var(--text-primary); margin: 20px 0 10px; font-weight:700;">Prerequisites Checklist:</h4><ul style="list-style: none; padding: 0;">';
             reqs.forEach(req => {
                 if (req.trim()) {
-                    requirementsHtml += `<li style="padding: 8px 0; padding-left: 25px; position: relative; color: var(--gray-600);"><span style="position: absolute; left: 0; color: var(--maroon);">✓</span> ${req.trim()}</li>`;
+                    requirementsHtml += `<li style="padding: 6px 0; padding-left: 25px; position: relative; color: var(--text-secondary);"><span style="position: absolute; left: 0; color: var(--color-success); font-weight:bold;">✓</span> ${req.trim()}</li>`;
                 }
             });
             requirementsHtml += '</ul>';
         }
 
         modalContent.innerHTML = `
-            <div style="margin-bottom: 20px;">
-                <p><i class="fas fa-map-marker-alt" style="color: var(--maroon);"></i> <strong>Location:</strong> ${program.location}</p>
-                <p><i class="fas fa-building" style="color: var(--maroon);"></i> <strong>Total Units:</strong> ${program.total_units}</p>
-                <p><i class="fas fa-info-circle" style="color: var(--maroon);"></i> <strong>Status:</strong> <span style="color: ${program.status == 'active' ? '#4CAF50' : '#f44336'}">${program.status}</span></p>
+            <div style="margin-bottom: 20px; display: grid; gap: 10px; font-size:0.95rem; border-bottom: 1px solid var(--border-color); padding-bottom:15px;">
+                <p><i class="fas fa-location-dot" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Location:</strong> ${program.location}</p>
+                <p><i class="fas fa-city" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Allocated Units:</strong> ${program.total_units} Units</p>
+                <p><i class="fas fa-circle-info" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Site Status:</strong> <span style="color: ${program.status == 'active' ? 'var(--color-success)' : 'var(--color-danger)'}; font-weight:700;">${program.status.toUpperCase()}</span></p>
             </div>
             <div style="margin-bottom: 20px;">
-                <h4 style="color: var(--midnight); margin-bottom: 10px;">Description:</h4>
-                <p style="line-height: 1.6; color: var(--gray-600);">${program.description}</p>
+                <h4 style="color: var(--text-primary); margin-bottom: 8px; font-weight:700;">Community Description:</h4>
+                <p style="line-height: 1.6; color: var(--text-secondary); font-size:0.92rem;">${program.description}</p>
             </div>
             ${requirementsHtml}
-            <div style="margin-top: 25px; text-align: center;">
-                <a href="housing-requirements.php" class="btn-requirements" style="display: inline-block; padding: 12px 30px; margin-right: 10px; text-decoration: none;">View All Requirements</a>
+            <div style="margin-top: 30px; text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+                <a href="housing-requirements.php" class="btn-details" style="flex:unset; padding: 10px 20px;">Requirements Guide</a>
                 <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
-                    <a href="apply-housing.php?program_id=${program.program_id}" class="btn-apply" style="display: inline-block; padding: 12px 30px; text-decoration: none;">Apply Now</a>
+                    <a href="apply-housing.php?program_id=${program.program_id}" class="btn-apply" style="flex:unset; padding: 10px 25px;">Apply Online</a>
                 <?php else: ?>
-                    <a href="login.php" class="btn-apply" style="display: inline-block; padding: 12px 30px; text-decoration: none;">Login to Apply</a>
+                    <a href="login.php" class="btn-apply" style="flex:unset; padding: 10px 25px;">Login to Apply</a>
                 <?php endif; ?>
             </div>
         `;
@@ -1594,32 +1461,49 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     }
 
+    // Smooth Scroll to internal anchors
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
-            e.preventDefault();
-            document.querySelector(this.getAttribute('href')).scrollIntoView({
-                behavior: 'smooth'
-            });
+            const targetId = this.getAttribute('href');
+            if (targetId !== '#') {
+                e.preventDefault();
+                document.querySelector(targetId)?.scrollIntoView({
+                    behavior: 'smooth'
+                });
+            }
         });
     });
 
-    // Animate stats numbers
+    // Statistical counter entry animations
     document.addEventListener('DOMContentLoaded', function() {
         const statNumbers = document.querySelectorAll('.stat-number');
-        statNumbers.forEach(stat => {
-            const target = parseInt(stat.textContent);
-            let current = 0;
-            const increment = target / 50;
-            const timer = setInterval(() => {
-                current += increment;
-                if (current >= target) {
-                    stat.textContent = target.toLocaleString();
-                    clearInterval(timer);
-                } else {
-                    stat.textContent = Math.floor(current).toLocaleString();
+        
+        // Simple IntersectionObserver for stats counter
+        const observer = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const stat = entry.target;
+                    const target = parseInt(stat.getAttribute('data-target') || 0);
+                    let current = 0;
+                    const duration = 1000; // ms
+                    const stepTime = 20;
+                    const increment = target / (duration / stepTime);
+                    
+                    const timer = setInterval(() => {
+                        current += increment;
+                        if (current >= target) {
+                            stat.textContent = target.toLocaleString();
+                            clearInterval(timer);
+                        } else {
+                            stat.textContent = Math.floor(current).toLocaleString();
+                        }
+                    }, stepTime);
+                    obs.unobserve(stat);
                 }
-            }, 20);
-        });
+            });
+        }, { threshold: 0.1 });
+        
+        statNumbers.forEach(stat => observer.observe(stat));
     });
     </script>
 </body>

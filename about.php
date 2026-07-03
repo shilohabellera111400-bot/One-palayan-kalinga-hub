@@ -8,10 +8,10 @@ require_once __DIR__ . '/config/database.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About Us - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        /* ========== PROFESSIONAL COLOR PALETTE ========== */
+        /* ========== MODERN PROFESSIONAL PALETTE & VARIABLES ========== */
         :root {
             --tan: #D8BA98;
             --maroon: #7F0303;
@@ -21,309 +21,113 @@ require_once __DIR__ . '/config/database.php';
             --maroon-dark: #5a0202;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-100: #F1F3F8;
-            --gray-200: #E4E7E9;
-            --gray-600: #6B7A8A;
-            --gray-700: #3A4A5A;
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08);
+            
+            /* Light mode default tokens */
+            --bg-primary: #F8F9FC;
+            --bg-secondary: #FFFFFF;
+            --bg-card: #FFFFFF;
+            --text-primary: #1F2937;
+            --text-secondary: #374151;
+            --text-muted: #6B7A8A;
+            --border-color: #E4E7EF;
+            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);
             --radius-card: 24px;
             --radius-element: 16px;
+        }
+
+        /* Dark mode overrides (automatically enabled via body.dark-mode or html[data-theme="dark"]) */
+        body.dark-mode, [data-theme="dark"] body {
+            --bg-primary: #0D1117;
+            --bg-secondary: #161B22;
+            --bg-card: #161B22;
+            --text-primary: #F0F6FC;
+            --text-secondary: #C9D1D9;
+            --text-muted: #8B949E;
+            --border-color: #30363D;
+            --white: #161B22;
+            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.2);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+            --alabaster: #21262D;
+            --midnight: #0F414A;
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--white);
-            color: var(--gray-700);
-            line-height: 1.5;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            line-height: 1.6;
         }
 
         .container {
-            max-width: 1280px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 0 24px;
         }
 
-        /* ========== NAVBAR STYLES - SAME AS INDEX.PHP ========== */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            z-index: 1000;
-            transition: all 0.3s ease-in-out;
-            background: var(--midnight);
-            border-bottom: none;
+        /* Header Fix for Floating Navbar */
+        .header-spacer {
+            height: 90px;
+        }
+        @media (max-width: 768px) {
+            .header-spacer { height: 75px; }
         }
 
-        .navbar.scrolled {
-            background: var(--white);
-            box-shadow: var(--shadow-md);
-            padding: 0.7rem 2rem;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-         .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        /* Logo with white circle background - from login page */
-        .logo-circle {
-            width: 65px;
-            height: 65px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.3s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .logo-circle:hover {
-            transform: scale(1.05);
-        }
-
-        .logo-circle img {
-            width: 63px;
-            height: auto;
-        }
-
-        .logo-text h2 {
-            font-size: 1.3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, white 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            letter-spacing: -0.3px;
-        }
-
-        .logo-text span {
-            font-size: 0.7rem;
-            font-weight: 500;
-            background: var(--tan);
-            padding: 2px 10px;
-            border-radius: 40px;
-            margin-left: 8px;
-            color: #3b2a1f;
-        }
-
-        .navbar.scrolled .logo-text h2 {
-            background: linear-gradient(135deg, var(--midnight) 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-        }
-
-        .navbar.scrolled .logo-icon {
-            background: var(--maroon);
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-
-        .nav-links a {
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.85);
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .nav-links a:hover {
-            color: white;
-        }
-
-        .navbar.scrolled .nav-links a {
-            color: var(--gray-700);
-        }
-
-        .navbar.scrolled .nav-links a:hover {
-            color: var(--maroon);
-        }
-
-        /* User Menu */
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .profile-icon {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.12);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            text-decoration: none;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        .profile-icon i {
-            font-size: 1.1rem;
-        }
-        .profile-icon span {
-            font-size: 0.85rem;
-        }
-        .profile-icon:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-        .logout-icon {
-            background: rgba(255, 255, 255, 0.1);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            color: white;
-            transition: all 0.3s;
-        }
-        .logout-icon:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-        .navbar.scrolled .profile-icon {
-            background: var(--alabaster);
-            color: var(--midnight);
-        }
-        .navbar.scrolled .profile-icon:hover {
-            background: var(--tan);
-        }
-        .navbar.scrolled .logout-icon {
-            background: var(--gray-100);
-            color: var(--maroon);
-        }
-        .navbar.scrolled .logout-icon:hover {
-            background: var(--gray-200);
-        }
-
-        .login-btn {
-            background: var(--maroon);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .login-btn:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-        }
-
-        .navbar.scrolled .login-btn {
-            background: var(--maroon);
-            color: white !important;
-        }
-        .navbar.scrolled .login-btn:hover {
-            background: var(--maroon-light);
-        }
-
-        .register-btn {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s;
-        }
-        .register-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-
-        .navbar.scrolled .register-btn {
-            background: var(--alabaster);
-            color: var(--midnight) !important;
-        }
-        .navbar.scrolled .register-btn:hover {
-            background: var(--tan);
-        }
-
-        .hamburger {
-            display: none;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 8px;
-        }
-
-        .hamburger span {
-            display: block;
-            width: 25px;
-            height: 2px;
-            margin: 5px 0;
-            background: white;
-            transition: all 0.3s;
-        }
-
-        .navbar.scrolled .hamburger span {
-            background: var(--midnight);
-        }
-
-        /* About Hero */
+        /* ========== About Hero Section ========== */
         .about-hero {
-            background: var(--midnight);
+            background: linear-gradient(135deg, var(--midnight) 0%, #155d6a 50%, var(--maroon-dark) 100%);
             color: white;
-            padding: 140px 0 80px;
+            padding: 90px 0;
             text-align: center;
             position: relative;
             overflow: hidden;
+            border-bottom: 5px solid var(--maroon);
         }
 
         .about-hero::before {
             content: '🏛️';
-            font-size: 15rem;
+            font-size: 16rem;
             position: absolute;
-            right: -50px;
+            right: -20px;
             bottom: -50px;
-            opacity: 0.06;
+            opacity: 0.05;
             transform: rotate(15deg);
             pointer-events: none;
         }
 
         .about-hero h1 {
-            font-size: 3rem;
-            font-weight: 800;
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 850;
             margin-bottom: 20px;
+            letter-spacing: -0.03em;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
             position: relative;
+            z-index: 1;
         }
 
         .about-hero p {
-            font-size: 1.1rem;
+            font-size: clamp(1rem, 2vw, 1.25rem);
             max-width: 800px;
             margin: 0 auto;
-            opacity: 0.9;
+            opacity: 0.95;
+            line-height: 1.7;
             position: relative;
+            z-index: 1;
         }
 
-        /* Mission Vision Section */
+        /* ========== Mission Vision Section ========== */
         .mission-vision-section {
             padding: 80px 0;
-            background: var(--gray-50);
+            background: var(--bg-primary);
         }
 
         .mv-container {
@@ -333,12 +137,16 @@ require_once __DIR__ . '/config/database.php';
         }
 
         .mission-card, .vision-card {
-            background: var(--white);
-            padding: 40px;
+            background: var(--bg-card);
+            padding: 45px 40px;
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-sm);
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
         }
 
         .mission-card:hover, .vision-card:hover {
@@ -347,63 +155,61 @@ require_once __DIR__ . '/config/database.php';
         }
 
         .mission-card {
-            border-bottom: 4px solid var(--maroon);
+            border-bottom: 5px solid var(--maroon);
         }
 
         .vision-card {
-            border-bottom: 4px solid var(--midnight);
+            border-bottom: 5px solid var(--midnight);
         }
 
         .mv-icon {
-            font-size: 3rem;
-            margin-bottom: 20px;
+            font-size: 2.8rem;
+            margin-bottom: 24px;
+            width: 70px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 20px;
+            background: var(--bg-primary);
         }
 
         .mission-card .mv-icon {
             color: var(--maroon);
+            background: rgba(127, 3, 3, 0.08);
         }
 
         .vision-card .mv-icon {
-            color: var(--midnight);
+            color: #1a6a78;
+            background: rgba(26, 106, 120, 0.08);
         }
 
         .mission-card h2, .vision-card h2 {
             font-size: 1.8rem;
             font-weight: 800;
-            margin-bottom: 25px;
-            position: relative;
-            padding-bottom: 15px;
+            margin-bottom: 20px;
+            letter-spacing: -0.01em;
         }
 
         .mission-card h2 {
             color: var(--maroon);
         }
+        body.dark-mode .mission-card h2 {
+            color: #ff6b6b;
+        }
 
         .vision-card h2 {
             color: var(--midnight);
         }
-
-        .mission-card h2::after, .vision-card h2::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 60px;
-            height: 3px;
-        }
-
-        .mission-card h2::after {
-            background: var(--maroon);
-        }
-
-        .vision-card h2::after {
-            background: var(--midnight);
+        body.dark-mode .vision-card h2 {
+            color: var(--light-blue);
         }
 
         .mv-content {
-            font-size: 1rem;
-            line-height: 1.8;
-            color: var(--gray-600);
+            font-size: 1.05rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+            flex-grow: 1;
         }
 
         .mv-list {
@@ -413,8 +219,7 @@ require_once __DIR__ . '/config/database.php';
         }
 
         .mv-list li {
-            padding: 10px 0;
-            padding-left: 35px;
+            padding: 10px 0 10px 32px;
             position: relative;
             font-size: 1rem;
         }
@@ -423,67 +228,98 @@ require_once __DIR__ . '/config/database.php';
             content: "✓";
             position: absolute;
             left: 0;
+            top: 50%;
+            transform: translateY(-50%);
             color: var(--maroon);
             font-weight: bold;
             font-size: 1.2rem;
+            background: rgba(127, 3, 3, 0.1);
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
         }
 
-        /* History Section */
+        body.dark-mode .mv-list li:before {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.15);
+        }
+
+        /* ========== History Section ========== */
         .history-section {
-            padding: 80px 0;
-            background: var(--alabaster);
+            padding: 90px 0;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .history-content {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             text-align: center;
         }
 
         .history-icon {
-            font-size: 4rem;
+            font-size: 3.5rem;
             color: var(--maroon);
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            display: inline-flex;
+            width: 80px;
+            height: 80px;
+            align-items: center;
+            justify-content: center;
+            background: rgba(127, 3, 3, 0.08);
+            border-radius: 50%;
+        }
+
+        body.dark-mode .history-icon {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.08);
         }
 
         .history-content h2 {
-            color: var(--midnight);
-            font-size: 2rem;
-            font-weight: 800;
-            margin-bottom: 20px;
+            color: var(--text-primary);
+            font-size: 2.2rem;
+            font-weight: 850;
+            margin-bottom: 25px;
+            letter-spacing: -0.02em;
         }
 
         .history-text {
-            color: var(--gray-600);
+            color: var(--text-secondary);
             line-height: 1.8;
-            font-size: 1rem;
+            font-size: 1.1rem;
+            text-align: justify;
         }
 
         .history-text p {
             margin-bottom: 20px;
         }
 
-        /* Organizational Chart Section */
+        /* ========== Organizational Chart Section ========== */
         .org-chart-section {
-            padding: 80px 0;
-            background: var(--gray-50);
+            padding: 90px 0;
+            background: var(--bg-primary);
         }
 
         .section-header {
             text-align: center;
-            margin-bottom: 50px;
+            margin-bottom: 60px;
         }
 
         .section-header h2 {
-            color: var(--midnight);
-            font-size: 2.2rem;
-            font-weight: 800;
-            margin-bottom: 15px;
+            color: var(--text-primary);
+            font-size: 2.4rem;
+            font-weight: 850;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
         }
 
         .section-header p {
-            color: var(--gray-600);
-            font-size: 1rem;
+            color: var(--text-muted);
+            font-size: 1.1rem;
         }
 
         .org-container {
@@ -497,268 +333,180 @@ require_once __DIR__ . '/config/database.php';
         }
 
         .head-card {
-            background: linear-gradient(135deg, var(--midnight) 0%, #1a6a78 100%);
+            background: linear-gradient(135deg, var(--midnight) 0%, #155d6a 100%);
             color: white;
-            padding: 35px;
+            padding: 40px 30px;
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-lg);
             display: inline-block;
-            min-width: 350px;
+            min-width: 380px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .head-card:hover {
+            transform: scale(1.03);
         }
 
         .head-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
+            font-size: 2.8rem;
+            margin-bottom: 16px;
+            color: var(--tan);
         }
 
         .head-name {
-            font-size: 1.5rem;
+            font-size: 1.55rem;
             font-weight: 800;
             margin-bottom: 8px;
+            letter-spacing: -0.01em;
         }
 
         .head-position {
-            font-size: 1rem;
+            font-size: 1.05rem;
             opacity: 0.9;
+            font-weight: 500;
         }
 
         .org-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 28px;
             margin-top: 40px;
         }
 
         .org-card {
-            background: var white;
+            background: var(--bg-card);
             border-radius: var(--radius-element);
-            padding: 30px 25px;
+            padding: 30px 20px;
             text-align: center;
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-color);
             box-shadow: var(--shadow-sm);
         }
 
         .org-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-6px);
             box-shadow: var(--shadow-md);
-            border-color: var(--light-blue);
+            border-color: var(--maroon);
         }
 
         .org-avatar {
-            width: 80px;
-            height: 80px;
-            background: var(--midnight);
+            width: 70px;
+            height: 70px;
+            background: rgba(12, 51, 102, 0.08);
+            color: var(--midnight);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 15px;
-            color: white;
-            font-size: 2rem;
+            margin: 0 auto 16px;
+            font-size: 1.8rem;
+        }
+
+        body.dark-mode .org-avatar {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--light-blue);
         }
 
         .org-name {
-            font-size: 1.1rem;
+            font-size: 1.15rem;
             font-weight: 700;
-            color: var(--midnight);
-            margin-bottom: 5px;
+            color: var(--text-primary);
+            margin-bottom: 6px;
         }
 
         .org-position {
             color: var(--maroon);
-            font-size: 0.85rem;
+            font-size: 0.88rem;
             font-weight: 600;
-            margin-bottom: 10px;
         }
 
-        /* Values Section */
+        body.dark-mode .org-position {
+            color: #ff6b6b;
+        }
+
+        /* ========== Core Values Section ========== */
         .values-section {
-            padding: 80px 0;
-            background: var(--alabaster);
+            padding: 90px 0;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
         }
 
         .values-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
             gap: 30px;
             margin-top: 50px;
         }
 
         .value-card {
-            background: var(--gray-50);
-            padding: 35px 25px;
+            background: var(--bg-primary);
+            padding: 40px 25px;
             border-radius: var(--radius-element);
             text-align: center;
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-color);
         }
 
         .value-card:hover {
             transform: translateY(-8px);
             box-shadow: var(--shadow-md);
-            border-color: var(--light-blue);
+            border-color: var(--maroon);
         }
 
         .value-icon {
-            width: 70px;
-            height: 70px;
+            width: 75px;
+            height: 75px;
             background: var(--maroon);
             color: white;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.8rem;
-            margin: 0 auto 20px;
+            font-size: 2rem;
+            margin: 0 auto 24px;
+            box-shadow: 0 6px 15px rgba(127, 3, 3, 0.15);
+        }
+
+        body.dark-mode .value-icon {
+            background: #ff6b6b;
+            color: #0D1117;
+            box-shadow: 0 6px 15px rgba(255, 107, 107, 0.15);
         }
 
         .value-card h3 {
-            color: var(--midnight);
-            margin-bottom: 15px;
-            font-size: 1.2rem;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            font-size: 1.3rem;
             font-weight: 700;
         }
 
         .value-card p {
-            color: var(--gray-600);
+            color: var(--text-secondary);
             line-height: 1.6;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
 
-        /* Footer */
-        .footer {
-            background: var(--midnight);
-            color: white;
-            padding: 60px 0 20px;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1.5fr;
-            gap: 40px;
-            margin-bottom: 40px;
-        }
-
-        .footer-section h3,
-        .footer-section h4 {
-            margin-bottom: 20px;
-            font-weight: 700;
-        }
-
-        .footer-section h3 {
-            color: var(--tan);
-            font-size: 1.2rem;
-        }
-
-        .footer-section h4 {
-            color: var(--light-blue);
-            font-size: 1rem;
-        }
-
-        .footer-section p {
-            color: rgba(255,255,255,0.7);
-            margin-bottom: 15px;
-            font-size: 0.85rem;
-        }
-
-        .footer-section ul {
-            list-style: none;
-        }
-
-        .footer-section ul li {
-            margin-bottom: 10px;
-        }
-
-        .footer-section a {
-            color: rgba(255,255,255,0.6);
-            text-decoration: none;
-            transition: color 0.3s;
-            font-size: 0.85rem;
-        }
-
-        .footer-section a:hover {
-            color: var(--tan);
-        }
-
-        .contact-number, .email {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255,255,255,0.7);
-            font-size: 0.85rem;
-        }
-
-        .footer-bottom {
-            text-align: center;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.5);
-            font-size: 0.75rem;
-        }
-
+        /* ========== Responsive Styles ========== */
         @media (max-width: 968px) {
-            .about-hero h1 { font-size: 2rem; }
-            .about-hero { padding: 120px 0 60px; }
             .mv-container { grid-template-columns: 1fr; gap: 30px; }
-            .nav-links {
-                display: none;
-                width: 100%;
-                flex-direction: column;
-                padding: 20px 0;
-                gap: 15px;
-            }
-            .nav-links.active { display: flex; }
-            .hamburger { display: block; }
+            .org-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
         }
 
         @media (max-width: 768px) {
-            .navbar { padding: 0.8rem 1.5rem; }
-            .navbar.scrolled { padding: 0.6rem 1.5rem; }
             .head-card { min-width: auto; width: 100%; }
-            .footer-grid { grid-template-columns: 1fr; gap: 30px; }
             .values-grid { grid-template-columns: 1fr; }
+            .about-hero { padding: 70px 0; }
         }
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar" id="navbar">
-        <div class="logo-area">
-            <div class="logo-circle">
-                <img src="images/logo.png" alt="One Palayan-Kalinga Hub Logo" onerror="this.src='https://placehold.co/32x32?text=PKH'">
-            </div>
-            <div class="logo-text">
-                <h2>ONE PALAYAN-KALINGA HUB</h2>
-                <span>CSWDO Palayan City</span>
-            </div>
-        </div>
-            
-        <div class="nav-links" id="navLinks">
-            <a href="index.php">Home</a>
-            <a href="services.php">Services</a>
-            <a href="about.php" class="active">About</a>
-            <a href="contact.php">Contact</a>
-            
-            <?php if(isLoggedIn()): ?>
-                <div class="user-menu">
-                    <a href="dashboard.php" class="profile-icon">
-                        <i class="fas fa-user-circle"></i>
-                        <span><?php echo htmlspecialchars($_SESSION['full_name']); ?></span>
-                    </a>
-                    
-                </div>
-            <?php else: ?>
-                <a href="login.php" class="login-btn">Login</a>
-                <a href="register.php" class="register-btn">Register</a>
-            <?php endif; ?>
-        </div>
-        <button class="hamburger" id="hamburger">
-            <span></span>
-            <span></span>
-            <span></span>
-        </button>
-    </nav>
+
+    <!-- Global Navigation -->
+    <?php include 'includes/navbar.php'; ?>
+
+    <!-- Header Spacer for Sticky Navbar -->
+    <div class="header-spacer"></div>
 
     <!-- Hero Section -->
     <section class="about-hero">
@@ -776,7 +524,7 @@ require_once __DIR__ . '/config/database.php';
                     <div class="mv-icon"><i class="fas fa-bullseye"></i></div>
                     <h2>MISSION</h2>
                     <div class="mv-content">
-                        <p>Care, Protect, Rehabilitate, Develop and Integrate into the mainstream the vulnerable and socially dysfunctional sectors of society</p>
+                        <p>Care, Protect, Rehabilitate, Develop and Integrate into the mainstream the vulnerable and socially dysfunctional sectors of society.</p>
                     </div>
                 </div>
 
@@ -803,7 +551,7 @@ require_once __DIR__ . '/config/database.php';
                 <h2>Our History</h2>
                 <div class="history-text">
                     <p>The City Social Welfare and Development Office (CSWDO) of Palayan City has been at the forefront of social services, dedicated to improving the quality of life for every resident. Through the years, we have evolved to meet the changing needs of our community, always with the goal of empowering individuals, families, and communities.</p>
-                    <p>Today, we continue this legacy through the One Palayan-Kalinga Hub, a digital transformation initiative that brings our services closer to the people we serve.</p>
+                    <p>Today, we continue this legacy through the One Palayan-Kalinga Hub, a digital transformation initiative that brings our services closer to the people we serve, streamlining processes, appointment scheduling, and relief support.</p>
                 </div>
             </div>
         </div>
@@ -828,22 +576,22 @@ require_once __DIR__ . '/config/database.php';
 
                 <div class="org-grid">
                     <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user"></i></div>
+                        <div class="org-avatar"><i class="fas fa-user-shield"></i></div>
                         <div class="org-name">JOCELYN M. AGULTO, RSW</div>
                         <div class="org-position">City Social Welfare Officer IV</div>
                     </div>
                     <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user"></i></div>
+                        <div class="org-avatar"><i class="fas fa-user-shield"></i></div>
                         <div class="org-name">MA. VICTORIA A. VENTURA, RSW</div>
                         <div class="org-position">Social Welfare Officer III</div>
                     </div>
                     <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user"></i></div>
+                        <div class="org-avatar"><i class="fas fa-user-cog"></i></div>
                         <div class="org-name">JONALYN C. CONCEPCION</div>
                         <div class="org-position">Administrative Officer V</div>
                     </div>
                     <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user"></i></div>
+                        <div class="org-avatar"><i class="fas fa-tasks"></i></div>
                         <div class="org-name">JOHN DEXTER A. VILLAMIN</div>
                         <div class="org-position">Project Development Officer II</div>
                     </div>
@@ -884,68 +632,8 @@ require_once __DIR__ . '/config/database.php';
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-section">
-                    <h3>ONE PALAYAN-KALINGA HUB</h3>
-                    <p>CSWDO Palayan City — Integrated Social Services Platform</p>
-                    <div>
-                        <h4>SERVICES</h4>
-                        <ul>
-                            <li><a href="appointments.php">Appointment Booking</a></li>
-                            <li><a href="aics.php">AICS Application</a></li>
-                            <li><a href="housing.php">Housing Programs</a></li>
-                        </ul>
-                    </div>
-                </div>
+    <!-- Global Footer -->
+    <?php include 'includes/footer.php'; ?>
 
-                <div class="footer-section">
-                    <h4>RESOURCES</h4>
-                    <ul>
-                        <li><a href="user-guide.php">User Guide</a></li>
-                        <li><a href="faqs.php">FAQs</a></li>
-                        <li><a href="privacy-policy.php">Privacy Policy</a></li>
-                        <li><a href="terms.php">Terms of Service</a></li>
-                    </ul>
-                </div>
-
-                <div class="footer-section">
-                    <h4>CONTACT US</h4>
-                    <p>City Social Welfare and Development Office<br>
-                    Palayan City, Nueva Ecija, Philippines</p>
-                    <p class="contact-number"><i class="fas fa-phone"></i> +63 (44) 123 4567</p>
-                    <p class="email"><i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</p>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 One Palayan-Kalinga Hub. All rights reserved. | A project of CSWDO Palayan City</p>
-            </div>
-        </div>
-    </footer>
-
-    <script>
-        // Navbar scroll effect
-        window.addEventListener('scroll', function() {
-            const navbar = document.getElementById('navbar');
-            if (window.scrollY > 50) {
-                navbar.classList.add('scrolled');
-            } else {
-                navbar.classList.remove('scrolled');
-            }
-        });
-
-        // Mobile menu toggle
-        const hamburger = document.getElementById('hamburger');
-        const navLinks = document.getElementById('navLinks');
-
-        if (hamburger) {
-            hamburger.addEventListener('click', () => {
-                hamburger.classList.toggle('active');
-                navLinks.classList.toggle('active');
-            });
-        }
-    </script>
 </body>
 </html>

@@ -17,6 +17,7 @@ $success = '';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    csrf_verify();
     $service_id = sanitize($_POST['service_id']);
     $appointment_date = sanitize($_POST['appointment_date']);
     $appointment_time = sanitize($_POST['appointment_time']);
@@ -117,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             <div class="booking-form">
                 <form method="POST" action="" id="bookingForm">
+                    <?php echo csrf_field(); ?>
                     <div class="form-group">
                         <label for="service_id">Select Service *</label>
                         <select id="service_id" name="service_id" required>

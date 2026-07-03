@@ -1,6 +1,7 @@
 <?php
 // Fix the path to config - go up one level to root, then into config folder
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/Mailer.php';
 
 if (!isStaff()) {
     // Fix redirect path - go to staff-login.php in root
@@ -31,22 +32,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
     $update_stmt->bindParam(':id', $appointment_id);
     
     if ($update_stmt->execute()) {
-        // Get user_id for notification
-        $user_query = "SELECT user_id FROM appointments WHERE appointment_id = :id";
+        // Get full appointment + user details for email and notification
+        $user_query = "SELECT a.*, s.service_name, u.user_id, u.email, u.first_name, u.last_name
+                       FROM appointments a
+                       JOIN services s ON a.service_id = s.service_id
+                       JOIN users u ON a.user_id = u.user_id
+                       WHERE a.appointment_id = :id";
         $user_stmt = $db->prepare($user_query);
         $user_stmt->bindParam(':id', $appointment_id);
         $user_stmt->execute();
-        $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
-        
-        // Create notification
-        $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
-                        VALUES (:user_id, 'Appointment Updated', 
-                        'Your appointment status has been updated to: " . $new_status . "', 'appointment')";
-        $notif_stmt = $db->prepare($notif_query);
-        $notif_stmt->bindParam(':user_id', $user['user_id']);
-        $notif_stmt->execute();
-        
-        $success = "Appointment status updated successfully!";
+        $appt_details = $user_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($appt_details) {
+            // Create in-app notification
+            $notif_msg = "Your appointment for {$appt_details['service_name']} has been updated to: " . ucfirst($new_status);
+            $notif_query = "INSERT INTO notifications (user_id, title, message, type)
+                            VALUES (:user_id, 'Appointment Status Updated', :msg, 'appointment')";
+            $notif_stmt = $db->prepare($notif_query);
+            $notif_stmt->bindParam(':user_id', $appt_details['user_id']);
+            $notif_stmt->bindParam(':msg', $notif_msg);
+            $notif_stmt->execute();
+
+            // Send email notification
+            try {
+                $mailer = new Mailer();
+                $user_name = $appt_details['first_name'] . ' ' . $appt_details['last_name'];
+                $email_result = $mailer->sendAppointmentStatusUpdate(
+                    $appt_details['email'],
+                    $user_name,
+                    $appt_details,
+                    $new_status,
+                    $notes
+                );
+                $email_status = $email_result['success']
+                    ? 'Email notification sent.'
+                    : 'Email failed: ' . $email_result['message'];
+                if (!$email_result['success']) error_log($email_status);
+            } catch (Exception $e) {
+                error_log('Appointment email error: ' . $e->getMessage());
+            }
+        }
+
+        $success = 'Appointment status updated successfully! ' . ($email_status ?? '');
     }
 }
 
