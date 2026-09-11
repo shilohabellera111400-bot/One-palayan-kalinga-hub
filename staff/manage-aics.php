@@ -43,6 +43,11 @@ if (!$has_aics_access) {
 
 // Get filter parameters
 $status_filter = isset($_GET['status']) ? sanitize($_GET['status']) : 'all';
+$type_filter = isset($_GET['type']) ? sanitize($_GET['type']) : 'all';
+$start_date = isset($_GET['start_date']) ? sanitize($_GET['start_date']) : '';
+$end_date = isset($_GET['end_date']) ? sanitize($_GET['end_date']) : '';
+$min_amount = isset($_GET['min_amount']) && $_GET['min_amount'] !== '' ? floatval($_GET['min_amount']) : '';
+$max_amount = isset($_GET['max_amount']) && $_GET['max_amount'] !== '' ? floatval($_GET['max_amount']) : '';
 $search = isset($_GET['search']) ? sanitize($_GET['search']) : '';
 
 // Pagination settings
@@ -66,14 +71,84 @@ if ($status_filter != 'all') {
     $params[':status'] = $status_filter;
 }
 
+if ($type_filter != 'all') {
+    $where[] = "a.request_type = :type";
+    $params[':type'] = $type_filter;
+}
+
+if (!empty($start_date)) {
+    $where[] = "a.submission_date >= :start_date";
+    $params[':start_date'] = $start_date . ' 00:00:00';
+}
+
+if (!empty($end_date)) {
+    $where[] = "a.submission_date <= :end_date";
+    $params[':end_date'] = $end_date . ' 23:59:59';
+}
+
+if ($min_amount !== '') {
+    $where[] = "a.amount_requested >= :min_amount";
+    $params[':min_amount'] = $min_amount;
+}
+
+if ($max_amount !== '') {
+    $where[] = "a.amount_requested <= :max_amount";
+    $params[':max_amount'] = $max_amount;
+}
+
 if (!empty($search)) {
-    $where[] = "(u.first_name LIKE :search OR u.last_name LIKE :search OR a.purpose LIKE :search)";
+    $where[] = "(u.first_name LIKE :search OR u.last_name LIKE :search OR a.purpose LIKE :search OR a.aics_id = :search_id)";
     $params[':search'] = "%$search%";
+    
+    // Attempt to extract numeric ID in case they search 'AICS-000012'
+    $clean_search = preg_replace('/[^0-9]/', '', $search);
+    $search_id = !empty($clean_search) ? intval($clean_search) : 0;
+    $params[':search_id'] = $search_id;
 }
 
 if (!empty($where)) {
     $base_query .= " WHERE " . implode(" AND ", $where);
     $count_query .= " WHERE " . implode(" AND ", $where);
+}
+
+// CSV Export Hook
+if (isset($_GET['export']) && $_GET['export'] == 'csv') {
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    
+    $export_query = $base_query . " ORDER BY a.submission_date DESC";
+    $export_stmt = $db->prepare($export_query);
+    foreach ($params as $key => $value) {
+        $export_stmt->bindValue($key, $value);
+    }
+    $export_stmt->execute();
+    
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=aics_requests_report_' . date('Ymd_His') . '.csv');
+    
+    $output = fopen('php://output', 'w');
+    fputs($output, "\xEF\xBB\xBF"); // UTF-8 BOM
+    
+    fputcsv($output, ['AICS ID', 'Applicant Name', 'Email', 'Contact Number', 'Type of Assistance', 'Amount Requested', 'Amount Approved', 'Status', 'Date Submitted', 'Purpose']);
+    
+    while ($row = $export_stmt->fetch(PDO::FETCH_ASSOC)) {
+        fputcsv($output, [
+            'AICS-' . str_pad($row['aics_id'], 6, '0', STR_PAD_LEFT),
+            $row['first_name'] . ' ' . $row['last_name'],
+            $row['email'],
+            $row['contact_number'],
+            ucfirst(str_replace('_', ' ', $row['request_type'])),
+            $row['amount_requested'],
+            $row['amount_approved'],
+            ucfirst($row['status']),
+            $row['submission_date'],
+            $row['purpose']
+        ]);
+    }
+    
+    fclose($output);
+    exit();
 }
 
 // Get total count for pagination
@@ -102,12 +177,21 @@ $all_stats_query = "SELECT
     SUM(CASE WHEN status = 'reviewing' THEN 1 ELSE 0 END) as reviewing,
     SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
     SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-    SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released
+    SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released,
+    SUM(amount_approved) as total_approved,
+    SUM(CASE WHEN request_type = 'medical' THEN 1 ELSE 0 END) as type_medical,
+    SUM(CASE WHEN request_type = 'funeral' THEN 1 ELSE 0 END) as type_funeral,
+    SUM(CASE WHEN request_type = 'educational' THEN 1 ELSE 0 END) as type_educational,
+    SUM(CASE WHEN request_type = 'cash_relief' THEN 1 ELSE 0 END) as type_cash_relief,
+    SUM(CASE WHEN request_type = 'food' THEN 1 ELSE 0 END) as type_food,
+    SUM(CASE WHEN request_type = 'transportation' THEN 1 ELSE 0 END) as type_transportation,
+    SUM(CASE WHEN request_type = 'material' THEN 1 ELSE 0 END) as type_material
     FROM aics_requests";
 $stats = $db->query($all_stats_query)->fetch(PDO::FETCH_ASSOC);
 
 // Handle status update
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
+    csrf_verify();
     $aics_id = sanitize($_POST['aics_id']);
     $new_status = sanitize($_POST['new_status']);
     $amount_approved = sanitize($_POST['amount_approved'] ?? 0);
@@ -135,7 +219,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
         $update_stmt = $db->prepare($update_query);
         $update_stmt->bindParam(':status', $new_status);
         $update_stmt->bindParam(':amount', $amount_approved);
-        $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        
+        if ($new_status == 'reviewing' || $new_status == 'approved') {
+            $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        }
         
         if ($new_status == 'rejected') {
             $update_stmt->bindParam(':remarks', $remarks);
@@ -154,13 +241,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
         $user_stmt->execute();
         $aics_details = $user_stmt->fetch(PDO::FETCH_ASSOC);
         
+        $type_label = strtoupper(str_replace('_', ' ', $aics_details['request_type']));
+        $notif_msg = "Your AICS $type_label request status has been updated to: " . strtoupper($new_status);
+        if ($new_status === 'reviewing') {
+            $notif_msg = "Your AICS $type_label application is now UNDER REVIEW. Please visit the CSWDO Office at Window 1, 2, or 3 for your interview and assessment. Make sure to bring your original supporting documents.";
+        } elseif ($new_status === 'approved') {
+            $notif_msg = "Your AICS $type_label application has been APPROVED and forwarded to the City Budget Office for voucher processing. Please wait for a text or call notification.";
+        }
+
         // Create notification
         $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
-                        VALUES (:user_id, 'AICS Status Updated', 
-                        CONCAT('Your AICS request status has been updated to: ', :status), 'aics')";
+                        VALUES (:user_id, 'AICS Status Updated', :msg, 'aics')";
         $notif_stmt = $db->prepare($notif_query);
         $notif_stmt->bindParam(':user_id', $aics_details['user_id']);
-        $notif_stmt->bindParam(':status', $new_status);
+        $notif_stmt->bindParam(':msg', $notif_msg);
         $notif_stmt->execute();
         
         // Send email
@@ -247,7 +341,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --midnight: #0F414A;
             --white: #FFFFFF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -258,11 +352,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --text-muted: #6B7A8A;
             --text-sidebar: rgba(255,255,255,0.7);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
+            --border-color: #C8D0DC;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
+            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
+            --shadow-md: 0 6px 24px rgba(15,65,74,0.12), 0 2px 8px rgba(0,0,0,0.07);
+            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
             
             --stat-bg: #FFFFFF;
@@ -573,7 +667,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         /* ========== STATS GRID ========== */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 14px;
             margin-bottom: 24px;
         }
@@ -629,6 +723,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .stat-icon.reviewing { background: rgba(33, 150, 243, 0.12); color: #2196F3; }
         .stat-icon.approved { background: rgba(76, 175, 80, 0.12); color: #4CAF50; }
         .stat-icon.rejected { background: rgba(244, 67, 54, 0.12); color: #EF5350; }
+        .stat-icon.disbursed { background: rgba(156, 39, 176, 0.12); color: #9C27B0; }
         .stat-info {
             position: relative;
             z-index: 1;
@@ -1150,6 +1245,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <p>Review and manage Assistance to Individuals in Crisis Situation requests</p>
             </div>
             <div class="top-bar-actions">
+                <a href="kanban-aics.php" class="btn btn-primary" style="margin-right: 15px; font-weight: 700; background: var(--maroon); color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-columns"></i> Kanban View
+                </a>
                 <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
                     <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
                 </button>
@@ -1175,7 +1273,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <div class="stat-icon total"><i class="fas fa-file-alt"></i></div>
                 <div class="stat-info">
                     <h3><?php echo $stats['total']; ?></h3>
-                    <p>Total</p>
+                    <p>Total Requests</p>
                 </div>
             </div>
             <div class="stat-card" onclick="window.location.href='manage-aics.php?status=submitted'">
@@ -1199,13 +1297,47 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <p>Approved</p>
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-aics.php?status=rejected'">
-                <div class="stat-icon rejected"><i class="fas fa-times-circle"></i></div>
+            <div class="stat-card" onclick="window.location.href='manage-aics.php?status=released'">
+                <div class="stat-icon approved" style="background: rgba(76,175,80,0.15); color: #2E7D32;"><i class="fas fa-hand-holding-usd"></i></div>
                 <div class="stat-info">
-                    <h3><?php echo $stats['rejected']; ?></h3>
-                    <p>Rejected</p>
+                    <h3><?php echo $stats['released']; ?></h3>
+                    <p>Released</p>
                 </div>
             </div>
+            <div class="stat-card" style="cursor: default;">
+                <div class="stat-icon disbursed"><i class="fas fa-wallet"></i></div>
+                <div class="stat-info">
+                    <h3>₱<?php echo number_format($stats['total_approved'] ?? 0, 2); ?></h3>
+                    <p>Total Disbursed</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Category Breakdown -->
+        <div class="category-breakdown" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; background: var(--bg-card); padding: 15px; border-radius: var(--radius-card); box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);">
+            <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); width: 100%; margin-bottom: 5px;"><i class="fas fa-chart-pie"></i> Assistance Type Summary</div>
+            <div class="type-pill" onclick="window.location.href='manage-aics.php?type=all'" style="cursor: pointer; display: flex; align-items: center; gap: 8px; background: var(--badge-bg); padding: 6px 14px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--border-color); transition: all 0.25s; <?php echo $type_filter == 'all' ? 'border-color: var(--maroon-light); background: rgba(127,3,3,0.05);' : ''; ?>">
+                <i class="fas fa-list-ul" style="color: var(--maroon-light);"></i>
+                <span style="color: var(--text-primary);">All Categories</span>
+                <span style="background: var(--maroon-light); color: white; padding: 1px 7px; border-radius: 50px; font-size: 0.65rem; font-weight: 700;"><?php echo $stats['total']; ?></span>
+            </div>
+            <?php 
+            $types_meta = [
+                'medical'        => ['label' => 'Medical', 'icon' => 'fa-file-medical', 'color' => '#2196F3'],
+                'funeral'        => ['label' => 'Burial/Funeral', 'icon' => 'fa-cross', 'color' => '#7F0303'],
+                'food'           => ['label' => 'Food', 'icon' => 'fa-utensils', 'color' => '#4CAF50'],
+                'transportation' => ['label' => 'Transportation', 'icon' => 'fa-bus', 'color' => '#00BCD4'],
+                'cash_relief'    => ['label' => 'Cash Relief', 'icon' => 'fa-hand-holding-usd', 'color' => '#9C27B0']
+            ];
+            foreach ($types_meta as $key => $meta):
+                $count_val = $stats['type_' . $key] ?? 0;
+            ?>
+            <div class="type-pill" onclick="window.location.href='manage-aics.php?type=<?php echo $key; ?>'" style="cursor: pointer; display: flex; align-items: center; gap: 8px; background: var(--badge-bg); padding: 6px 14px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--border-color); transition: all 0.25s; <?php echo $type_filter == $key ? 'border-color: ' . $meta['color'] . '; background: ' . $meta['color'] . '10;' : ''; ?>">
+                <i class="fas <?php echo $meta['icon']; ?>" style="color: <?php echo $meta['color']; ?>;"></i>
+                <span style="color: var(--text-primary);"><?php echo $meta['label']; ?></span>
+                <span style="background: <?php echo $meta['color']; ?>; color: white; padding: 1px 7px; border-radius: 50px; font-size: 0.65rem; font-weight: 700;"><?php echo $count_val; ?></span>
+            </div>
+            <?php endforeach; ?>
         </div>
         
         <!-- Filter -->
@@ -1218,17 +1350,45 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <option value="submitted" <?php echo $status_filter == 'submitted' ? 'selected' : ''; ?>>Submitted</option>
                         <option value="reviewing" <?php echo $status_filter == 'reviewing' ? 'selected' : ''; ?>>Reviewing</option>
                         <option value="approved" <?php echo $status_filter == 'approved' ? 'selected' : ''; ?>>Approved</option>
-                        <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
+                        <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Did Not Qualify</option>
                         <option value="released" <?php echo $status_filter == 'released' ? 'selected' : ''; ?>>Released</option>
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label><i class="fas fa-search"></i> Search</label>
-                    <input type="text" name="search" placeholder="Name or purpose..." value="<?php echo htmlspecialchars($search); ?>">
+                    <label><i class="fas fa-tag"></i> Type</label>
+                    <select name="type">
+                        <option value="all" <?php echo $type_filter == 'all' ? 'selected' : ''; ?>>All Types</option>
+                        <option value="medical" <?php echo $type_filter == 'medical' ? 'selected' : ''; ?>>Medical</option>
+                        <option value="funeral" <?php echo $type_filter == 'funeral' ? 'selected' : ''; ?>>Funeral</option>
+                        <option value="food" <?php echo $type_filter == 'food' ? 'selected' : ''; ?>>Food</option>
+                        <option value="transportation" <?php echo $type_filter == 'transportation' ? 'selected' : ''; ?>>Transportation</option>
+                        <option value="cash_relief" <?php echo $type_filter == 'cash_relief' ? 'selected' : ''; ?>>Cash Relief</option>
+                    </select>
                 </div>
-                <div class="filter-actions">
-                    <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Apply</button>
-                    <?php if($status_filter != 'all' || !empty($search)): ?>
+                <div class="filter-group">
+                    <label><i class="fas fa-calendar-alt"></i> Start Date</label>
+                    <input type="date" name="start_date" style="padding: 8px 12px; border-radius: var(--radius-element); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);" value="<?php echo htmlspecialchars($start_date); ?>">
+                </div>
+                <div class="filter-group">
+                    <label><i class="fas fa-calendar-alt"></i> End Date</label>
+                    <input type="date" name="end_date" style="padding: 8px 12px; border-radius: var(--radius-element); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);" value="<?php echo htmlspecialchars($end_date); ?>">
+                </div>
+                <div class="filter-group">
+                    <label><i class="fas fa-dollar-sign"></i> Min (₱)</label>
+                    <input type="number" name="min_amount" placeholder="Min" style="width: 100px; padding: 8px 12px; border-radius: var(--radius-element); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);" value="<?php echo htmlspecialchars($min_amount); ?>">
+                </div>
+                <div class="filter-group">
+                    <label><i class="fas fa-dollar-sign"></i> Max (₱)</label>
+                    <input type="number" name="max_amount" placeholder="Max" style="width: 100px; padding: 8px 12px; border-radius: var(--radius-element); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);" value="<?php echo htmlspecialchars($max_amount); ?>">
+                </div>
+                <div class="filter-group">
+                    <label><i class="fas fa-search"></i> Search</label>
+                    <input type="text" name="search" placeholder="Name, ID or purpose..." value="<?php echo htmlspecialchars($search); ?>">
+                </div>
+                <div class="filter-actions" style="margin-top: 15px; width: 100%; display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Apply Filters</button>
+                    <button type="submit" name="export" value="csv" class="btn-primary" style="background-color: #2e7d32; border-color: #1b5e20;"><i class="fas fa-file-csv"></i> Export CSV</button>
+                    <?php if($status_filter != 'all' || $type_filter != 'all' || !empty($search) || !empty($start_date) || !empty($end_date) || $min_amount !== '' || $max_amount !== ''): ?>
                     <a href="manage-aics.php" class="btn-secondary"><i class="fas fa-times"></i> Clear</a>
                     <?php endif; ?>
                 </div>
@@ -1314,12 +1474,16 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </table>
             
             <!-- Pagination -->
-            <?php if($total_pages > 1): ?>
+            <?php if($total_pages > 1): 
+                $page_params = $_GET;
+            ?>
             <div class="pagination">
                 <span class="page-info">Showing <?php echo $offset + 1; ?> - <?php echo min($offset + $per_page, $total_records); ?> of <?php echo $total_records; ?></span>
                 
-                <?php if($page > 1): ?>
-                    <a href="?page=<?php echo $page - 1; ?><?php echo $status_filter != 'all' ? '&status=' . $status_filter : ''; ?><?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?>">
+                <?php if($page > 1): 
+                    $page_params['page'] = $page - 1;
+                ?>
+                    <a href="?<?php echo http_build_query($page_params); ?>">
                         <i class="fas fa-chevron-left"></i>
                     </a>
                 <?php else: ?>
@@ -1331,7 +1495,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 $end_page = min($total_pages, $page + 2);
                 
                 if ($start_page > 1) {
-                    echo '<a href="?page=1' . ($status_filter != 'all' ? '&status=' . $status_filter : '') . (!empty($search) ? '&search=' . urlencode($search) : '') . '">1</a>';
+                    $page_params['page'] = 1;
+                    echo '<a href="?' . http_build_query($page_params) . '">1</a>';
                     if ($start_page > 2) {
                         echo '<span class="ellipsis">...</span>';
                     }
@@ -1339,19 +1504,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 
                 for ($i = $start_page; $i <= $end_page; $i++) {
                     $active = $i == $page ? 'active' : '';
-                    echo '<a href="?page=' . $i . ($status_filter != 'all' ? '&status=' . $status_filter : '') . (!empty($search) ? '&search=' . urlencode($search) : '') . '" class="' . $active . '">' . $i . '</a>';
+                    $page_params['page'] = $i;
+                    echo '<a href="?' . http_build_query($page_params) . '" class="' . $active . '">' . $i . '</a>';
                 }
                 
                 if ($end_page < $total_pages) {
                     if ($end_page < $total_pages - 1) {
                         echo '<span class="ellipsis">...</span>';
                     }
-                    echo '<a href="?page=' . $total_pages . ($status_filter != 'all' ? '&status=' . $status_filter : '') . (!empty($search) ? '&search=' . urlencode($search) : '') . '">' . $total_pages . '</a>';
+                    $page_params['page'] = $total_pages;
+                    echo '<a href="?' . http_build_query($page_params) . '">' . $total_pages . '</a>';
                 }
                 ?>
                 
-                <?php if($page < $total_pages): ?>
-                    <a href="?page=<?php echo $page + 1; ?><?php echo $status_filter != 'all' ? '&status=' . $status_filter : ''; ?><?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?>">
+                <?php if($page < $total_pages): 
+                    $page_params['page'] = $page + 1;
+                ?>
+                    <a href="?<?php echo http_build_query($page_params); ?>">
                         <i class="fas fa-chevron-right"></i>
                     </a>
                 <?php else: ?>
@@ -1371,6 +1540,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             <button class="close-btn" onclick="closeModal()">&times;</button>
         </div>
         <form method="POST">
+            <?php echo csrf_field(); ?>
             <div class="modal-body">
                 <input type="hidden" name="aics_id" id="modal_aics_id">
                 <div class="applicant-info">

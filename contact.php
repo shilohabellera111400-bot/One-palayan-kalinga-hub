@@ -6,11 +6,12 @@ $success = '';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
+    csrf_verify();
     $name = sanitize($_POST['name']);
     $email = sanitize($_POST['email']);
     $subject = sanitize($_POST['subject']);
     $message = sanitize($_POST['message']);
-    
+
     // Validate inputs
     if (empty($name) || empty($email) || empty($subject) || empty($message)) {
         $error = "Please fill in all required fields.";
@@ -49,9 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
             </body>
             </html>
             ";
-            
-            $result = $mailer->send('cswdo@palayancity.gov.ph', "Contact Form: $subject", $body);
-            
+
+            $result = $mailer->send('monaaronmarcelo0924@gmail.com', "Contact Form: $subject", $body);
+
             if ($result['success']) {
                 $success = "Thank you for your message! We will get back to you soon.";
             } else {
@@ -65,12 +66,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contact Us - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* ========== MODERN PROFESSIONAL PALETTE & VARIABLES ========== */
@@ -83,15 +86,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
             --maroon-dark: #5a0202;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            
+
             /* Light mode default tokens */
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --text-primary: #1F2937;
             --text-secondary: #374151;
             --text-muted: #6B7A8A;
-            --border-color: #E4E7EF;
+            --border-color: #C8D0DC;
             --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
             --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.06);
             --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);
@@ -100,7 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
         }
 
         /* Dark mode overrides */
-        body.dark-mode, [data-theme="dark"] body {
+        body.dark-mode,
+        [data-theme="dark"] body {
             --bg-primary: #0D1117;
             --bg-secondary: #161B22;
             --bg-card: #161B22;
@@ -140,8 +144,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
         .header-spacer {
             height: 90px;
         }
+
         @media (max-width: 768px) {
-            .header-spacer { height: 75px; }
+            .header-spacer {
+                height: 75px;
+            }
         }
 
         /* Hero Header */
@@ -396,7 +403,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
             color: #ff6b6b;
         }
 
-        .form-group input, .form-group textarea {
+        .form-group input,
+        .form-group textarea {
             width: 100%;
             padding: 14px;
             border: 2px solid var(--border-color);
@@ -409,7 +417,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
             outline: none;
         }
 
-        .form-group input:focus, .form-group textarea:focus {
+        .form-group input:focus,
+        .form-group textarea:focus {
             border-color: var(--midnight);
             box-shadow: 0 0 0 4px rgba(15, 65, 74, 0.15);
             background: var(--bg-card);
@@ -456,8 +465,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
         }
 
         @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-12px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .alert-success {
@@ -496,11 +512,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
             .page-header {
                 padding: 60px 0;
             }
+
             .contact-info-item {
                 flex-direction: column;
                 align-items: center;
                 text-align: center;
             }
+
             .hours-list li {
                 flex-direction: column;
                 align-items: center;
@@ -509,6 +527,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
         }
     </style>
 </head>
+
 <body>
 
     <!-- Global Navigation -->
@@ -524,28 +543,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
             <p>We're here to help! Reach out to us for any questions, concerns, or support inquiries.</p>
         </div>
     </div>
-    
+
     <div class="container" style="padding-top: 40px;">
-        <?php if($success): ?>
+        <?php if ($success): ?>
             <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?php echo $success; ?></div>
         <?php endif; ?>
-        <?php if($error): ?>
+        <?php if ($error): ?>
             <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> <?php echo $error; ?></div>
         <?php endif; ?>
-        
+
         <div class="contact-layout">
             <!-- Contact Information -->
             <div class="info-section">
                 <h2><i class="fas fa-address-card"></i> Contact Info</h2>
-                
+
                 <div class="contact-info-item">
                     <div class="contact-icon"><i class="fas fa-map-marker-alt"></i></div>
                     <div class="contact-details">
                         <h3>Office Address</h3>
-                        <p>City Social Welfare and Development Office<br>Palayan City Hall, Nueva Ecija, Philippines 3132</p>
+                        <p>City Social Welfare and Development Office<br>Palayan City Hall, Nueva Ecija, Philippines
+                            3132</p>
                     </div>
                 </div>
-                
+
                 <div class="contact-info-item">
                     <div class="contact-icon"><i class="fas fa-phone-alt"></i></div>
                     <div class="contact-details">
@@ -553,7 +573,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
                         <p>📞 (044) 123-4567<br>📞 8962-2813 / 8951-7433</p>
                     </div>
                 </div>
-                
+
                 <div class="contact-info-item">
                     <div class="contact-icon"><i class="fas fa-envelope"></i></div>
                     <div class="contact-details">
@@ -561,7 +581,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
                         <p>📧 cswdo@palayancity.gov.ph<br>📧 info@palayancity.gov.ph</p>
                     </div>
                 </div>
-                
+
                 <div class="office-hours">
                     <h3><i class="fas fa-clock"></i> Office Hours</h3>
                     <ul class="hours-list">
@@ -571,53 +591,60 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
                         <li><span>Holidays:</span><span>Closed</span></li>
                     </ul>
                 </div>
-                
+
                 <div class="social-links">
                     <a href="#" class="social-link" title="Facebook"><i class="fab fa-facebook-f"></i></a>
                     <a href="#" class="social-link" title="Twitter"><i class="fab fa-twitter"></i></a>
                     <a href="#" class="social-link" title="Viber"><i class="fab fa-viber"></i></a>
                     <a href="#" class="social-link" title="Messenger"><i class="fab fa-facebook-messenger"></i></a>
                 </div>
-                
+
                 <div class="map-container">
-                    <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3838.747942698715!2d121.09641737593237!3d15.541062085065403!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x33b18f8ab6230f89%3A0xe54e60b1338dfa0c!2sPalayan%20City%20Hall!5e0!3m2!1sen!2sph!4v1700000000000!5m2!1sen!2sph" allowfullscreen="" loading="lazy"></iframe>
+                    <iframe
+                        src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3838.747942698715!2d121.09641737593237!3d15.541062085065403!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x33b18f8ab6230f89%3A0xe54e60b1338dfa0c!2sPalayan%20City%20Hall!5e0!3m2!1sen!2sph!4v1700000000000!5m2!1sen!2sph"
+                        allowfullscreen="" loading="lazy"></iframe>
                 </div>
             </div>
-            
+
             <!-- Contact Form -->
             <div class="form-section">
                 <h2><i class="fas fa-paper-plane"></i> Send a Message</h2>
-                
+
                 <form method="POST" action="">
+                    <?php echo csrf_field(); ?>
                     <div class="form-group">
                         <label><i class="fas fa-user"></i> Your Name *</label>
                         <input type="text" name="name" required placeholder="Enter your full name">
                     </div>
-                    
+
                     <div class="form-group">
                         <label><i class="fas fa-envelope"></i> Email Address *</label>
                         <input type="email" name="email" required placeholder="Enter your email address">
                     </div>
-                    
+
                     <div class="form-group">
                         <label><i class="fas fa-tag"></i> Subject *</label>
                         <input type="text" name="subject" required placeholder="What is this regarding?">
                     </div>
-                    
+
                     <div class="form-group">
                         <label><i class="fas fa-comment"></i> Message *</label>
-                        <textarea name="message" rows="6" required placeholder="Please provide details about your inquiry..."></textarea>
+                        <textarea name="message" rows="6" required
+                            placeholder="Please provide details about your inquiry..."></textarea>
                     </div>
-                    
+
                     <button type="submit" name="send_message" class="btn-submit">
                         <i class="fas fa-paper-plane"></i> Send Message
                     </button>
                 </form>
-                
-                <div style="margin-top: 24px; padding: 20px; background: var(--alabaster); border: 1px solid var(--border-color); border-radius: var(--radius-element);">
-                    <p style="font-size: 0.88rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+
+                <div
+                    style="margin-top: 24px; padding: 20px; background: var(--alabaster); border: 1px solid var(--border-color); border-radius: var(--radius-element);">
+                    <p
+                        style="font-size: 0.88rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
                         <i class="fas fa-info-circle" style="color: var(--midnight);"></i>
-                        We typically respond within 1-2 business days. For immediate assistance, please call us directly.
+                        We typically respond within 1-2 business days. For immediate assistance, please call us
+                        directly.
                     </p>
                 </div>
             </div>
@@ -629,7 +656,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
 
     <script>
         // Auto-fade alerts after 5 seconds
-        setTimeout(function() {
+        setTimeout(function () {
             document.querySelectorAll('.alert').forEach(alert => {
                 alert.style.transition = 'opacity 0.5s, transform 0.5s';
                 alert.style.opacity = '0';
@@ -639,4 +666,5 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
         }, 5000);
     </script>
 </body>
+
 </html>

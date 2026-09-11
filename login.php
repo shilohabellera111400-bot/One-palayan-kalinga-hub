@@ -863,10 +863,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <p>Please enter your details to sign in</p>
                 </div>
 
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    <div>New here? <a href="register.php">Create an account</a></div>
-                </div>
 
                 <?php if ($timeout_notice): ?>
                     <div class="alert alert-warning">
@@ -888,7 +884,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
 
                     <div class="form-group">
-                        <label><i class="fas fa-lock"></i> Password <span class="required">*</span></label>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="margin: 0;"><i class="fas fa-lock"></i> Password <span class="required">*</span></label>
+                            <a href="forgot-password.php" style="font-size: 0.8rem; color: #7F0303; text-decoration: none; font-weight: 500; transition: color 0.3s;" onmouseover="this.style.color='#9a1515'" onmouseout="this.style.color='#7F0303'">Forgot Password?</a>
+                        </div>
                         <div class="input-group">
                             <input type="password" name="password" required id="password"
                                 placeholder="Enter your password">

@@ -48,19 +48,24 @@
     --radius-xl: 32px;
     --radius-full: 9999px;
 
-    /* Light mode surface tokens */
-    --surface-bg:      #F8F9FC;
+    /* Light mode surface tokens — stronger card contrast */
+    --surface-bg:      #E8ECF2;
     --surface-card:    #FFFFFF;
     --surface-input:   #FFFFFF;
     --surface-subtle:  #F1F4F9;
-    --border-color:    #E4E7EF;
+    --border-color:    #C8D0DC;
     --text-primary:    #1F2937;
     --text-secondary:  #374151;
     --text-muted:      #717D92;
     --nav-bg:          #FFFFFF;
-    --nav-border:      #E4E7EF;
-    --nav-shadow:      0 4px 12px rgba(0,0,0,0.06);
+    --nav-border:      #C8D0DC;
+    --nav-shadow:      0 4px 16px rgba(15,65,74,0.10);
     --footer-bg:       #0F414A;
+    --shadow-xs: 0 1px 4px rgba(0,0,0,0.08);
+    --shadow-sm: 0 3px 12px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.06);
+    --shadow-md: 0 6px 24px rgba(15,65,74,0.12), 0 2px 8px rgba(0,0,0,0.07);
+    --shadow-lg: 0 12px 40px rgba(15,65,74,0.14), 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-accent: 0 8px 24px rgba(var(--accent-rgb), 0.30);
 }
 
 /* ================================================

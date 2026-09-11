@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 
 // Check for dark mode preference from cookie
@@ -27,14 +27,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --light-blue: #96C0CE;
             --alabaster: #E3E7EB;
             
-            --bg-primary: #EFF1F4;
+            --bg-primary: #E8ECF2;
             --bg-card: #FFFFFF;
             --text-primary: #263238;
             --text-secondary: #3A4A5A;
             --text-muted: #6B7A8A;
             --border-color: #D5DBE1;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
             --shadow-md: 0 10px 30px rgba(15, 65, 74, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
             --shadow-lg: 0 16px 40px rgba(15, 65, 74, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);

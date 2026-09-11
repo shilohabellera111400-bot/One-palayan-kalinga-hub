@@ -8,71 +8,138 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
-class Mailer {
+class Mailer
+{
     private $mail;
     private $db;
-    
-    public function __construct() {
+
+    public function __construct()
+    {
         $this->mail = new PHPMailer(true);
-        
+
         // Server settings
         $this->mail->isSMTP();
-        $this->mail->Host       = MAIL_HOST;
-        $this->mail->SMTPAuth   = true;
-        $this->mail->Username   = MAIL_USERNAME;
-        $this->mail->Password   = MAIL_PASSWORD;
+        $this->mail->Host = MAIL_HOST;
+        $this->mail->SMTPAuth = true;
+        $this->mail->Username = MAIL_USERNAME;
+        $this->mail->Password = MAIL_PASSWORD;
         $this->mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $this->mail->Port       = MAIL_PORT;
-        
+        $this->mail->Port = MAIL_PORT;
+
         // Default settings
         $this->mail->setFrom(MAIL_FROM, MAIL_FROM_NAME);
         $this->mail->addReplyTo(MAIL_REPLY_TO, MAIL_FROM_NAME);
         $this->mail->isHTML(true);
         $this->mail->CharSet = 'UTF-8';
-        
+
+        // Local SSL workaround for XAMPP/development environments
+        if (
+            (isset($_SERVER['HTTP_HOST']) && (strpos($_SERVER['HTTP_HOST'], 'localhost') !== false || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false)) ||
+            (PHP_SAPI === 'cli')
+        ) {
+            $this->mail->SMTPOptions = array(
+                'ssl' => array(
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                )
+            );
+        }
+
         // Database connection for logging
         $database = new Database();
         $this->db = $database->getConnection();
     }
-    
+
     /**
      * Send email and log to database
      */
-    public function send($to, $subject, $body, $user_id = null) {
+    public function send($to, $subject, $body, $user_id = null)
+    {
         try {
             // Clear previous recipients
             $this->mail->clearAddresses();
-            
+
             // Add recipient
             $this->mail->addAddress($to);
-            
+
             // Email content
             $this->mail->Subject = $subject;
-            $this->mail->Body    = $body;
+            $this->mail->Body = $body;
             $this->mail->AltBody = strip_tags(str_replace(['<br>', '<br/>', '</p>'], "\n", $body));
-            
+
             // Send email
             $sent = $this->mail->send();
-            
+
             // Log to database
             $this->logEmail($to, $subject, $user_id, 'sent');
-            
+
             return ['success' => true, 'message' => 'Email sent successfully'];
-            
+
         } catch (Exception $e) {
             // Log error
             $this->logEmail($to, $subject, $user_id, 'failed', $this->mail->ErrorInfo);
-            
+
             return ['success' => false, 'message' => $this->mail->ErrorInfo];
         }
     }
-    
+
+    /**
+     * Queue an email into database for asynchronous sending
+     */
+    public function queueEmail($to, $subject, $body, $recipient_name = '')
+    {
+        try {
+            $stmt = $this->db->prepare("INSERT INTO email_queue (recipient, recipient_name, subject, body, status, created_at) VALUES (:to, :name, :subject, :body, 'pending', NOW())");
+            $stmt->bindParam(':to', $to);
+            $stmt->bindParam(':name', $recipient_name);
+            $stmt->bindParam(':subject', $subject);
+            $stmt->bindParam(':body', $body);
+            return $stmt->execute();
+        } catch (Exception $e) {
+            error_log("Failed to queue email: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Process pending emails from queue
+     */
+    public function processQueue($limit = 10)
+    {
+        try {
+            $stmt = $this->db->prepare("SELECT * FROM email_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT :limit");
+            $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+            $stmt->execute();
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $processed = 0;
+            foreach ($items as $item) {
+                $res = $this->send($item['recipient'], $item['subject'], $item['body']);
+                $newStatus = $res['success'] ? 'sent' : 'failed';
+                $errMsg = $res['success'] ? null : $res['message'];
+
+                $up = $this->db->prepare("UPDATE email_queue SET status = :status, error_message = :err, processed_at = NOW() WHERE queue_id = :id");
+                $up->bindParam(':status', $newStatus);
+                $up->bindParam(':err', $errMsg);
+                $up->bindParam(':id', $item['queue_id']);
+                $up->execute();
+                $processed++;
+            }
+            return $processed;
+        } catch (Exception $e) {
+            error_log("Failed to process email queue: " . $e->getMessage());
+            return 0;
+        }
+    }
+
     /**
      * Send appointment confirmation email
      */
-    public function sendAppointmentConfirmation($user_email, $user_name, $appointment) {
+    public function sendAppointmentConfirmation($user_email, $user_name, $appointment)
+    {
         $subject = "Appointment Confirmation - CSWDO Palayan City";
-        
+
         $body = $this->getEmailTemplate(
             "Appointment Confirmed",
             $user_name,
@@ -118,32 +185,33 @@ class Mailer {
             </div>
             
             <div style='text-align: center; margin: 30px 0;'>
-                <a href='http://localhost/palayan_kalinga_hub/view-appointment.php?id={$appointment['appointment_id']}' 
+                <a href='" . APP_URL . "/view-appointment.php?id={$appointment['appointment_id']}' 
                    style='background: #003366; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;'>
                     View Appointment Details
                 </a>
             </div>
             "
         );
-        
+
         return $this->send($user_email, $subject, $body, $appointment['user_id']);
     }
 
     /**
      * Send appointment STATUS UPDATE email (when staff changes status)
      */
-    public function sendAppointmentStatusUpdate($user_email, $user_name, $appointment, $new_status, $notes = '') {
+    public function sendAppointmentStatusUpdate($user_email, $user_name, $appointment, $new_status, $notes = '')
+    {
         $status_labels = [
-            'confirmed'  => ['label' => 'Confirmed',  'color' => '#4CAF50', 'icon' => '✅'],
-            'completed'  => ['label' => 'Completed',  'color' => '#2196F3', 'icon' => '🎉'],
-            'cancelled'  => ['label' => 'Cancelled',  'color' => '#EF5350', 'icon' => '❌'],
-            'no_show'    => ['label' => 'No Show',    'color' => '#FF9800', 'icon' => '⚠️'],
-            'rescheduled'=> ['label' => 'Rescheduled','color' => '#9C27B0', 'icon' => '📅'],
+            'confirmed' => ['label' => 'Confirmed', 'color' => '#4CAF50', 'icon' => '✅'],
+            'completed' => ['label' => 'Completed', 'color' => '#2196F3', 'icon' => '🎉'],
+            'cancelled' => ['label' => 'Cancelled', 'color' => '#EF5350', 'icon' => '❌'],
+            'no_show' => ['label' => 'No Show', 'color' => '#FF9800', 'icon' => '⚠️'],
+            'rescheduled' => ['label' => 'Rescheduled', 'color' => '#9C27B0', 'icon' => '📅'],
         ];
         $s = $status_labels[$new_status] ?? ['label' => ucfirst($new_status), 'color' => '#666', 'icon' => '📋'];
 
         $tracking = 'APT-' . str_pad($appointment['appointment_id'], 6, '0', STR_PAD_LEFT);
-        $subject  = "Appointment Update ({$s['label']}) – {$tracking}";
+        $subject = "Appointment Update ({$s['label']}) – {$tracking}";
 
         $date_str = isset($appointment['appointment_date'])
             ? date('F d, Y', strtotime($appointment['appointment_date'])) : 'N/A';
@@ -179,7 +247,7 @@ class Mailer {
             </div>
             {$notes_html}
             <div style='text-align:center;margin:24px 0;'>
-                <a href='http://localhost/palayan_kalinga_hub/my-appointments.php'
+                <a href='" . APP_URL . "/my-appointments.php'
                    style='background:#7F0303;color:white;padding:12px 30px;text-decoration:none;border-radius:30px;font-weight:700;font-size:0.9rem;'>View My Appointments</a>
             </div>
             "
@@ -187,11 +255,12 @@ class Mailer {
 
         return $this->send($user_email, $subject, $body, $appointment['user_id'] ?? null);
     }
-    
+
     /**
      * Send AICS status update email
      */
-    public function sendAICSUpdate($user_email, $user_name, $aics) {
+    public function sendAICSUpdate($user_email, $user_name, $aics)
+    {
         $status_colors = [
             'submitted' => '#ff9800',
             'reviewing' => '#2196F3',
@@ -199,7 +268,7 @@ class Mailer {
             'rejected' => '#f44336',
             'released' => '#9C27B0'
         ];
-        
+
         $status_icons = [
             'submitted' => '📝',
             'reviewing' => '🔍',
@@ -207,15 +276,28 @@ class Mailer {
             'rejected' => '❌',
             'released' => '💰'
         ];
-        
+
         $status = $aics['status'];
         $color = $status_colors[$status] ?? '#666';
         $icon = $status_icons[$status] ?? '📋';
-        
+
+        $extra_instruction = "";
+        if ($status === 'reviewing') {
+            $extra_instruction = "
+            <div style='background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; border-radius: 8px; margin: 20px 0; color: #b78103;'>
+                <strong>📢 INTERVIEW NOTICE:</strong> Please visit the CSWDO Office at Window 1, 2, or 3 for your interview and assessment. Make sure to bring your original supporting documents.
+            </div>";
+        } elseif ($status === 'approved') {
+            $extra_instruction = "
+            <div style='background: #e8f5e9; border-left: 4px solid #4CAF50; padding: 15px; border-radius: 8px; margin: 20px 0; color: #2e7d32;'>
+                <strong>📢 BUDGET OFFICE FORWARDING:</strong> Your request has been approved and forwarded to the City Budget Office for voucher processing. Please wait for a text or call notification.
+            </div>";
+        }
+
         $tracking = "AICS-" . str_pad($aics['aics_id'], 6, '0', STR_PAD_LEFT);
-        
+
         $subject = "AICS Request Update - {$tracking}";
-        
+
         $body = $this->getEmailTemplate(
             "AICS Request Status Update",
             $user_name,
@@ -225,6 +307,8 @@ class Mailer {
                     {$icon} Status: " . ucfirst($status) . "
                 </div>
             </div>
+            
+            {$extra_instruction}
             
             <div style='background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;'>
                 <h3 style='color: #003366; margin-bottom: 15px;'>Request Details:</h3>
@@ -241,12 +325,12 @@ class Mailer {
                         <td style='padding: 10px; border-bottom: 1px solid #ddd;'><strong>Amount Requested:</strong></td>
                         <td style='padding: 10px; border-bottom: 1px solid #ddd;'>₱" . number_format($aics['amount_requested'], 2) . "</td>
                     </tr>"
-                    . ($aics['amount_approved'] ? "
+            . ($aics['amount_approved'] ? "
                     <tr>
                         <td style='padding: 10px; border-bottom: 1px solid #ddd;'><strong>Amount Approved:</strong></td>
                         <td style='padding: 10px; border-bottom: 1px solid #ddd;'><strong style='color: #4CAF50;'>₱" . number_format($aics['amount_approved'], 2) . "</strong></td>
                     </tr>" : "") .
-                    ($aics['rejection_reason'] ? "
+            ($aics['rejection_reason'] ? "
                     <tr>
                         <td style='padding: 10px;'><strong>Reason:</strong></td>
                         <td style='padding: 10px; color: #f44336;'>{$aics['rejection_reason']}</td>
@@ -255,25 +339,72 @@ class Mailer {
             </div>
             
             <div style='text-align: center; margin: 30px 0;'>
-                <a href='http://localhost/palayan_kalinga_hub/track-aics.php?tracking={$tracking}' 
+                <a href='" . APP_URL . "/track-aics.php?tracking={$tracking}' 
                    style='background: #003366; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;'>
                     Track Your Request
                 </a>
             </div>
             "
         );
-        
+
         return $this->send($user_email, $subject, $body, $aics['user_id']);
     }
-    
+
+    /**
+     * Send AICS application submission confirmation email
+     */
+    public function sendAICSConfirmation($user_email, $user_name, $aics)
+    {
+        $tracking = "AICS-" . str_pad($aics['aics_id'], 6, '0', STR_PAD_LEFT);
+        $subject = "AICS Application Received - {$tracking}";
+
+        $body = $this->getEmailTemplate(
+            "AICS Application Submitted",
+            $user_name,
+            "
+            <p>Thank you for submitting your application for <strong>" . ucfirst($aics['request_type']) . " Assistance</strong> under the Assistance to Individuals in Crisis Situations (AICS) program.</p>
+            
+            <div style='background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;'>
+                <h3 style='color: #003366; margin-bottom: 15px;'>Application Details:</h3>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tr>
+                        <td style='padding: 10px; border-bottom: 1px solid #ddd;'><strong>Tracking Number:</strong></td>
+                        <td style='padding: 10px; border-bottom: 1px solid #ddd;'><code style='background: #003366; color: white; padding: 5px 10px; border-radius: 5px;'>{$tracking}</code></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 10px; border-bottom: 1px solid #ddd;'><strong>Type of Assistance:</strong></td>
+                        <td style='padding: 10px; border-bottom: 1px solid #ddd;'>" . ucfirst($aics['request_type']) . "</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 10px;'><strong>Status:</strong></td>
+                        <td style='padding: 10px;'>Submitted (Pending Review)</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <p>Our staff will review your submitted documents. You will receive updates about the status of your application via email.</p>
+            
+            <div style='text-align: center; margin: 30px 0;'>
+                <a href='" . APP_URL . "/track-aics.php?tracking={$tracking}' 
+                   style='background: #7F0303; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;'>
+                    Track Your Request
+                </a>
+            </div>
+            "
+        );
+
+        return $this->send($user_email, $subject, $body, $aics['user_id'] ?? null);
+    }
+
     /**
      * Send housing application update email
      */
-    public function sendHousingUpdate($user_email, $user_name, $housing) {
+    public function sendHousingUpdate($user_email, $user_name, $housing)
+    {
         $tracking = "HSG-" . str_pad($housing['beneficiary_id'], 6, '0', STR_PAD_LEFT);
-        
+
         $subject = "Housing Application Update - {$tracking}";
-        
+
         $body = $this->getEmailTemplate(
             "Housing Application Status Update",
             $user_name,
@@ -293,7 +424,7 @@ class Mailer {
                         <td style='padding: 10px; border-bottom: 1px solid #ddd;'><strong>Status:</strong></td>
                         <td style='padding: 10px; border-bottom: 1px solid #ddd;'><span style='background: " . ($housing['status'] == 'approved' ? '#4CAF50' : '#ff9800') . "; color: white; padding: 5px 10px; border-radius: 5px;'>" . ucfirst($housing['status']) . "</span></td>
                     </tr>"
-                    . ($housing['unit_assigned'] ? "
+            . ($housing['unit_assigned'] ? "
                     <tr>
                         <td style='padding: 10px;'><strong>Unit Assigned:</strong></td>
                         <td style='padding: 10px;'><strong style='color: #4CAF50;'>{$housing['unit_assigned']}</strong></td>
@@ -302,16 +433,17 @@ class Mailer {
             </div>
             "
         );
-        
+
         return $this->send($user_email, $subject, $body, $housing['user_id']);
     }
-    
+
     /**
      * Send document verification email
      */
-    public function sendDocumentVerification($user_email, $user_name, $document) {
+    public function sendDocumentVerification($user_email, $user_name, $document)
+    {
         $subject = "Document Verification Update";
-        
+
         $body = $this->getEmailTemplate(
             "Document Verification Status",
             $user_name,
@@ -327,21 +459,22 @@ class Mailer {
             </div>
             "
         );
-        
+
         return $this->send($user_email, $subject, $body, $document['user_id']);
     }
-    
+
     /**
      * Send password reset email
      */
-    public function sendPasswordReset($user_email, $user_name, $reset_link) {
+    public function sendPasswordReset($user_email, $user_name, $reset_link)
+    {
         $subject = "Password Reset Request";
-        
+
         $body = $this->getEmailTemplate(
             "Password Reset",
             $user_name,
             "
-            <p>We received a request to reset your password. Click the button below to proceed:</p>
+            <p>We received a request to reset your password. Click the button below to choose a new password:</p>
             
             <div style='text-align: center; margin: 30px 0;'>
                 <a href='{$reset_link}' 
@@ -354,14 +487,15 @@ class Mailer {
             <p style='color: #666; font-size: 0.9rem;'>This link will expire in 1 hour.</p>
             "
         );
-        
+
         return $this->send($user_email, $subject, $body);
     }
-    
+
     /**
      * Get email template with header and footer
      */
-    private function getEmailTemplate($title, $user_name, $content) {
+    private function getEmailTemplate($title, $user_name, $content)
+    {
         return "
         <!DOCTYPE html>
         <html>
@@ -407,11 +541,12 @@ class Mailer {
         </html>
         ";
     }
-    
+
     /**
      * Log email to database
      */
-    private function logEmail($recipient, $subject, $user_id, $status, $error = null) {
+    private function logEmail($recipient, $subject, $user_id, $status, $error = null)
+    {
         try {
             $query = "INSERT INTO email_logs (recipient, subject, user_id, status, error_message, created_at) 
                       VALUES (:recipient, :subject, :user_id, :status, :error, NOW())";
@@ -427,14 +562,15 @@ class Mailer {
             error_log("Failed to log email: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Send bulk email (for staff use)
      */
-    public function sendBulk($recipients, $subject, $body) {
+    public function sendBulk($recipients, $subject, $body)
+    {
         $success_count = 0;
         $fail_count = 0;
-        
+
         foreach ($recipients as $recipient) {
             $result = $this->send($recipient['email'], $subject, $body, $recipient['user_id']);
             if ($result['success']) {
@@ -442,11 +578,11 @@ class Mailer {
             } else {
                 $fail_count++;
             }
-            
+
             // Small delay to avoid rate limiting
             usleep(500000); // 0.5 seconds
         }
-        
+
         return [
             'success' => true,
             'success_count' => $success_count,

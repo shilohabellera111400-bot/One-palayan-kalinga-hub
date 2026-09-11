@@ -24,16 +24,27 @@ $pending_app = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
     csrf_verify();
-    $assistance_type = sanitize($_POST['assistance_type']);
-    $amount_requested = sanitize($_POST['amount_requested']);
-    $purpose = sanitize($_POST['purpose']);
-    $hospital_name = sanitize($_POST['hospital_name'] ?? '');
-    $doctor_name = sanitize($_POST['doctor_name'] ?? '');
     
-    $db->beginTransaction();
-    
-    try {
-        $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, purpose, status, created_at) 
+    // Check if user has active/pending application
+    if ($pending_app && $pending_app['status'] !== 'rejected') {
+        $error = "You already have an active application. Please wait for it to be resolved.";
+    } 
+    // Server-side validation for required files
+    elseif (!isset($_FILES['valid_id']) || $_FILES['valid_id']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A valid ID is required.";
+    } elseif (!isset($_FILES['medical_certificate']) || $_FILES['medical_certificate']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A medical certificate is required.";
+    } else {
+        $assistance_type = sanitize($_POST['assistance_type']);
+        $amount_requested = sanitize($_POST['amount_requested']);
+        $purpose = sanitize($_POST['purpose']);
+        $hospital_name = sanitize($_POST['hospital_name'] ?? '');
+        $doctor_name = sanitize($_POST['doctor_name'] ?? '');
+        
+        $db->beginTransaction();
+        
+        try {
+        $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, purpose, status, submission_date) 
                   VALUES (:user_id, 'medical', :amount, :purpose, 'submitted', NOW())";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':user_id', $_SESSION['user_id']);
@@ -42,6 +53,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $stmt->execute();
         
         $aics_id = $db->lastInsertId();
+
+        $detail_query = "INSERT INTO aics_medical_details (aics_id, assistance_type, hospital_name, doctor_name) 
+                         VALUES (:aics_id, :assistance_type, :hospital_name, :doctor_name)";
+        $detail_stmt = $db->prepare($detail_query);
+        $detail_stmt->bindParam(':aics_id', $aics_id);
+        $detail_stmt->bindParam(':assistance_type', $assistance_type);
+        $detail_stmt->bindParam(':hospital_name', $hospital_name);
+        $detail_stmt->bindParam(':doctor_name', $doctor_name);
+        $detail_stmt->execute();
         
         $uploader = new FileUploader();
         $document_fields = [
@@ -83,9 +103,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $db->commit();
         $success = "Application submitted successfully! Your tracking number is: <strong>AICS-" . str_pad($aics_id, 6, '0', STR_PAD_LEFT) . "</strong>";
         
+        // Send email confirmation
+        try {
+            require_once __DIR__ . '/includes/Mailer.php';
+            $mailer = new Mailer();
+            $user_query = "SELECT email, first_name, last_name FROM users WHERE user_id = :user_id";
+            $user_stmt = $db->prepare($user_query);
+            $user_stmt->bindParam(':user_id', $_SESSION['user_id']);
+            $user_stmt->execute();
+            $user_info = $user_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user_info && !empty($user_info['email'])) {
+                $user_name = $user_info['first_name'] . ' ' . $user_info['last_name'];
+                $aics_data = [
+                    'aics_id' => $aics_id,
+                    'request_type' => 'medical',
+                    'user_id' => $_SESSION['user_id']
+                ];
+                $mailer->sendAICSConfirmation($user_info['email'], $user_name, $aics_data);
+            }
+        } catch (Exception $e) {
+            error_log("AICS medical submission email confirmation failed: " . $e->getMessage());
+        }
+        
     } catch (Exception $e) {
         $db->rollBack();
         $error = "Application failed: " . $e->getMessage();
+    }
     }
 }
 ?>

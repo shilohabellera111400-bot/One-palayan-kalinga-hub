@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 ?>
 <!DOCTYPE html>
@@ -23,13 +23,13 @@ require_once __DIR__ . '/config/database.php';
             --white: #FFFFFF;
             
             /* Light mode default tokens */
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --text-primary: #1F2937;
             --text-secondary: #374151;
             --text-muted: #6B7A8A;
-            --border-color: #E4E7EF;
+            --border-color: #C8D0DC;
             --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
             --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.06);
             --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);

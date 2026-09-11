@@ -763,6 +763,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
             <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
             <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
+            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
             <li class="menu-divider">System</li>
             <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
             <li><a href="settings.php" class="active"><i class="fas fa-cog"></i> System Settings</a></li>
@@ -879,6 +880,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <div class="form-group">
                         <label><i class="fas fa-map-marker-alt"></i> Office Address</label>
                         <textarea name="address" rows="2"><?php echo htmlspecialchars($settings['address']); ?></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label><i class="fas fa-calendar-check"></i> Max Appointments Per Day</label>
+                        <input type="number" name="max_appointments_per_day" value="<?php echo intval($settings['max_appointments_per_day'] ?? 15); ?>" min="1" required>
                     </div>
                     
                     <button type="submit" name="update_general" class="btn-primary">
@@ -1059,3 +1065,5 @@ document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
 </script>
 </body>
 </html>
+
+

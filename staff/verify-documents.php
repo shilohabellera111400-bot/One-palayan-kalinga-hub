@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../config/database.php';
 
 if (!isStaff()) {
@@ -111,7 +111,7 @@ $initials = substr($initials, 0, 2);
             --midnight: #0F414A;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
+            --gray-50: #E8ECF2;
             --gray-100: #F1F3F8;
             --gray-200: #E8ECF2;
             --gray-600: #6B7A8A;

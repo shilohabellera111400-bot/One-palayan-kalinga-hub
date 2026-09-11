@@ -33,16 +33,7 @@ $stmt->execute();
                 <h3><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></h3>
                 <p>Resident</p>
             </div>
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php">Dashboard</a></li>
-                <li><a href="profile.php">My Profile</a></li>
-                <li><a href="book-appointment.php">Book Appointment</a></li>
-                <li><a href="my-appointments.php">My Appointments</a></li>
-                <li><a href="apply-aics.php">Apply for AICS</a></li>
-                <li><a href="my-aics.php" class="active">My AICS Requests</a></li>
-                <li><a href="my-documents.php">My Documents</a></li>
-                <li><a href="logout.php">Logout</a></li>
-            </ul>
+            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
         </div>
         
         <div class="main-content">

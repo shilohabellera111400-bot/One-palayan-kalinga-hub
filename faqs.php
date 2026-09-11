@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 
 // No login required for FAQs page
@@ -94,7 +94,7 @@ foreach ($filtered_faqs as $faq) {
             --midnight: #0F414A;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
+            --gray-50: #E8ECF2;
             --gray-100: #F1F3F8;
             --gray-200: #E4E7E9;
             --gray-600: #6B7A8A;

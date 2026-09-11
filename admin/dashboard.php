@@ -67,30 +67,53 @@ $activity_stmt = $db->prepare("SELECT * FROM audit_logs ORDER BY created_at DESC
 $activity_stmt->execute();
 $recent_activities = $activity_stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Fetch Barangay geographical stats
+$check_cols = $db->query("SHOW COLUMNS FROM users");
+$user_cols = [];
+while ($col = $check_cols->fetch(PDO::FETCH_ASSOC)) {
+    $user_cols[] = $col['Field'];
+}
+
+$barangay_field = in_array('barangay', $user_cols)
+    ? "u.barangay"
+    : "COALESCE((SELECT barangay_name FROM verification_requests WHERE user_id = u.user_id LIMIT 1), 'Unknown')";
+
+$barangay_stmt = $db->prepare("SELECT * FROM (
+    SELECT $barangay_field as barangay, COUNT(DISTINCT a.aics_id) as aics_count, COUNT(DISTINCT h.beneficiary_id) as housing_count
+    FROM users u
+    LEFT JOIN aics_requests a ON u.user_id = a.user_id
+    LEFT JOIN housing_beneficiaries h ON u.user_id = h.user_id
+    GROUP BY $barangay_field
+) as sub
+WHERE barangay IS NOT NULL AND barangay != '' AND barangay != 'Unknown'
+ORDER BY (aics_count + housing_count) DESC");
+$barangay_stmt->execute();
+$barangay_stats = $barangay_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get initials for sidebar avatar
 $initials = '';
 $name_parts = explode(' ', $_SESSION['full_name']);
-foreach($name_parts as $part) {
+foreach ($name_parts as $part) {
     $initials .= strtoupper(substr($part, 0, 1));
 }
 $initials = substr($initials, 0, 2);
 
 // ─── Prepare last-6-month labels ───────────────────────────────────────────
-$months      = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+$months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 $monthly_data = array_fill(0, 12, 0);
 foreach ($monthly_trend as $row) {
-    $monthly_data[$row['month'] - 1] = (int)$row['count'];
+    $monthly_data[$row['month'] - 1] = (int) $row['count'];
 }
 
 // Build rolling 6-month window
 $chart_labels = [];
-$chart_aics   = [];
+$chart_aics = [];
 for ($i = 5; $i >= 0; $i--) {
-    $m = (int)date('n') - $i;
-    if ($m < 1) $m += 12;
+    $m = (int) date('n') - $i;
+    if ($m < 1)
+        $m += 12;
     $chart_labels[] = $months[$m - 1];
-    $chart_aics[]   = $monthly_data[$m - 1];
+    $chart_aics[] = $monthly_data[$m - 1];
 }
 
 // ─── Monthly appointments trend (last 6 months) ────────────────────────────
@@ -103,11 +126,14 @@ $appt_stmt = $db->prepare(
 $appt_stmt->execute();
 $appt_trend_raw = $appt_stmt->fetchAll(PDO::FETCH_ASSOC);
 $appt_data = array_fill(0, 12, 0);
-foreach ($appt_trend_raw as $row) { $appt_data[$row['month'] - 1] = (int)$row['count']; }
+foreach ($appt_trend_raw as $row) {
+    $appt_data[$row['month'] - 1] = (int) $row['count'];
+}
 $chart_appts = [];
 for ($i = 5; $i >= 0; $i--) {
-    $m = (int)date('n') - $i;
-    if ($m < 1) $m += 12;
+    $m = (int) date('n') - $i;
+    if ($m < 1)
+        $m += 12;
     $chart_appts[] = $appt_data[$m - 1];
 }
 
@@ -116,7 +142,7 @@ $cat_labels = [];
 $cat_values = [];
 foreach ($aics_by_category as $c) {
     $cat_labels[] = ucfirst(str_replace('_', ' ', $c['request_type']));
-    $cat_values[] = (int)$c['count'];
+    $cat_values[] = (int) $c['count'];
 }
 
 // ─── Housing status distribution ────────────────────────────────────────────
@@ -129,16 +155,16 @@ $h_labels = [];
 $h_values = [];
 foreach ($housing_status_raw as $h) {
     $h_labels[] = ucfirst($h['status']);
-    $h_values[] = (int)$h['count'];
+    $h_values[] = (int) $h['count'];
 }
 
 // ─── AICS status colors ─────────────────────────────────────────────────────
 $status_colors = [
-    'submitted'  => '#FFC107',
-    'reviewing'  => '#42A5F5',
-    'approved'   => '#66BB6A',
-    'rejected'   => '#EF5350',
-    'released'   => '#26A69A'
+    'submitted' => '#FFC107',
+    'reviewing' => '#42A5F5',
+    'approved' => '#66BB6A',
+    'rejected' => '#EF5350',
+    'released' => '#26A69A'
 ];
 
 // Let's print out JSON encoded versions of our PHP data arrays to use in JS
@@ -158,10 +184,11 @@ $status_cls = [];
 foreach ($status_labels as $key => $label) {
     $count = 0;
     foreach ($status_breakdown as $s) {
-        if ($s['status'] == $key) $count = $s['count'];
+        if ($s['status'] == $key)
+            $count = $s['count'];
     }
     $status_lbls[] = $label;
-    $status_vals[] = (int)$count;
+    $status_vals[] = (int) $count;
     $status_cls[] = $status_colors[$key] ?? '#999';
 }
 $js_status_labels = json_encode($status_lbls);
@@ -173,11 +200,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - One Palayan-Kalinga Hub</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
@@ -191,35 +221,35 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --light-blue: #96C0CE;
             --midnight: #0F414A;
             --white: #FFFFFF;
-            
+
             /* Light theme defaults */
             --bg-primary: #F8F9FC;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
+            --bg-sidebar-hover: rgba(255, 255, 255, 0.12);
+            --bg-sidebar-active: rgba(255, 255, 255, 0.15);
             --text-primary: #263238;
             --text-secondary: #3A4A5A;
             --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
+            --text-sidebar: rgba(255, 255, 255, 0.7);
             --text-sidebar-active: #FFFFFF;
             --border-color: #E8ECF2;
-            
+
             /* Enhanced Shadows - visible in light mode */
             --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
             --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.10);
             --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
             --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.15);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
-            
+
             --search-bg: #FFFFFF;
             --stat-bg: #FFFFFF;
             --chart-bg: #FFFFFF;
             --recent-bg: #FFFFFF;
             --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
-            
+            --divider: rgba(255, 255, 255, 0.08);
+
             --stat-gradient-1: linear-gradient(135deg, #7F0303, #9a1515);
             --stat-gradient-2: linear-gradient(135deg, #1a73e8, #4fc3f7);
             --stat-gradient-3: linear-gradient(135deg, #2e7d32, #66bb6a);
@@ -234,34 +264,34 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --bg-secondary: #111827;
             --bg-card: #1a2332;
             --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
+            --bg-sidebar-hover: rgba(255, 255, 255, 0.06);
+            --bg-sidebar-active: rgba(255, 255, 255, 0.10);
             --text-primary: #E8EDF5;
             --text-secondary: #B0C4DE;
             --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
+            --text-sidebar: rgba(255, 255, 255, 0.6);
             --text-sidebar-active: #FFFFFF;
             --border-color: #2a3a4f;
-            
+
             /* Enhanced Shadows - visible in dark mode */
             --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
             --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
             --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
             --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.70);
             --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.25);
-            
+
             --search-bg: #1a2332;
             --stat-bg: #1a2332;
             --chart-bg: #1a2332;
             --recent-bg: #1a2332;
             --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
-            
+            --divider: rgba(255, 255, 255, 0.05);
+
             /* Adjust maroon for dark mode */
             --maroon: #8B1A1A;
             --maroon-light: #A82828;
             --maroon-dark: #5a0202;
-            
+
             --stat-gradient-1: linear-gradient(135deg, #8B1A1A, #A82828);
             --stat-gradient-2: linear-gradient(135deg, #1565c0, #42a5f5);
             --stat-gradient-3: linear-gradient(135deg, #1b5e20, #43a047);
@@ -270,7 +300,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --stat-gradient-6: linear-gradient(135deg, #004d40, #00897b);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background: var(--bg-primary);
@@ -281,7 +316,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; }
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
 
         /* ========== SIDEBAR ========== */
         .sidebar {
@@ -298,9 +336,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease;
             box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
         }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
 
         .sidebar-header {
             padding: 28px 20px 20px;
@@ -309,6 +357,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             align-items: center;
             gap: 12px;
         }
+
         .logo-wrapper {
             display: flex;
             align-items: center;
@@ -316,19 +365,21 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             flex: 1;
             min-width: 0;
         }
+
         .logo-image {
             width: 48px;
             height: 48px;
             border-radius: 12px;
             object-fit: contain;
-            background: rgba(255,255,255,0.10);
+            background: rgba(255, 255, 255, 0.10);
             padding: 4px;
             flex-shrink: 0;
         }
+
         .logo-icon {
             width: 44px;
             height: 44px;
-            background: rgba(255,255,255,0.10);
+            background: rgba(255, 255, 255, 0.10);
             border-radius: 12px;
             display: none;
             align-items: center;
@@ -337,10 +388,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 1.3rem;
             flex-shrink: 0;
         }
+
         .logo-text {
             flex: 1;
             min-width: 0;
         }
+
         .logo-text h2 {
             color: var(--text-sidebar-active);
             font-size: 1.1rem;
@@ -348,8 +401,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             letter-spacing: -0.5px;
             line-height: 1.2;
         }
+
         .logo-text span {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255, 255, 255, 0.4);
             font-size: 0.65rem;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -360,7 +414,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 16px 14px;
             flex: 1;
         }
-        .sidebar-menu li { margin-bottom: 2px; }
+
+        .sidebar-menu li {
+            margin-bottom: 2px;
+        }
+
         .sidebar-menu li a {
             display: flex;
             align-items: center;
@@ -373,14 +431,31 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.85rem;
             transition: all 0.25s;
         }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
+
+        .sidebar-menu li a i {
+            width: 20px;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .sidebar-menu li a:hover {
+            background: var(--bg-sidebar-hover);
+            color: var(--text-sidebar-active);
+        }
+
+        .sidebar-menu li a:hover i {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
         .sidebar-menu li a.active {
             background: var(--bg-sidebar-active);
             color: var(--text-sidebar-active);
         }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
+
+        .sidebar-menu li a.active i {
+            color: var(--text-sidebar-active);
+        }
+
         .menu-divider {
             border-top: 1px solid var(--divider);
             margin: 12px 0;
@@ -388,7 +463,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.6rem;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
+            color: rgba(255, 255, 255, 0.3);
             padding-left: 14px;
         }
 
@@ -396,6 +471,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 16px;
             border-top: 1px solid var(--divider);
         }
+
         .sidebar-footer a {
             display: flex;
             align-items: center;
@@ -406,10 +482,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             text-decoration: none;
             font-size: 0.85rem;
             font-weight: 500;
-            background: rgba(255,255,255,0.04);
+            background: rgba(255, 255, 255, 0.04);
             transition: all 0.25s;
         }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
+
+        .sidebar-footer a:hover {
+            background: rgba(255, 255, 255, 0.10);
+            color: var(--text-sidebar-active);
+        }
+
         .sidebar-footer .user-info {
             display: flex;
             align-items: center;
@@ -417,6 +498,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding: 10px 14px;
             margin-bottom: 8px;
         }
+
         .sidebar-footer .avatar {
             width: 38px;
             height: 38px;
@@ -429,13 +511,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: white;
             font-size: 0.8rem;
         }
+
         .sidebar-footer .user-details h4 {
             color: var(--text-sidebar-active);
             font-size: 0.85rem;
             font-weight: 600;
         }
+
         .sidebar-footer .user-details p {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255, 255, 255, 0.4);
             font-size: 0.7rem;
         }
 
@@ -458,22 +542,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             flex-wrap: wrap;
             gap: 12px;
         }
+
         .page-title h1 {
             font-size: 1.5rem;
             color: var(--text-primary);
             font-weight: 700;
             transition: color 0.3s ease;
         }
+
         .page-title p {
             color: var(--text-muted);
             font-size: 0.85rem;
             margin-top: 2px;
         }
+
         .top-bar-actions {
             display: flex;
             gap: 12px;
             align-items: center;
         }
+
         .search-box {
             display: flex;
             align-items: center;
@@ -485,6 +573,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease, border-color 0.3s ease;
             box-shadow: var(--shadow-sm);
         }
+
         .search-box input {
             border: none;
             outline: none;
@@ -493,8 +582,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             min-width: 180px;
             color: var(--text-primary);
         }
-        .search-box input::placeholder { color: var(--text-muted); }
-        .search-box i { color: var(--text-muted); }
+
+        .search-box input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-box i {
+            color: var(--text-muted);
+        }
 
         .theme-toggle {
             background: var(--bg-card);
@@ -511,6 +606,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 1.1rem;
             box-shadow: var(--shadow-sm);
         }
+
         .theme-toggle:hover {
             background: var(--maroon);
             color: white;
@@ -534,7 +630,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border: 1px solid var(--border-color);
             box-shadow: var(--shadow-sm);
         }
-        .top-icon:hover { 
+
+        .top-icon:hover {
             color: var(--text-primary);
             box-shadow: var(--shadow-md);
             transform: translateY(-2px);
@@ -547,6 +644,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 20px;
             margin-bottom: 30px;
         }
+
         .stat-card {
             background: var(--stat-bg);
             border-radius: 20px;
@@ -558,6 +656,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             position: relative;
             overflow: hidden;
         }
+
         .stat-card::before {
             content: '';
             position: absolute;
@@ -568,13 +667,16 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border-radius: 20px 20px 0 0;
             transition: height 0.3s ease;
         }
+
         .stat-card:hover::before {
             height: 6px;
         }
+
         .stat-card:hover {
             transform: translateY(-6px);
             box-shadow: var(--shadow-hover);
         }
+
         .stat-card:active {
             transform: translateY(-2px);
         }
@@ -585,6 +687,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             justify-content: space-between;
             margin-bottom: 12px;
         }
+
         .stat-icon-wrapper {
             width: 52px;
             height: 52px;
@@ -596,12 +699,36 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             flex-shrink: 0;
             box-shadow: var(--shadow-sm);
         }
-        .stat-icon-wrapper.maroon { background: rgba(127, 3, 3, 0.12); color: var(--maroon-light); }
-        .stat-icon-wrapper.green { background: rgba(76, 175, 80, 0.12); color: #4CAF50; }
-        .stat-icon-wrapper.blue { background: rgba(33, 150, 243, 0.12); color: #2196F3; }
-        .stat-icon-wrapper.orange { background: rgba(255, 152, 0, 0.12); color: #FF9800; }
-        .stat-icon-wrapper.purple { background: rgba(156, 39, 176, 0.12); color: #9C27B0; }
-        .stat-icon-wrapper.teal { background: rgba(0, 150, 136, 0.12); color: #009688; }
+
+        .stat-icon-wrapper.maroon {
+            background: rgba(127, 3, 3, 0.12);
+            color: var(--maroon-light);
+        }
+
+        .stat-icon-wrapper.green {
+            background: rgba(76, 175, 80, 0.12);
+            color: #4CAF50;
+        }
+
+        .stat-icon-wrapper.blue {
+            background: rgba(33, 150, 243, 0.12);
+            color: #2196F3;
+        }
+
+        .stat-icon-wrapper.orange {
+            background: rgba(255, 152, 0, 0.12);
+            color: #FF9800;
+        }
+
+        .stat-icon-wrapper.purple {
+            background: rgba(156, 39, 176, 0.12);
+            color: #9C27B0;
+        }
+
+        .stat-icon-wrapper.teal {
+            background: rgba(0, 150, 136, 0.12);
+            color: #009688;
+        }
 
         .stat-badge {
             font-size: 0.6rem;
@@ -623,11 +750,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             margin-bottom: 4px;
             transition: color 0.3s ease;
         }
+
         .stat-label {
             font-size: 0.8rem;
             color: var(--text-muted);
             font-weight: 500;
         }
+
         .stat-footer {
             margin-top: 10px;
             padding-top: 10px;
@@ -638,17 +767,43 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.7rem;
             color: var(--text-muted);
         }
-        .stat-footer .trend-up { color: #4CAF50; }
-        .stat-footer .trend-down { color: #EF5350; }
-        .stat-footer i { font-size: 0.65rem; }
+
+        .stat-footer .trend-up {
+            color: #4CAF50;
+        }
+
+        .stat-footer .trend-down {
+            color: #EF5350;
+        }
+
+        .stat-footer i {
+            font-size: 0.65rem;
+        }
 
         /* Color variations for stat cards */
-        .stat-card.maroon::before { background: var(--stat-gradient-1); }
-        .stat-card.blue::before { background: var(--stat-gradient-2); }
-        .stat-card.green::before { background: var(--stat-gradient-3); }
-        .stat-card.orange::before { background: var(--stat-gradient-4); }
-        .stat-card.purple::before { background: var(--stat-gradient-5); }
-        .stat-card.teal::before { background: var(--stat-gradient-6); }
+        .stat-card.maroon::before {
+            background: var(--stat-gradient-1);
+        }
+
+        .stat-card.blue::before {
+            background: var(--stat-gradient-2);
+        }
+
+        .stat-card.green::before {
+            background: var(--stat-gradient-3);
+        }
+
+        .stat-card.orange::before {
+            background: var(--stat-gradient-4);
+        }
+
+        .stat-card.purple::before {
+            background: var(--stat-gradient-5);
+        }
+
+        .stat-card.teal::before {
+            background: var(--stat-gradient-6);
+        }
 
         /* ========== CHARTS SECTION ========== */
         .charts-grid {
@@ -657,12 +812,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 24px;
             margin-bottom: 24px;
         }
+
         .charts-row-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 24px;
             margin-bottom: 28px;
         }
+
         .chart-card {
             background: var(--chart-bg);
             border-radius: 20px;
@@ -671,22 +828,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border: 1px solid var(--border-color);
             transition: all 0.3s ease;
         }
+
         .chart-card:hover {
             box-shadow: var(--shadow-lg);
             transform: translateY(-2px);
         }
+
         .chart-card .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 18px;
         }
+
         .chart-card .card-header h3 {
             font-size: 0.95rem;
             font-weight: 700;
             color: var(--text-primary);
             transition: color 0.3s ease;
         }
+
         .chart-card .card-header .badge {
             font-size: 0.65rem;
             color: var(--text-muted);
@@ -696,6 +857,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease, color 0.3s ease;
             box-shadow: var(--shadow-sm);
         }
+
         .chart-container {
             position: relative;
             height: 200px;
@@ -704,6 +866,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 8px;
             padding-top: 10px;
         }
+
         .bar-wrapper {
             flex: 1;
             display: flex;
@@ -713,6 +876,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             height: 100%;
             justify-content: flex-end;
         }
+
         .bar {
             width: 100%;
             max-width: 32px;
@@ -722,10 +886,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             background: linear-gradient(180deg, var(--maroon-light), var(--maroon));
             box-shadow: 0 2px 8px rgba(127, 3, 3, 0.3);
         }
+
         .bar:hover {
             opacity: 0.8;
             transform: scaleX(1.1);
         }
+
         .bar-label {
             font-size: 0.6rem;
             color: var(--text-muted);
@@ -733,13 +899,29 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         /* Canvas wrapper gives Chart.js a defined height */
-        .canvas-wrap { position: relative; width: 100%; }
-        .canvas-wrap.h220 { height: 220px; }
-        .canvas-wrap.h240 { height: 240px; }
-        .canvas-wrap canvas { display: block; }
+        .canvas-wrap {
+            position: relative;
+            width: 100%;
+        }
+
+        .canvas-wrap.h220 {
+            height: 220px;
+        }
+
+        .canvas-wrap.h240 {
+            height: 240px;
+        }
+
+        .canvas-wrap canvas {
+            display: block;
+        }
 
         /* Chart toggle tabs */
-        .chart-tabs { display: flex; gap: 6px; }
+        .chart-tabs {
+            display: flex;
+            gap: 6px;
+        }
+
         .chart-tab {
             padding: 3px 12px;
             border-radius: 20px;
@@ -751,12 +933,36 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--text-muted);
             transition: all 0.2s;
         }
-        .chart-tab.active { background: var(--maroon); border-color: var(--maroon); color: white; }
+
+        .chart-tab.active {
+            background: var(--maroon);
+            border-color: var(--maroon);
+            color: white;
+        }
 
         /* Chart legend */
-        .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--text-muted); font-weight: 500; }
-        .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
 
         /* Status Breakdown */
         .status-list {
@@ -764,19 +970,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             flex-direction: column;
             gap: 10px;
         }
+
         .status-item {
             display: flex;
             align-items: center;
             gap: 12px;
             padding: 4px 0;
         }
+
         .status-dot {
             width: 10px;
             height: 10px;
             border-radius: 50%;
             flex-shrink: 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
+
         .status-item .status-label {
             flex: 1;
             font-size: 0.8rem;
@@ -784,12 +993,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--text-secondary);
             transition: color 0.3s ease;
         }
+
         .status-item .status-count {
             font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-primary);
             transition: color 0.3s ease;
         }
+
         .status-item .status-bar {
             width: 80px;
             height: 6px;
@@ -797,13 +1008,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border-radius: 4px;
             overflow: hidden;
             transition: background 0.3s ease;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
         }
+
         .status-item .status-bar .fill {
             height: 100%;
             border-radius: 4px;
             transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
         }
 
         /* ========== BOTTOM SECTIONS ========== */
@@ -813,6 +1025,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 24px;
             margin-bottom: 28px;
         }
+
         .recent-card {
             background: var(--recent-bg);
             border-radius: 20px;
@@ -821,22 +1034,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             border: 1px solid var(--border-color);
             transition: all 0.3s ease;
         }
+
         .recent-card:hover {
             box-shadow: var(--shadow-lg);
             transform: translateY(-2px);
         }
+
         .recent-card .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 16px;
         }
+
         .recent-card .card-header h3 {
             font-size: 0.95rem;
             font-weight: 700;
             color: var(--text-primary);
             transition: color 0.3s ease;
         }
+
         .recent-card .card-header a {
             font-size: 0.75rem;
             color: var(--maroon-light);
@@ -844,7 +1061,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-weight: 600;
             transition: all 0.3s ease;
         }
-        .recent-card .card-header a:hover { 
+
+        .recent-card .card-header a:hover {
             text-decoration: underline;
             transform: translateX(4px);
         }
@@ -860,10 +1078,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             padding-left: 4px;
             padding-right: 4px;
         }
+
         .activity-item:hover {
             background: var(--badge-bg);
         }
-        .activity-item:last-child { border-bottom: none; }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
         .activity-icon {
             width: 36px;
             height: 36px;
@@ -875,22 +1098,44 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             flex-shrink: 0;
             box-shadow: var(--shadow-sm);
         }
-        .activity-icon.aics { background: rgba(127, 3, 3, 0.12); color: var(--maroon-light); }
-        .activity-icon.housing { background: rgba(33, 150, 243, 0.12); color: #2196F3; }
-        .activity-icon.verification { background: rgba(0, 150, 136, 0.12); color: #009688; }
-        .activity-icon.appointment { background: rgba(255, 152, 0, 0.12); color: #FF9800; }
-        .activity-icon.system { background: rgba(156, 39, 176, 0.12); color: #9C27B0; }
+
+        .activity-icon.aics {
+            background: rgba(127, 3, 3, 0.12);
+            color: var(--maroon-light);
+        }
+
+        .activity-icon.housing {
+            background: rgba(33, 150, 243, 0.12);
+            color: #2196F3;
+        }
+
+        .activity-icon.verification {
+            background: rgba(0, 150, 136, 0.12);
+            color: #009688;
+        }
+
+        .activity-icon.appointment {
+            background: rgba(255, 152, 0, 0.12);
+            color: #FF9800;
+        }
+
+        .activity-icon.system {
+            background: rgba(156, 39, 176, 0.12);
+            color: #9C27B0;
+        }
 
         .activity-content {
             flex: 1;
             min-width: 0;
         }
+
         .activity-content .title {
             font-size: 0.85rem;
             font-weight: 600;
             color: var(--text-primary);
             transition: color 0.3s ease;
         }
+
         .activity-content .desc {
             font-size: 0.75rem;
             color: var(--text-muted);
@@ -898,6 +1143,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
         .activity-time {
             font-size: 0.65rem;
             color: var(--text-muted);
@@ -912,13 +1158,41 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-weight: 600;
             box-shadow: var(--shadow-sm);
         }
-        .status-badge.submitted { background: rgba(255, 152, 0, 0.2); color: #FF9800; }
-        .status-badge.reviewing { background: rgba(33, 150, 243, 0.2); color: #42A5F5; }
-        .status-badge.approved { background: rgba(76, 175, 80, 0.2); color: #66BB6A; }
-        .status-badge.rejected { background: rgba(244, 67, 54, 0.2); color: #EF5350; }
-        .status-badge.released { background: rgba(0, 150, 136, 0.2); color: #26A69A; }
-        .status-badge.pending { background: rgba(156, 39, 176, 0.2); color: #AB47BC; }
-        .status-badge.qualified { background: rgba(33, 150, 243, 0.2); color: #42A5F5; }
+
+        .status-badge.submitted {
+            background: rgba(255, 152, 0, 0.2);
+            color: #FF9800;
+        }
+
+        .status-badge.reviewing {
+            background: rgba(33, 150, 243, 0.2);
+            color: #42A5F5;
+        }
+
+        .status-badge.approved {
+            background: rgba(76, 175, 80, 0.2);
+            color: #66BB6A;
+        }
+
+        .status-badge.rejected {
+            background: rgba(244, 67, 54, 0.2);
+            color: #EF5350;
+        }
+
+        .status-badge.released {
+            background: rgba(0, 150, 136, 0.2);
+            color: #26A69A;
+        }
+
+        .status-badge.pending {
+            background: rgba(156, 39, 176, 0.2);
+            color: #AB47BC;
+        }
+
+        .status-badge.qualified {
+            background: rgba(33, 150, 243, 0.2);
+            color: #42A5F5;
+        }
 
         .no-data {
             text-align: center;
@@ -928,594 +1202,771 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         /* ========== RESPONSIVE ========== */
         @media (max-width: 1200px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .charts-grid { grid-template-columns: 1fr; }
-            .bottom-grid { grid-template-columns: 1fr; }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .bottom-grid {
+                grid-template-columns: 1fr;
+            }
         }
+
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
+
         @media (max-width: 576px) {
-            .stats-grid { grid-template-columns: 1fr; }
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .search-box input { min-width: 120px; }
-            .bottom-grid { grid-template-columns: 1fr; }
-            .charts-grid { grid-template-columns: 1fr; }
-            .stat-card { padding: 18px 16px; }
-            .stat-number { font-size: 1.6rem; }
-            .stat-icon-wrapper { width: 44px; height: 44px; font-size: 1.2rem; }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .top-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box input {
+                min-width: 120px;
+            }
+
+            .bottom-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-card {
+                padding: 18px 16px;
+            }
+
+            .stat-number {
+                font-size: 1.6rem;
+            }
+
+            .stat-icon-wrapper {
+                width: 44px;
+                height: 44px;
+                font-size: 1.2rem;
+            }
         }
     </style>
 </head>
+
 <body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-wrapper">
+                    <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
+                    <div class="logo-text">
+                        <h2>One Palayan-Kalinga Hub</h2>
+                        <span>Admin Panel</span>
+                    </div>
+                </div>
+            </div>
+
+            <ul class="sidebar-menu">
+                <li><a href="dashboard.php" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li class="menu-divider">User Management</li>
+                <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
+                <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
+                <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
+                <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
+            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
+                <li class="menu-divider">System</li>
+                <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
+                <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
+                <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
+                <li class="menu-divider"></li>
+                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar"><?php echo $initials; ?></div>
+                    <div class="user-details">
+                        <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
+                        <p>Administrator</p>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <p>Administrator</p>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <div class="page-title">
+                    <h1>Dashboard</h1>
+                    <p>Overview of the One Palayan-Kalinga Hub</p>
                 </div>
+                <div class="top-bar-actions">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Search..." id="globalSearch">
+                    </div>
+                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
+                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
+                    </button>
+                    <a href="audit-logs.php" class="top-icon"><i class="fas fa-bell"></i></a>
+                    <a href="settings.php" class="top-icon"><i class="fas fa-cog"></i></a>
+                </div>
+            </div>
+
+            <!-- Enhanced Stats Grid -->
+            <div class="stats-grid">
+                <!-- Pending Verifications -->
+                <div class="stat-card orange" onclick="window.location.href='manage-verifications.php?status=pending'">
+                    <div class="stat-top">
+                        <div class="stat-icon-wrapper orange"><i class="fas fa-clock"></i></div>
+                        <span class="stat-badge">Needs Review</span>
+                    </div>
+                    <div class="stat-number"><?php echo number_format($stats['pending_verifications']); ?></div>
+                    <div class="stat-label">Pending Verifications</div>
+                    <div class="stat-footer">
+                        <i class="fas fa-users"></i>
+                        <?php echo number_format($stats['total_residents']); ?> total residents
+                    </div>
+                </div>
+
+                <!-- Verified Residents -->
+                <div class="stat-card green" onclick="window.location.href='manage-verifications.php?status=verified'">
+                    <div class="stat-top">
+                        <div class="stat-icon-wrapper green"><i class="fas fa-check-circle"></i></div>
+                        <span class="stat-badge">Active</span>
+                    </div>
+                    <div class="stat-number"><?php echo number_format($stats['verified_residents']); ?></div>
+                    <div class="stat-label">Verified Residents</div>
+                    <div class="stat-footer">
+                        <i class="fas fa-user-check"></i>
+                        <?php echo $stats['total_residents'] > 0 ? round(($stats['verified_residents'] / $stats['total_residents']) * 100) : 0; ?>%
+                        verified
+                    </div>
+                </div>
+
+                <!-- Staff Members -->
+                <div class="stat-card blue" onclick="window.location.href='manage-staff.php'">
+                    <div class="stat-top">
+                        <div class="stat-icon-wrapper blue"><i class="fas fa-user-tie"></i></div>
+                        <span class="stat-badge">Team</span>
+                    </div>
+                    <div class="stat-number"><?php echo number_format($stats['total_staff']); ?></div>
+                    <div class="stat-label">Staff Members</div>
+                    <div class="stat-footer">
+                        <i class="fas fa-building"></i> Active staff
+                    </div>
+                </div>
+
+                <!-- Total Residents -->
+                <div class="stat-card purple" onclick="window.location.href='manage-residents.php'">
+                    <div class="stat-top">
+                        <div class="stat-icon-wrapper purple"><i class="fas fa-user-friends"></i></div>
+                        <span class="stat-badge">Community</span>
+                    </div>
+                    <div class="stat-number"><?php echo number_format($stats['total_residents']); ?></div>
+                    <div class="stat-label">Total Residents</div>
+                    <div class="stat-footer">
+                        <i class="fas fa-calendar-alt"></i> Registered users
+                    </div>
+                </div>
+
+                <!-- AICS Requests -->
+                <div class="stat-card maroon" onclick="window.location.href='../staff/manage-aics.php'">
+                    <div class="stat-top">
+                        <div class="stat-icon-wrapper maroon"><i class="fas fa-hand-holding-heart"></i></div>
+                        <span
+                            class="stat-badge"><?php echo $stats['pending_aics'] > 0 ? $stats['pending_aics'] . ' Pending' : 'All'; ?></span>
+                    </div>
+                    <div class="stat-number"><?php echo number_format($stats['total_aics']); ?></div>
+                    <div class="stat-label">AICS Requests</div>
+                    <div class="stat-footer">
+                        <i class="fas fa-hourglass-half"></i>
+                        <?php echo number_format($stats['pending_aics']); ?> pending review
+                    </div>
+                </div>
+
+                <!-- Housing Applications -->
+                <div class="stat-card teal" onclick="window.location.href='../staff/manage-housing.php'">
+                    <div class="stat-top">
+                        <div class="stat-icon-wrapper teal"><i class="fas fa-home"></i></div>
+                        <span
+                            class="stat-badge"><?php echo $stats['pending_housing'] > 0 ? $stats['pending_housing'] . ' Pending' : 'All'; ?></span>
+                    </div>
+                    <div class="stat-number"><?php echo number_format($stats['total_housing']); ?></div>
+                    <div class="stat-label">Housing Applications</div>
+                    <div class="stat-footer">
+                        <i class="fas fa-hourglass-half"></i>
+                        <?php echo number_format($stats['pending_housing']); ?> pending review
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 1 -->
+            <div class="charts-grid">
+                <!-- Monthly Trend Chart (AICS & Appointments Dual Chart) -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-line" style="color: var(--maroon-light); margin-right: 8px;"></i>
+                            AICS & Appointments Trend</h3>
+                        <div class="chart-tabs">
+                            <button class="chart-tab active" onclick="toggleTrendChart('all')">All</button>
+                            <button class="chart-tab" onclick="toggleTrendChart('aics')">AICS</button>
+                            <button class="chart-tab" onclick="toggleTrendChart('appts')">Appts</button>
+                        </div>
+                    </div>
+                    <div class="canvas-wrap h240">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- AICS Status Pie/Doughnut Chart -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS
+                            Status Breakdown</h3>
+                        <span class="badge">Total: <?php echo $stats['total_aics']; ?></span>
+                    </div>
+                    <div class="canvas-wrap h240">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 2 -->
+            <div class="charts-row-2">
+                <!-- AICS Category Breakdown Donut Chart -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS
+                            Category Breakdown</h3>
+                        <span class="badge">Categories Distribution</span>
+                    </div>
+                    <div class="canvas-wrap h240">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Housing Program Status Breakdown Bar Chart -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-home" style="color: var(--maroon-light); margin-right: 8px;"></i> Housing
+                            Status Breakdown</h3>
+                        <span class="badge">Beneficiary Statuses</span>
+                    </div>
+                    <div class="canvas-wrap h240">
+                        <canvas id="housingChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Geographical Demand Heatmap by Barangay -->
+            <div class="chart-card full-width" style="margin-top: 30px; margin-bottom: 30px; grid-column: 1 / -1;">
+                <div class="card-header">
+                    <h3><i class="fas fa-map-marked-alt" style="color: var(--maroon-light); margin-right: 8px;"></i>
+                        Geographical Demand Heatmap (Palayan City by Barangay)</h3>
+                    <span class="badge">AICS & Housing Crisis Distribution</span>
+                </div>
+
+                <div
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 20px;">
+                    <!-- SVGMockup Map Container -->
+                    <div
+                        style="background: var(--bg-primary); border-radius: var(--radius-element); padding: 15px; text-align: center; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 250px;">
+                        <span
+                            style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; display: block;"><i
+                                class="fas fa-map"></i> Palayan City Heatmap Visual</span>
+                        <svg viewBox="0 0 400 240" style="width: 100%; max-height: 220px;">
+                            <!-- Mockup contours of Palayan City Barangays -->
+                            <g stroke="var(--bg-card)" stroke-width="2" fill="none">
+                                <path d="M50,120 L120,40 L190,70 L150,140 Z" fill="#4CAF50" fill-opacity="0.6"
+                                    title="Barangay Atate" style="transition: all 0.3s; cursor: pointer;"
+                                    onmouseover="this.style.fillOpacity=0.9" onmouseout="this.style.fillOpacity=0.6" />
+                                <path d="M120,40 L210,20 L270,90 L190,70 Z" fill="#FF9800" fill-opacity="0.6"
+                                    title="Barangay Singalat" style="transition: all 0.3s; cursor: pointer;"
+                                    onmouseover="this.style.fillOpacity=0.9" onmouseout="this.style.fillOpacity=0.6" />
+                                <path d="M150,140 L190,70 L270,90 L230,180 L180,170 Z" fill="#F44336" fill-opacity="0.6"
+                                    title="Barangay Caballero" style="transition: all 0.3s; cursor: pointer;"
+                                    onmouseover="this.style.fillOpacity=0.9" onmouseout="this.style.fillOpacity=0.6" />
+                                <path d="M270,90 L340,50 L380,120 L310,170 Z" fill="#4CAF50" fill-opacity="0.6"
+                                    title="Barangay Ganaderia" style="transition: all 0.3s; cursor: pointer;"
+                                    onmouseover="this.style.fillOpacity=0.9" onmouseout="this.style.fillOpacity=0.6" />
+                                <path d="M230,180 L310,170 L280,230 L200,220 Z" fill="#FF9800" fill-opacity="0.6"
+                                    title="Barangay Mapait" style="transition: all 0.3s; cursor: pointer;"
+                                    onmouseover="this.style.fillOpacity=0.9" onmouseout="this.style.fillOpacity=0.6" />
+                                <path d="M310,170 L380,120 L390,190 Z" fill="#4CAF50" fill-opacity="0.6"
+                                    title="Barangay Marcos Village" style="transition: all 0.3s; cursor: pointer;"
+                                    onmouseover="this.style.fillOpacity=0.9" onmouseout="this.style.fillOpacity=0.6" />
+                            </g>
+                            <!-- Legend -->
+                            <g transform="translate(10, 200)" font-size="10" font-family="Inter"
+                                fill="var(--text-secondary)">
+                                <rect width="12" height="12" fill="#F44336" rx="2" />
+                                <text x="18" y="10">High Demand (Caballero)</text>
+
+                                <rect x="150" width="12" height="12" fill="#FF9800" rx="2" />
+                                <text x="168" y="10">Moderate (Singalat/Mapait)</text>
+
+                                <rect x="300" width="12" height="12" fill="#4CAF50" rx="2" />
+                                <text x="318" y="10">Low (Atate/Others)</text>
+                            </g>
+                        </svg>
+                    </div>
+
+                    <!-- Barangay Stats List -->
+                    <div
+                        style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px;">
+                        <span
+                            style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);"><i
+                                class="fas fa-list"></i> Barangay Demand Rankings</span>
+                        <?php
+                        $max_total = 1;
+                        foreach ($barangay_stats as $bs) {
+                            $total = (int) $bs['aics_count'] + (int) $bs['housing_count'];
+                            if ($total > $max_total)
+                                $max_total = $total;
+                        }
+                        if (count($barangay_stats) > 0):
+                            foreach ($barangay_stats as $bs):
+                                $aics_cnt = (int) $bs['aics_count'];
+                                $housing_cnt = (int) $bs['housing_count'];
+                                $total_cnt = $aics_cnt + $housing_cnt;
+                                $pct = round(($total_cnt / $max_total) * 100);
+                                $heat_color = $pct > 70 ? 'var(--color-danger)' : ($pct > 30 ? 'var(--color-warning)' : 'var(--color-success)');
+                                ?>
+                                <div
+                                    style="background: var(--bg-card); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
+                                    <div
+                                        style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600;">
+                                        <span
+                                            style="color: var(--text-primary);"><?php echo htmlspecialchars($bs['barangay']); ?></span>
+                                        <span style="color: <?php echo $heat_color; ?>;"><?php echo $total_cnt; ?>
+                                            requests</span>
+                                    </div>
+                                    <div style="display: flex; gap: 8px; font-size: 0.65rem; color: var(--text-muted);">
+                                        <span>AICS: <?php echo $aics_cnt; ?></span>
+                                        <span>•</span>
+                                        <span>Housing: <?php echo $housing_cnt; ?></span>
+                                    </div>
+                                    <div
+                                        style="width: 100%; height: 6px; background: var(--bg-primary); border-radius: 10px; overflow: hidden; margin-top: 2px;">
+                                        <div
+                                            style="width: <?php echo $pct; ?>%; height: 100%; background: <?php echo $heat_color; ?>; border-radius: 10px;">
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php
+                            endforeach;
+                        else:
+                            ?>
+                            <p style="font-size: 0.8rem; text-align: center; margin-top: 30px; color: var(--text-muted);">No
+                                geographical data recorded yet.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity Sections -->
+            <div class="bottom-grid">
+                <!-- Recent AICS -->
+                <div class="recent-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-hand-holding-heart"
+                                style="color: var(--maroon-light); margin-right: 8px;"></i> Recent AICS Requests</h3>
+                        <a href="../staff/manage-aics.php">View All →</a>
+                    </div>
+                    <?php if (count($recent_aics) > 0): ?>
+                        <?php foreach ($recent_aics as $a): ?>
+                            <div class="activity-item">
+                                <div class="activity-icon aics"><i class="fas fa-file-alt"></i></div>
+                                <div class="activity-content">
+                                    <div class="title"><?php echo htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?>
+                                    </div>
+                                    <div class="desc"><?php echo ucfirst($a['request_type']); ?> •
+                                        ₱<?php echo number_format($a['amount_requested'] ?? 0, 2); ?></div>
+                                </div>
+                                <span
+                                    class="status-badge <?php echo $a['status']; ?>"><?php echo ucfirst($a['status']); ?></span>
+                                <span class="activity-time"><?php echo date('M d', strtotime($a['submission_date'])); ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p class="no-data">No recent AICS requests</p>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Recent Housing -->
+                <div class="recent-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-home" style="color: var(--maroon-light); margin-right: 8px;"></i> Recent
+                            Housing Applications</h3>
+                        <a href="../staff/manage-housing.php">View All →</a>
+                    </div>
+                    <?php if (count($recent_housing) > 0): ?>
+                        <?php foreach ($recent_housing as $h): ?>
+                            <div class="activity-item">
+                                <div class="activity-icon housing"><i class="fas fa-building"></i></div>
+                                <div class="activity-content">
+                                    <div class="title"><?php echo htmlspecialchars($h['first_name'] . ' ' . $h['last_name']); ?>
+                                    </div>
+                                    <div class="desc"><?php echo htmlspecialchars($h['program_name'] ?? 'N/A'); ?></div>
+                                </div>
+                                <span
+                                    class="status-badge <?php echo $h['status']; ?>"><?php echo ucfirst($h['status']); ?></span>
+                                <span class="activity-time"><?php echo date('M d', strtotime($h['application_date'])); ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p class="no-data">No recent housing applications</p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Recent Activities (Audit Logs) -->
+            <div class="recent-card" style="margin-top: 0;">
+                <div class="card-header">
+                    <h3><i class="fas fa-clock" style="color: var(--maroon-light); margin-right: 8px;"></i> Recent
+                        System Activities</h3>
+                    <a href="audit-logs.php">View All →</a>
+                </div>
+                <?php if (!empty($recent_activities)): ?>
+                    <?php foreach (array_slice($recent_activities, 0, 5) as $activity): ?>
+                        <div class="activity-item">
+                            <div class="activity-icon system"><i class="fas fa-user-check"></i></div>
+                            <div class="activity-content">
+                                <div class="title">User #<?php echo $activity['user_id']; ?> •
+                                    <?php echo ucfirst($activity['action']); ?></div>
+                                <div class="desc">
+                                    <?php echo $activity['table_affected'] ? 'Table: ' . $activity['table_affected'] : 'System action'; ?>
+                                </div>
+                            </div>
+                            <span
+                                class="activity-time"><?php echo date('M d, h:i A', strtotime($activity['created_at'])); ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <p class="no-data">No recent activities</p>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1>Dashboard</h1>
-                <p>Overview of the One Palayan-Kalinga Hub</p>
-            </div>
-            <div class="top-bar-actions">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search..." id="globalSearch">
-                </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="audit-logs.php" class="top-icon"><i class="fas fa-bell"></i></a>
-                <a href="settings.php" class="top-icon"><i class="fas fa-cog"></i></a>
-            </div>
-        </div>
+    <script>
+        // ========== THEME TOGGLE ==========
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
 
-        <!-- Enhanced Stats Grid -->
-        <div class="stats-grid">
-            <!-- Pending Verifications -->
-            <div class="stat-card orange" onclick="window.location.href='manage-verifications.php?status=pending'">
-                <div class="stat-top">
-                    <div class="stat-icon-wrapper orange"><i class="fas fa-clock"></i></div>
-                    <span class="stat-badge">Needs Review</span>
-                </div>
-                <div class="stat-number"><?php echo number_format($stats['pending_verifications']); ?></div>
-                <div class="stat-label">Pending Verifications</div>
-                <div class="stat-footer">
-                    <i class="fas fa-users"></i> 
-                    <?php echo number_format($stats['total_residents']); ?> total residents
-                </div>
-            </div>
+        // Check for saved theme preference
+        const currentTheme = localStorage.getItem('theme') ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
-            <!-- Verified Residents -->
-            <div class="stat-card green" onclick="window.location.href='manage-verifications.php?status=verified'">
-                <div class="stat-top">
-                    <div class="stat-icon-wrapper green"><i class="fas fa-check-circle"></i></div>
-                    <span class="stat-badge">Active</span>
-                </div>
-                <div class="stat-number"><?php echo number_format($stats['verified_residents']); ?></div>
-                <div class="stat-label">Verified Residents</div>
-                <div class="stat-footer">
-                    <i class="fas fa-user-check"></i> 
-                    <?php echo $stats['total_residents'] > 0 ? round(($stats['verified_residents'] / $stats['total_residents']) * 100) : 0; ?>% verified
-                </div>
-            </div>
+        // Apply theme
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
 
-            <!-- Staff Members -->
-            <div class="stat-card blue" onclick="window.location.href='manage-staff.php'">
-                <div class="stat-top">
-                    <div class="stat-icon-wrapper blue"><i class="fas fa-user-tie"></i></div>
-                    <span class="stat-badge">Team</span>
-                </div>
-                <div class="stat-number"><?php echo number_format($stats['total_staff']); ?></div>
-                <div class="stat-label">Staff Members</div>
-                <div class="stat-footer">
-                    <i class="fas fa-building"></i> Active staff
-                </div>
-            </div>
+            // Update icon
+            const icon = themeToggle.querySelector('i');
+            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
 
-            <!-- Total Residents -->
-            <div class="stat-card purple" onclick="window.location.href='manage-residents.php'">
-                <div class="stat-top">
-                    <div class="stat-icon-wrapper purple"><i class="fas fa-user-friends"></i></div>
-                    <span class="stat-badge">Community</span>
-                </div>
-                <div class="stat-number"><?php echo number_format($stats['total_residents']); ?></div>
-                <div class="stat-label">Total Residents</div>
-                <div class="stat-footer">
-                    <i class="fas fa-calendar-alt"></i> Registered users
-                </div>
-            </div>
-
-            <!-- AICS Requests -->
-            <div class="stat-card maroon" onclick="window.location.href='../staff/manage-aics.php'">
-                <div class="stat-top">
-                    <div class="stat-icon-wrapper maroon"><i class="fas fa-hand-holding-heart"></i></div>
-                    <span class="stat-badge"><?php echo $stats['pending_aics'] > 0 ? $stats['pending_aics'] . ' Pending' : 'All'; ?></span>
-                </div>
-                <div class="stat-number"><?php echo number_format($stats['total_aics']); ?></div>
-                <div class="stat-label">AICS Requests</div>
-                <div class="stat-footer">
-                    <i class="fas fa-hourglass-half"></i> 
-                    <?php echo number_format($stats['pending_aics']); ?> pending review
-                </div>
-            </div>
-
-            <!-- Housing Applications -->
-            <div class="stat-card teal" onclick="window.location.href='../staff/manage-housing.php'">
-                <div class="stat-top">
-                    <div class="stat-icon-wrapper teal"><i class="fas fa-home"></i></div>
-                    <span class="stat-badge"><?php echo $stats['pending_housing'] > 0 ? $stats['pending_housing'] . ' Pending' : 'All'; ?></span>
-                </div>
-                <div class="stat-number"><?php echo number_format($stats['total_housing']); ?></div>
-                <div class="stat-label">Housing Applications</div>
-                <div class="stat-footer">
-                    <i class="fas fa-hourglass-half"></i> 
-                    <?php echo number_format($stats['pending_housing']); ?> pending review
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row 1 -->
-        <div class="charts-grid">
-            <!-- Monthly Trend Chart (AICS & Appointments Dual Chart) -->
-            <div class="chart-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-chart-line" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS & Appointments Trend</h3>
-                    <div class="chart-tabs">
-                        <button class="chart-tab active" onclick="toggleTrendChart('all')">All</button>
-                        <button class="chart-tab" onclick="toggleTrendChart('aics')">AICS</button>
-                        <button class="chart-tab" onclick="toggleTrendChart('appts')">Appts</button>
-                    </div>
-                </div>
-                <div class="canvas-wrap h240">
-                    <canvas id="trendChart"></canvas>
-                </div>
-            </div>
-
-            <!-- AICS Status Pie/Doughnut Chart -->
-            <div class="chart-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS Status Breakdown</h3>
-                    <span class="badge">Total: <?php echo $stats['total_aics']; ?></span>
-                </div>
-                <div class="canvas-wrap h240">
-                    <canvas id="statusChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row 2 -->
-        <div class="charts-row-2">
-            <!-- AICS Category Breakdown Donut Chart -->
-            <div class="chart-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-chart-pie" style="color: var(--maroon-light); margin-right: 8px;"></i> AICS Category Breakdown</h3>
-                    <span class="badge">Categories Distribution</span>
-                </div>
-                <div class="canvas-wrap h240">
-                    <canvas id="categoryChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Housing Program Status Breakdown Bar Chart -->
-            <div class="chart-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-home" style="color: var(--maroon-light); margin-right: 8px;"></i> Housing Status Breakdown</h3>
-                    <span class="badge">Beneficiary Statuses</span>
-                </div>
-                <div class="canvas-wrap h240">
-                    <canvas id="housingChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Activity Sections -->
-        <div class="bottom-grid">
-            <!-- Recent AICS -->
-            <div class="recent-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-hand-holding-heart" style="color: var(--maroon-light); margin-right: 8px;"></i> Recent AICS Requests</h3>
-                    <a href="../staff/manage-aics.php">View All →</a>
-                </div>
-                <?php if (count($recent_aics) > 0): ?>
-                    <?php foreach ($recent_aics as $a): ?>
-                    <div class="activity-item">
-                        <div class="activity-icon aics"><i class="fas fa-file-alt"></i></div>
-                        <div class="activity-content">
-                            <div class="title"><?php echo htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></div>
-                            <div class="desc"><?php echo ucfirst($a['request_type']); ?> • ₱<?php echo number_format($a['amount_requested'] ?? 0, 2); ?></div>
-                        </div>
-                        <span class="status-badge <?php echo $a['status']; ?>"><?php echo ucfirst($a['status']); ?></span>
-                        <span class="activity-time"><?php echo date('M d', strtotime($a['submission_date'])); ?></span>
-                    </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <p class="no-data">No recent AICS requests</p>
-                <?php endif; ?>
-            </div>
-
-            <!-- Recent Housing -->
-            <div class="recent-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-home" style="color: var(--maroon-light); margin-right: 8px;"></i> Recent Housing Applications</h3>
-                    <a href="../staff/manage-housing.php">View All →</a>
-                </div>
-                <?php if (count($recent_housing) > 0): ?>
-                    <?php foreach ($recent_housing as $h): ?>
-                    <div class="activity-item">
-                        <div class="activity-icon housing"><i class="fas fa-building"></i></div>
-                        <div class="activity-content">
-                            <div class="title"><?php echo htmlspecialchars($h['first_name'] . ' ' . $h['last_name']); ?></div>
-                            <div class="desc"><?php echo htmlspecialchars($h['program_name'] ?? 'N/A'); ?></div>
-                        </div>
-                        <span class="status-badge <?php echo $h['status']; ?>"><?php echo ucfirst($h['status']); ?></span>
-                        <span class="activity-time"><?php echo date('M d', strtotime($h['application_date'])); ?></span>
-                    </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <p class="no-data">No recent housing applications</p>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Recent Activities (Audit Logs) -->
-        <div class="recent-card" style="margin-top: 0;">
-            <div class="card-header">
-                <h3><i class="fas fa-clock" style="color: var(--maroon-light); margin-right: 8px;"></i> Recent System Activities</h3>
-                <a href="audit-logs.php">View All →</a>
-            </div>
-            <?php if (!empty($recent_activities)): ?>
-                <?php foreach (array_slice($recent_activities, 0, 5) as $activity): ?>
-                <div class="activity-item">
-                    <div class="activity-icon system"><i class="fas fa-user-check"></i></div>
-                    <div class="activity-content">
-                        <div class="title">User #<?php echo $activity['user_id']; ?> • <?php echo ucfirst($activity['action']); ?></div>
-                        <div class="desc"><?php echo $activity['table_affected'] ? 'Table: ' . $activity['table_affected'] : 'System action'; ?></div>
-                    </div>
-                    <span class="activity-time"><?php echo date('M d, h:i A', strtotime($activity['created_at'])); ?></span>
-                </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <p class="no-data">No recent activities</p>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
-
-<script>
-// ========== THEME TOGGLE ==========
-const themeToggle = document.getElementById('themeToggle');
-const html = document.documentElement;
-
-// Check for saved theme preference
-const currentTheme = localStorage.getItem('theme') || 
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-// Apply theme
-function setTheme(theme) {
-    html.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    // Update icon
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    
-    // Set cookie for PHP
-    document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-}
-
-// Initialize theme
-setTheme(currentTheme);
-
-// Toggle on click
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    const newTheme = current === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    setTimeout(updateChartsTheme, 50);
-});
-
-// ========== SEARCH FUNCTIONALITY ==========
-document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
-    if (e.key === 'Enter') {
-        const query = this.value.trim();
-        if (query) {
-            window.location.href = 'manage-residents.php?search=' + encodeURIComponent(query);
+            // Set cookie for PHP
+            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
         }
-    }
-});
 
-// ========== INITIALIZE CHARTS ==========
-let trendChartInstance = null;
-let statusChartInstance = null;
-let categoryChartInstance = null;
-let housingChartInstance = null;
+        // Initialize theme
+        setTheme(currentTheme);
 
-function getThemeColors() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    return {
-        text: isDark ? '#b0bec5' : '#37474f',
-        grid: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-        tooltipBg: isDark ? '#1a2332' : '#ffffff',
-        tooltipColor: isDark ? '#ffffff' : '#263238',
-        border: isDark ? '#2a3547' : '#e8ecf2',
-        cardBg: isDark ? '#1a2332' : '#ffffff'
-    };
-}
+        // Toggle on click
+        themeToggle.addEventListener('click', () => {
+            const current = html.getAttribute('data-theme');
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+            setTimeout(updateChartsTheme, 50);
+        });
 
-function initTrendChart() {
-    const ctx = document.getElementById('trendChart')?.getContext('2d');
-    if (!ctx) return;
-    const colors = getThemeColors();
-    trendChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: <?php echo $js_chart_labels; ?>,
-            datasets: [
-                {
-                    label: 'AICS Applications',
-                    data: <?php echo $js_chart_aics; ?>,
-                    borderColor: '#7F0303',
-                    backgroundColor: 'rgba(127, 3, 3, 0.06)',
-                    borderWidth: 3,
-                    tension: 0.35,
-                    fill: true,
-                    pointBackgroundColor: '#7F0303',
-                    pointHoverRadius: 6
-                },
-                {
-                    label: 'Appointments',
-                    data: <?php echo $js_chart_appts; ?>,
-                    borderColor: '#FFC107',
-                    backgroundColor: 'rgba(255, 193, 7, 0.06)',
-                    borderWidth: 3,
-                    tension: 0.35,
-                    fill: true,
-                    pointBackgroundColor: '#FFC107',
-                    pointHoverRadius: 6
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: { color: colors.text, font: { family: 'Inter', weight: 600 } }
-                },
-                tooltip: {
-                    backgroundColor: colors.tooltipBg,
-                    titleColor: colors.tooltipColor,
-                    bodyColor: colors.tooltipColor,
-                    borderColor: colors.border,
-                    borderWidth: 1
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { color: colors.text }
-                },
-                y: {
-                    grid: { color: colors.grid },
-                    ticks: { color: colors.text }
+        // ========== SEARCH FUNCTIONALITY ==========
+        document.getElementById('globalSearch')?.addEventListener('keyup', function (e) {
+            if (e.key === 'Enter') {
+                const query = this.value.trim();
+                if (query) {
+                    window.location.href = 'manage-residents.php?search=' + encodeURIComponent(query);
                 }
             }
-        }
-    });
-}
+        });
 
-function initStatusChart() {
-    const ctx = document.getElementById('statusChart')?.getContext('2d');
-    if (!ctx) return;
-    const colors = getThemeColors();
-    statusChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: <?php echo $js_status_labels; ?>,
-            datasets: [{
-                data: <?php echo $js_status_values; ?>,
-                backgroundColor: <?php echo $js_status_colors; ?>,
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '70%',
-            plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { color: colors.text, font: { family: 'Inter', size: 11, weight: 600 } }
+        // ========== INITIALIZE CHARTS ==========
+        let trendChartInstance = null;
+        let statusChartInstance = null;
+        let categoryChartInstance = null;
+        let housingChartInstance = null;
+
+        function getThemeColors() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            return {
+                text: isDark ? '#b0bec5' : '#37474f',
+                grid: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                tooltipBg: isDark ? '#1a2332' : '#ffffff',
+                tooltipColor: isDark ? '#ffffff' : '#263238',
+                border: isDark ? '#2a3547' : '#e8ecf2',
+                cardBg: isDark ? '#1a2332' : '#ffffff'
+            };
+        }
+
+        function initTrendChart() {
+            const ctx = document.getElementById('trendChart')?.getContext('2d');
+            if (!ctx) return;
+            const colors = getThemeColors();
+            trendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: <?php echo $js_chart_labels; ?>,
+                    datasets: [
+                        {
+                            label: 'AICS Applications',
+                            data: <?php echo $js_chart_aics; ?>,
+                            borderColor: '#7F0303',
+                            backgroundColor: 'rgba(127, 3, 3, 0.06)',
+                            borderWidth: 3,
+                            tension: 0.35,
+                            fill: true,
+                            pointBackgroundColor: '#7F0303',
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Appointments',
+                            data: <?php echo $js_chart_appts; ?>,
+                            borderColor: '#FFC107',
+                            backgroundColor: 'rgba(255, 193, 7, 0.06)',
+                            borderWidth: 3,
+                            tension: 0.35,
+                            fill: true,
+                            pointBackgroundColor: '#FFC107',
+                            pointHoverRadius: 6
+                        }
+                    ]
                 },
-                tooltip: {
-                    backgroundColor: colors.tooltipBg,
-                    titleColor: colors.tooltipColor,
-                    bodyColor: colors.tooltipColor,
-                    borderColor: colors.border,
-                    borderWidth: 1
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { color: colors.text, font: { family: 'Inter', weight: 600 } }
+                        },
+                        tooltip: {
+                            backgroundColor: colors.tooltipBg,
+                            titleColor: colors.tooltipColor,
+                            bodyColor: colors.tooltipColor,
+                            borderColor: colors.border,
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: colors.text }
+                        },
+                        y: {
+                            grid: { color: colors.grid },
+                            ticks: { color: colors.text }
+                        }
+                    }
                 }
-            }
-        }
-    });
-}
-
-function initCategoryChart() {
-    const ctx = document.getElementById('categoryChart')?.getContext('2d');
-    if (!ctx) return;
-    const colors = getThemeColors();
-    categoryChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: <?php echo $js_cat_labels; ?>,
-            datasets: [{
-                data: <?php echo $js_cat_values; ?>,
-                backgroundColor: [
-                    '#7F0303', '#b45309', '#6a1b9a', '#4a148c', '#00695c', '#1565c0', '#2e7d32'
-                ],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { color: colors.text, font: { family: 'Inter', size: 11, weight: 600 } }
-                },
-                tooltip: {
-                    backgroundColor: colors.tooltipBg,
-                    titleColor: colors.tooltipColor,
-                    bodyColor: colors.tooltipColor,
-                    borderColor: colors.border,
-                    borderWidth: 1
-                }
-            }
-        }
-    });
-}
-
-function initHousingChart() {
-    const ctx = document.getElementById('housingChart')?.getContext('2d');
-    if (!ctx) return;
-    const colors = getThemeColors();
-    housingChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: <?php echo $js_h_labels; ?>,
-            datasets: [{
-                label: 'Housing Applications',
-                data: <?php echo $js_h_values; ?>,
-                backgroundColor: '#00695c',
-                borderRadius: 8,
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: colors.tooltipBg,
-                    titleColor: colors.tooltipColor,
-                    bodyColor: colors.tooltipColor,
-                    borderColor: colors.border,
-                    borderWidth: 1
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { color: colors.text }
-                },
-                y: {
-                    grid: { color: colors.grid },
-                    ticks: { color: colors.text, stepSize: 1 }
-                }
-            }
-        }
-    });
-}
-
-function toggleTrendChart(mode) {
-    const tabs = document.querySelectorAll('.chart-tab');
-    tabs.forEach(tab => tab.classList.remove('active'));
-    
-    const btnMap = { 'all': 0, 'aics': 1, 'appts': 2 };
-    if (tabs[btnMap[mode]]) {
-        tabs[btnMap[mode]].classList.add('active');
-    }
-    
-    if (!trendChartInstance) return;
-    
-    if (mode === 'all') {
-        trendChartInstance.setDatasetVisibility(0, true);
-        trendChartInstance.setDatasetVisibility(1, true);
-    } else if (mode === 'aics') {
-        trendChartInstance.setDatasetVisibility(0, true);
-        trendChartInstance.setDatasetVisibility(1, false);
-    } else if (mode === 'appts') {
-        trendChartInstance.setDatasetVisibility(0, false);
-        trendChartInstance.setDatasetVisibility(1, true);
-    }
-    trendChartInstance.update();
-}
-
-function updateChartsTheme() {
-    const colors = getThemeColors();
-    const charts = [trendChartInstance, statusChartInstance, categoryChartInstance, housingChartInstance];
-    charts.forEach(chart => {
-        if (!chart) return;
-        if (chart.options.scales) {
-            Object.keys(chart.options.scales).forEach(scaleKey => {
-                const scale = chart.options.scales[scaleKey];
-                if (scale.grid) scale.grid.color = colors.grid;
-                if (scale.ticks) scale.ticks.color = colors.text;
             });
         }
-        if (chart.options.plugins?.legend?.labels) {
-            chart.options.plugins.legend.labels.color = colors.text;
-        }
-        if (chart.options.plugins?.tooltip) {
-            chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
-            chart.options.plugins.tooltip.titleColor = colors.tooltipColor;
-            chart.options.plugins.tooltip.bodyColor = colors.tooltipColor;
-            chart.options.plugins.tooltip.borderColor = colors.border;
-        }
-        chart.update();
-    });
-}
 
-document.addEventListener('DOMContentLoaded', function() {
-    initTrendChart();
-    initStatusChart();
-    initCategoryChart();
-    initHousingChart();
-});
-</script>
+        function initStatusChart() {
+            const ctx = document.getElementById('statusChart')?.getContext('2d');
+            if (!ctx) return;
+            const colors = getThemeColors();
+            statusChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: <?php echo $js_status_labels; ?>,
+                    datasets: [{
+                        data: <?php echo $js_status_values; ?>,
+                        backgroundColor: <?php echo $js_status_colors; ?>,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { color: colors.text, font: { family: 'Inter', size: 11, weight: 600 } }
+                        },
+                        tooltip: {
+                            backgroundColor: colors.tooltipBg,
+                            titleColor: colors.tooltipColor,
+                            bodyColor: colors.tooltipColor,
+                            borderColor: colors.border,
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function initCategoryChart() {
+            const ctx = document.getElementById('categoryChart')?.getContext('2d');
+            if (!ctx) return;
+            const colors = getThemeColors();
+            categoryChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: <?php echo $js_cat_labels; ?>,
+                    datasets: [{
+                        data: <?php echo $js_cat_values; ?>,
+                        backgroundColor: [
+                            '#7F0303', '#b45309', '#6a1b9a', '#4a148c', '#00695c', '#1565c0', '#2e7d32'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { color: colors.text, font: { family: 'Inter', size: 11, weight: 600 } }
+                        },
+                        tooltip: {
+                            backgroundColor: colors.tooltipBg,
+                            titleColor: colors.tooltipColor,
+                            bodyColor: colors.tooltipColor,
+                            borderColor: colors.border,
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function initHousingChart() {
+            const ctx = document.getElementById('housingChart')?.getContext('2d');
+            if (!ctx) return;
+            const colors = getThemeColors();
+            housingChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?php echo $js_h_labels; ?>,
+                    datasets: [{
+                        label: 'Housing Applications',
+                        data: <?php echo $js_h_values; ?>,
+                        backgroundColor: '#00695c',
+                        borderRadius: 8,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: colors.tooltipBg,
+                            titleColor: colors.tooltipColor,
+                            bodyColor: colors.tooltipColor,
+                            borderColor: colors.border,
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: colors.text }
+                        },
+                        y: {
+                            grid: { color: colors.grid },
+                            ticks: { color: colors.text, stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function toggleTrendChart(mode) {
+            const tabs = document.querySelectorAll('.chart-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            const btnMap = { 'all': 0, 'aics': 1, 'appts': 2 };
+            if (tabs[btnMap[mode]]) {
+                tabs[btnMap[mode]].classList.add('active');
+            }
+
+            if (!trendChartInstance) return;
+
+            if (mode === 'all') {
+                trendChartInstance.setDatasetVisibility(0, true);
+                trendChartInstance.setDatasetVisibility(1, true);
+            } else if (mode === 'aics') {
+                trendChartInstance.setDatasetVisibility(0, true);
+                trendChartInstance.setDatasetVisibility(1, false);
+            } else if (mode === 'appts') {
+                trendChartInstance.setDatasetVisibility(0, false);
+                trendChartInstance.setDatasetVisibility(1, true);
+            }
+            trendChartInstance.update();
+        }
+
+        function updateChartsTheme() {
+            const colors = getThemeColors();
+            const charts = [trendChartInstance, statusChartInstance, categoryChartInstance, housingChartInstance];
+            charts.forEach(chart => {
+                if (!chart) return;
+                if (chart.options.scales) {
+                    Object.keys(chart.options.scales).forEach(scaleKey => {
+                        const scale = chart.options.scales[scaleKey];
+                        if (scale.grid) scale.grid.color = colors.grid;
+                        if (scale.ticks) scale.ticks.color = colors.text;
+                    });
+                }
+                if (chart.options.plugins?.legend?.labels) {
+                    chart.options.plugins.legend.labels.color = colors.text;
+                }
+                if (chart.options.plugins?.tooltip) {
+                    chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+                    chart.options.plugins.tooltip.titleColor = colors.tooltipColor;
+                    chart.options.plugins.tooltip.bodyColor = colors.tooltipColor;
+                    chart.options.plugins.tooltip.borderColor = colors.border;
+                }
+                chart.update();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            initTrendChart();
+            initStatusChart();
+            initCategoryChart();
+            initHousingChart();
+        });
+    </script>
 </body>
+
 </html>
+
+

@@ -205,3 +205,4 @@ function updateFooterStats() {
 // Update stats on page load
 document.addEventListener('DOMContentLoaded', updateFooterStats);
 </script>
+<script src="js/draft-preservation.js"></script>

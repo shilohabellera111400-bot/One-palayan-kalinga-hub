@@ -157,12 +157,88 @@ switch($request['request_type']) {
         break;
 }
 
+// Handle new comment submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_comment') {
+    $comment_text = sanitize($_POST['comment_text'] ?? '');
+    
+    if (!empty($comment_text)) {
+        $user_id = $_SESSION['user_id'];
+        $attachment_path = null;
+        
+        // Handle optional attachment upload
+        if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+            $file_tmp = $_FILES['attachment']['tmp_name'];
+            $file_name = $_FILES['attachment']['name'];
+            $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+            $allowed_exts = ['pdf', 'jpg', 'jpeg', 'png'];
+            
+            if (in_array($file_ext, $allowed_exts)) {
+                $new_filename = uniqid('comment_', true) . '_' . time() . '.' . $file_ext;
+                $upload_dir = __DIR__ . '/../uploads/aics/';
+                if (!is_dir($upload_dir)) {
+                    mkdir($upload_dir, 0755, true);
+                }
+                
+                $dest_path = $upload_dir . $new_filename;
+                if (move_uploaded_file($file_tmp, $dest_path)) {
+                    $attachment_path = 'uploads/aics/' . $new_filename;
+                    
+                    // Also record this as a supporting document for the application!
+                    $doc_query = "INSERT INTO aics_documents (aics_id, document_type, document_name, document_path) 
+                                  VALUES (:aics_id, 'supporting_document', :doc_name, :doc_path)";
+                    $doc_stmt = $db->prepare($doc_query);
+                    $doc_stmt->bindValue(':aics_id', $aics_id);
+                    $doc_stmt->bindValue(':doc_name', 'Comment Attachment: ' . $file_name);
+                    $doc_stmt->bindValue(':doc_path', $attachment_path);
+                    $doc_stmt->execute();
+                }
+            }
+        }
+        
+        // Insert comment
+        $insert_query = "INSERT INTO aics_comments (aics_id, user_id, comment_text, attachment_path) 
+                         VALUES (:aics_id, :user_id, :comment_text, :attachment_path)";
+        $insert_stmt = $db->prepare($insert_query);
+        $insert_stmt->bindValue(':aics_id', $aics_id);
+        $insert_stmt->bindValue(':user_id', $user_id);
+        $insert_stmt->bindValue(':comment_text', $comment_text);
+        $insert_stmt->bindValue(':attachment_path', $attachment_path);
+        
+        if ($insert_stmt->execute()) {
+            // Also notify the applicant if the staff commented!
+            if (isStaff() || isAdmin()) {
+                $notif_msg = "A CSWDO staff left a comment on your AICS Application AICS-" . str_pad($aics_id, 6, '0', STR_PAD_LEFT);
+                $notif_query = "INSERT INTO notifications (user_id, title, message) VALUES (:user_id, 'New Application Comment', :message)";
+                $notif_stmt = $db->prepare($notif_query);
+                $notif_stmt->bindValue(':user_id', $request['user_id']);
+                $notif_stmt->bindValue(':message', $notif_msg);
+                $notif_stmt->execute();
+            }
+            
+            // Redirect to refresh and avoid form re-submission
+            header("Location: view-aics.php?id=" . $aics_id . "&success=Comment posted!");
+            exit;
+        }
+    }
+}
+
 // Fetch supporting documents
 $docs_query = "SELECT * FROM aics_documents WHERE aics_id = :id ORDER BY upload_date DESC";
 $docs_stmt = $db->prepare($docs_query);
 $docs_stmt->bindParam(':id', $aics_id);
 $docs_stmt->execute();
 $documents = $docs_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch comments for this request
+$comments_query = "SELECT c.*, u.first_name, u.last_name, u.role 
+                   FROM aics_comments c 
+                   JOIN users u ON c.user_id = u.user_id 
+                   WHERE c.aics_id = :id 
+                   ORDER BY c.created_at ASC";
+$comments_stmt = $db->prepare($comments_query);
+$comments_stmt->bindParam(':id', $aics_id);
+$comments_stmt->execute();
+$comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Helper function to clean document path
 function cleanDocumentPath($path) {
@@ -308,7 +384,7 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
             --midnight: #0F414A;
             --white: #FFFFFF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -319,11 +395,11 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
             --text-muted: #6B7A8A;
             --text-sidebar: rgba(255,255,255,0.7);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
+            --border-color: #C8D0DC;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
+            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
+            --shadow-md: 0 6px 24px rgba(15,65,74,0.12), 0 2px 8px rgba(0,0,0,0.07);
+            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
             
             --card-bg: #FFFFFF;
@@ -382,6 +458,89 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
             line-height: 1.5;
             min-height: 100vh;
             transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        /* ========== TIMELINE STYLES ========== */
+        .timeline {
+            position: relative;
+            padding-left: 32px;
+            margin: 15px 0 5px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 9px;
+            top: 5px;
+            bottom: 5px;
+            width: 2px;
+            background: var(--border-color);
+            transition: background 0.3s ease;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 24px;
+        }
+        .timeline-item:last-child {
+            margin-bottom: 0;
+        }
+        .timeline-icon {
+            position: absolute;
+            left: -32px;
+            top: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+        .timeline-item.success .timeline-icon {
+            border-color: var(--color-success);
+            color: var(--color-success);
+            background: rgba(76, 175, 80, 0.08);
+        }
+        .timeline-item.active .timeline-icon {
+            border-color: var(--color-warning);
+            color: var(--color-warning);
+            background: rgba(255, 152, 0, 0.08);
+            animation: pulse-border 2s infinite;
+        }
+        .timeline-item.danger .timeline-icon {
+            border-color: var(--color-danger);
+            color: var(--color-danger);
+            background: rgba(239, 83, 80, 0.08);
+        }
+        .timeline-content {
+            padding-left: 8px;
+        }
+        .timeline-content h4 {
+            margin: 0;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .timeline-content p {
+            margin: 3px 0 0;
+            font-size: 0.76rem;
+            color: var(--text-secondary);
+        }
+        .timeline-content .time {
+            display: inline-block;
+            margin-top: 4px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(255, 152, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
         }
 
         .app-container { display: flex; min-height: 100vh; }
@@ -1268,57 +1427,114 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
             </div>
             <?php endif; ?>
             
-            <!-- Processing Information -->
+            <!-- Processing Information & Timeline -->
             <div class="info-card">
                 <div class="card-header">
-                    <i class="fas fa-clipboard-list"></i>
-                    <h3>Processing Information</h3>
-                </div>
-                <div class="info-row">
-                    <span class="label">Current Status</span>
-                    <span class="value">
-                        <span style="background: <?php echo $statusInfo['bg']; ?>; color: <?php echo $statusInfo['color']; ?>; padding: 3px 14px; border-radius: 50px; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 6px;">
-                            <i class="fas <?php echo $statusInfo['icon']; ?>"></i>
-                            <?php echo $statusInfo['text']; ?>
-                        </span>
-                    </span>
+                    <i class="fas fa-history"></i>
+                    <h3>Application Timeline & Status</h3>
                 </div>
                 
-                <?php if($request['reviewed_by'] && isset($staff_info['reviewer'])): ?>
-                <div class="info-row">
-                    <span class="label">Reviewed By</span>
-                    <span class="value"><?php echo htmlspecialchars($staff_info['reviewer']['first_name'] . ' ' . $staff_info['reviewer']['last_name']); ?></span>
+                <div class="timeline">
+                    <!-- Step 1: Submission -->
+                    <div class="timeline-item success">
+                        <div class="timeline-icon">
+                            <i class="fas fa-paper-plane"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Application Submitted</h4>
+                            <p>Submitted successfully by the applicant.</p>
+                            <span class="time"><?php echo date('F d, Y h:i A', strtotime($request['submission_date'])); ?></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2: Review -->
+                    <?php if($request['reviewed_by'] && isset($staff_info['reviewer'])): ?>
+                    <div class="timeline-item success">
+                        <div class="timeline-icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Under Review</h4>
+                            <p>Reviewed by: <strong><?php echo htmlspecialchars($staff_info['reviewer']['first_name'] . ' ' . $staff_info['reviewer']['last_name']); ?></strong></p>
+                            <span class="time"><?php echo date('F d, Y h:i A', strtotime($request['review_date'])); ?></span>
+                        </div>
+                    </div>
+                    <?php elseif($request['status'] == 'submitted'): ?>
+                    <div class="timeline-item active">
+                        <div class="timeline-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Awaiting Review</h4>
+                            <p>Pending staff assignment and document review.</p>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <!-- Step 3: Approval / Rejection -->
+                    <?php if($request['status'] == 'rejected'): ?>
+                    <div class="timeline-item danger">
+                        <div class="timeline-icon">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Application Rejected</h4>
+                            <p style="color: var(--color-danger); font-weight: 500;">Reason: <?php echo nl2br(htmlspecialchars($request['rejection_reason'])); ?></p>
+                            <?php if($request['review_date']): ?>
+                            <span class="time"><?php echo date('F d, Y h:i A', strtotime($request['review_date'])); ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php elseif($request['approved_by'] && isset($staff_info['approver'])): ?>
+                    <div class="timeline-item success">
+                        <div class="timeline-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Approved</h4>
+                            <p>Approved by: <strong><?php echo htmlspecialchars($staff_info['approver']['first_name'] . ' ' . $staff_info['approver']['last_name']); ?></strong></p>
+                            <?php if ($request['amount_approved'] > 0): ?>
+                            <p>Approved Amount: <strong>₱<?php echo number_format($request['amount_approved'], 2); ?></strong></p>
+                            <?php endif; ?>
+                            <span class="time"><?php echo date('F d, Y h:i A', strtotime($request['approval_date'])); ?></span>
+                        </div>
+                    </div>
+                    <?php elseif($request['status'] == 'reviewing'): ?>
+                    <div class="timeline-item active">
+                        <div class="timeline-icon">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Processing Application</h4>
+                            <p>Evaluating eligibility for financial assistance allocation.</p>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <!-- Step 4: Released -->
+                    <?php if($request['status'] == 'released' || $request['release_date']): ?>
+                    <div class="timeline-item success">
+                        <div class="timeline-icon">
+                            <i class="fas fa-hand-holding-usd"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Funds Released</h4>
+                            <p>Financial assistance has been released to the beneficiary.</p>
+                            <span class="time"><?php echo date('F d, Y h:i A', strtotime($request['release_date'])); ?></span>
+                        </div>
+                    </div>
+                    <?php elseif($request['status'] == 'approved'): ?>
+                    <div class="timeline-item active">
+                        <div class="timeline-icon">
+                            <i class="fas fa-hourglass-half"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <h4>Awaiting Fund Release</h4>
+                            <p>Approved funds are being prepared for release.</p>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
-                <div class="info-row">
-                    <span class="label">Review Date</span>
-                    <span class="value"><?php echo date('F d, Y h:i A', strtotime($request['review_date'])); ?></span>
-                </div>
-                <?php endif; ?>
-                
-                <?php if($request['approved_by'] && isset($staff_info['approver'])): ?>
-                <div class="info-row">
-                    <span class="label">Approved By</span>
-                    <span class="value"><?php echo htmlspecialchars($staff_info['approver']['first_name'] . ' ' . $staff_info['approver']['last_name']); ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Approval Date</span>
-                    <span class="value"><?php echo date('F d, Y h:i A', strtotime($request['approval_date'])); ?></span>
-                </div>
-                <?php endif; ?>
-                
-                <?php if($request['release_date']): ?>
-                <div class="info-row">
-                    <span class="label">Release Date</span>
-                    <span class="value"><?php echo date('F d, Y h:i A', strtotime($request['release_date'])); ?></span>
-                </div>
-                <?php endif; ?>
-                
-                <?php if($request['rejection_reason']): ?>
-                <div class="info-row">
-                    <span class="label">Rejection Reason</span>
-                    <span class="value" style="color: var(--color-danger);"><?php echo nl2br(htmlspecialchars($request['rejection_reason'])); ?></span>
-                </div>
-                <?php endif; ?>
             </div>
             
             <!-- Supporting Documents -->
@@ -1364,7 +1580,77 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
                         <p>No documents uploaded</p>
                     </div>
                 <?php endif; ?>
+        </div>
+
+        <!-- Comments & Internal Notes -->
+        <div class="info-card" style="margin-top: 24px; grid-column: 1 / -1;">
+            <div class="card-header">
+                <i class="fas fa-comments"></i>
+                <h3>Application Comments & Chat Thread</h3>
             </div>
+            
+            <div class="comments-thread" style="max-height: 400px; overflow-y: auto; padding: 15px; background: var(--bg-primary); border-radius: var(--radius-element); margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px; border: 1px solid var(--border-color);">
+                <?php if (count($comments) > 0): ?>
+                    <?php foreach ($comments as $comment): 
+                        $is_staff = $comment['role'] === 'staff' || $comment['role'] === 'admin';
+                        $bubble_align = $is_staff ? 'align-self: flex-end; background: rgba(127, 3, 3, 0.08); border-left: 3px solid var(--maroon);' : 'align-self: flex-start; background: var(--bg-card); border-left: 3px solid var(--midnight);';
+                    ?>
+                        <div class="comment-bubble" style="max-width: 75%; padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow-sm); <?php echo $bubble_align; ?>">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 5px; font-size: 0.75rem;">
+                                <strong style="color: var(--text-primary);"><?php echo htmlspecialchars($comment['first_name'] . ' ' . $comment['last_name']); ?> (<?php echo ucfirst($comment['role']); ?>)</strong>
+                                <span style="color: var(--text-muted);"><?php echo date('M d, Y h:i A', strtotime($comment['created_at'])); ?></span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; white-space: pre-wrap;"><?php echo htmlspecialchars($comment['comment_text']); ?></div>
+                            
+                            <?php if (!empty($comment['attachment_path'])): 
+                                $att_path = cleanDocumentPath($comment['attachment_path']);
+                                $att_ext = pathinfo($comment['attachment_path'], PATHINFO_EXTENSION);
+                                $att_is_img = in_array(strtolower($att_ext), ['jpg', 'jpeg', 'png', 'gif']);
+                            ?>
+                                <div class="comment-attachment" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+                                    <?php if ($att_is_img): ?>
+                                        <a href="<?php echo $att_path; ?>" target="_blank">
+                                            <img src="<?php echo $att_path; ?>" alt="Attachment" style="max-width: 100%; max-height: 150px; border-radius: 6px; box-shadow: var(--shadow-sm); margin-top: 5px; display: block;">
+                                        </a>
+                                    <?php else: ?>
+                                        <a href="<?php echo $att_path; ?>" target="_blank" style="font-size: 0.78rem; font-weight: 600; color: var(--maroon-light); display: inline-flex; align-items: center; gap: 5px; text-decoration: none;">
+                                            <i class="fas fa-file-pdf"></i> View Attached PDF
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div style="text-align: center; padding: 30px 0; color: var(--text-muted);">
+                        <i class="fas fa-comments" style="font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                        <p style="font-size: 0.85rem;">No comments posted yet. Start the conversation below!</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <form action="view-aics.php?id=<?php echo $aics_id; ?>" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="add_comment">
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 5px;">Post a Comment / Instructions</label>
+                    <textarea name="comment_text" rows="3" placeholder="Write instructions, requests for clarifications, or updates here..." required style="width: 100%; padding: 12px; border-radius: var(--radius-element); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-family: inherit; resize: vertical; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--maroon-light)'" onblur="this.style.borderColor='var(--border-color)'"></textarea>
+                </div>
+                
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px;">
+                    <div class="file-upload-group" style="display: flex; align-items: center; gap: 10px;">
+                        <label for="comment_attachment" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px; border-radius: 30px; border: 1px solid var(--border-color); background: var(--bg-card); font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); transition: all 0.25s;">
+                            <i class="fas fa-paperclip" style="color: var(--maroon-light);"></i> Attach File (Image/PDF)
+                        </label>
+                        <input type="file" id="comment_attachment" name="attachment" style="display: none;" onchange="document.getElementById('file_chosen_label').textContent = this.files[0] ? this.files[0].name : 'No file chosen'">
+                        <span id="file_chosen_label" style="font-size: 0.75rem; color: var(--text-muted);">No file chosen</span>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary" style="padding: 10px 24px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-paper-plane"></i> Send Message
+                    </button>
+                </div>
+            </form>
         </div>
         
         <!-- Action Buttons -->

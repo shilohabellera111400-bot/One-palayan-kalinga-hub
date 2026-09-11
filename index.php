@@ -852,54 +852,30 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.85rem;
             margin: 0;
         }
-        .housing-image {
-            background: linear-gradient(135deg, var(--midnight), var(--light-blue));
-            border-radius: 28px;
-            padding: 42px;
-            text-align: center;
+
+        .housing-video-wrapper {
             position: relative;
+            border-radius: 28px;
             overflow: hidden;
             min-height: 360px;
+            box-shadow: 0 20px 44px rgba(15,65,74,0.16);
+            background: #000;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 20px 44px rgba(15,65,74,0.16);
-            transition: all 0.4s ease;
+            border: 1px solid var(--border-color);
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
         }
-        .housing-image:hover {
-            transform: scale(1.01);
+        .housing-video-wrapper:hover {
+            transform: scale(1.02);
             box-shadow: 0 24px 50px rgba(15,65,74,0.25);
         }
-        .housing-image i {
-            font-size: 6rem;
-            color: rgba(255,255,255,0.3);
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
-        .housing-image:hover i {
-            transform: scale(1.1);
-            color: rgba(255,255,255,0.5);
-        }
-        .housing-image h3 {
-            color: white;
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-        }
-        .housing-image p {
-            color: rgba(255,255,255,0.7);
-            font-size: 0.9rem;
-        }
-        .image-badge {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: var(--maroon);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 40px;
-            font-size: 0.8rem;
-            animation: pulse 2s infinite;
+        .housing-video-element {
+            width: 100%;
+            height: 100%;
+            min-height: 360px;
+            object-fit: cover;
+            display: block;
         }
 
         /* ========== TRANSPARENCY SECTION ========== */
@@ -1571,11 +1547,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         </div>
                     </div>
                 </div>
-                <div class="housing-image animate-fade-scale delay-2">
-                    <i class="fas fa-home"></i>
-                    <h3>Housing Programs</h3>
-                    <p>AKAP Village • San Lorenzo Residences • Socialized Housing</p>
-                    <div class="image-badge">Housing Program 2026</div>
+                <div class="housing-video-wrapper animate-fade-scale delay-2">
+                    <video class="housing-video-element" controls poster="images/cswdo-housing-assistance.jpg" preload="none">
+                        <source src="video/Palayan%20City%20Township%20Housing%20Fair.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
                 </div>
             </div>
         </div>
@@ -1897,7 +1873,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     console.log('📍 CSWDO Palayan City');
     console.log('💡 Keyboard shortcuts: Ctrl+H (Home), Ctrl+L (Login)');
     console.log('🌓 Toggle dark/light mode using the sun/moon button in the navbar!');
+
     </script>
+
     <script src="js/main.js"></script>
 </body>
 </html>

@@ -100,6 +100,19 @@ function getHousingStatusInfo($status) {
     return $statuses[$status] ?? ['color' => '#999', 'icon' => 'fa-question-circle', 'text' => ucfirst($status), 'bg' => '#f5f5f5'];
 }
 
+// Get user details for profile picture
+$user_info_query = "SELECT profile_picture FROM users WHERE user_id = :user_id";
+$user_info_stmt = $db->prepare($user_info_query);
+$user_info_stmt->bindParam(':user_id', $_SESSION['user_id']);
+$user_info_stmt->execute();
+$user_p = $user_info_stmt->fetch(PDO::FETCH_ASSOC);
+
+// Profile picture path
+$profile_picture = $user_p['profile_picture'] ?? '';
+$avatar_url = !empty($profile_picture) && file_exists($profile_picture)
+    ? $profile_picture
+    : '';
+
 // Get initials for sidebar avatar
 $initials = '';
 $name_parts = explode(' ', $_SESSION['full_name']);
@@ -107,177 +120,20 @@ foreach($name_parts as $part) {
     $initials .= strtoupper(substr($part, 0, 1));
 }
 $initials = substr($initials, 0, 2);
+
+// Check if dark mode is enabled
+$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>View Housing Application - One Palayan-Kalinga Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/portal-layout.css">
     <style>
-        /* ========== COLOR PALETTE ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --alabaster: #EFE8DF;
-            --light-blue: #96C0CE;
-            --midnight: #0F414A;
-            --maroon-light: #9a1515;
-            --white: #FFFFFF;
-            --gray-50: #F8F9FC;
-            --gray-100: #F1F3F8;
-            --gray-200: #E8ECF2;
-            --gray-600: #6B7A8A;
-            --gray-700: #3A4A5A;
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --radius-card: 24px;
-            --radius-element: 16px;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--gray-50);
-            color: var(--gray-700);
-            line-height: 1.5;
-        }
-
-        /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; background: var(--gray-50); }
-
-        /* ========== SIDEBAR - MAROON THEME ========== */
-        .sidebar {
-            width: 280px;
-            background: var(--maroon);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.3rem;
-        }
-        .logo-text h2 {
-            color: white;
-            font-size: 1.1rem;
-            font-weight: 700;
-            line-height: 1.3;
-        }
-        .logo-text p {
-            color: rgba(255,255,255,0.65);
-            font-size: 0.65rem;
-            margin-top: 2px;
-        }
-
-        .user-info-sidebar {
-            padding: 0 20px 24px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .user-avatar {
-            width: 48px;
-            height: 48px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            color: white;
-        }
-        .user-info-sidebar h4 {
-            color: white;
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-        .user-info-sidebar span {
-            color: rgba(255,255,255,0.6);
-            font-size: 0.7rem;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 0 16px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 8px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: rgba(255,255,255,0.8);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 22px; font-size: 1.1rem; color: rgba(255,255,255,0.7); }
-        .sidebar-menu li a:hover { background: rgba(255,255,255,0.12); color: white; }
-        .sidebar-menu li a.active {
-            background: var(--maroon-light);
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .sidebar-menu li a.active i { color: white; }
-
-        .sidebar-footer {
-            padding: 20px 16px 30px 16px;
-            margin-top: auto;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: rgba(255,255,255,0.8);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.08);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.18); color: white; }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 28px 36px;
-        }
-
         /* Breadcrumb */
         .breadcrumb {
             margin-bottom: 20px;
@@ -502,21 +358,30 @@ $initials = substr($initials, 0, 2);
     </style>
 </head>
 <body>
-<div class="app-container">
-    <!-- Sidebar - Maroon Theme -->
-    <div class="sidebar">
-        <div>
+    <div class="app-container">
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo-icon"><i class="fas fa-home"></i></div>
                 <div class="logo-text">
-                    <h2>One Palayan-Kalinga<br>Hub</h2>
-                    <p>Integrated Service Portal</p>
+                    <h2>One Palayan-Kalinga Hub</h2>
+                    <span>Integrated Service Portal</span>
                 </div>
+                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
             <div class="user-info-sidebar">
-                <div class="user-avatar">
-                    <i class="fas fa-user-circle"></i>
+                <div class="user-avatar-sidebar">
+                    <?php if (!empty($avatar_url)): ?>
+                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
+                    <?php else: ?>
+                        <?php echo $initials; ?>
+                    <?php endif; ?>
                 </div>
                 <div>
                     <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
@@ -524,26 +389,33 @@ $initials = substr($initials, 0, 2);
                 </div>
             </div>
             
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
-                <li><a href="appointments.php"><i class="fas fa-calendar-plus"></i> Book Appointment</a></li>
-                <li><a href="my-appointments.php"><i class="fas fa-calendar-check"></i> My Appointments</a></li>
-                <li><a href="aics.php"><i class="fas fa-hand-holding-heart"></i> Apply for AICS</a></li>
-                <li><a href="aics-requests.php"><i class="fas fa-list-alt"></i> AICS Requests</a></li>
-                <li><a href="housing-applications.php"><i class="fas fa-home"></i> Housing Applications</a></li>
-                <li><a href="my-housing.php" class="active"><i class="fas fa-building"></i> My Housing</a></li>
-                <li><a href="documents.php"><i class="fas fa-folder-open"></i> My Documents</a></li>
-                <li><a href="notifications.php"><i class="fas fa-bell"></i> Notifications</a></li>
-            </ul>
+            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
+            
+            <div class="sidebar-footer">
+                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
+            </div>
         </div>
-        <div class="sidebar-footer">
-            <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-        </div>
-    </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
+                        <i class="fas fa-bars"></i>
+                        <span>Menu</span>
+                    </button>
+                    <div class="page-title">
+                        <h1><i class="fas fa-home"></i> Application Details</h1>
+                        <p>View housing application status and beneficiary info</p>
+                    </div>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
+                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
+                    </button>
+                </div>
+            </div>
         <div class="breadcrumb">
             <a href="dashboard.php">Dashboard</a> > 
             <a href="my-housing.php">My Housing</a> > 
@@ -745,6 +617,66 @@ $initials = substr($initials, 0, 2);
             </button>
         </div>
     </div>
-</div>
+    <script>
+        // ========== MOBILE SIDEBAR TOGGLE ==========
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const hamburgerBtn = document.getElementById('hamburgerBtn');
+        const sidebarClose = document.getElementById('sidebarClose');
+
+        function openSidebar() {
+            sidebar.classList.add('open');
+            sidebarOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        if (hamburgerBtn) hamburgerBtn.addEventListener('click', openSidebar);
+        if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
+        // ========== THEME TOGGLE ==========
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+
+        const currentTheme = localStorage.getItem('theme') || 
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = themeToggle ? themeToggle.querySelector('i') : null;
+            if (icon) {
+                icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            }
+            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
+            document.body.style.transition = 'background 0.4s ease, color 0.4s ease';
+        }
+
+        setTheme(currentTheme);
+
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function() {
+                const current = html.getAttribute('data-theme');
+                const newTheme = current === 'dark' ? 'light' : 'dark';
+                setTheme(newTheme);
+                
+                themeToggle.style.transform = 'scale(0.9)';
+                setTimeout(() => { themeToggle.style.transform = ''; }, 200);
+            });
+        }
+
+        // ========== KEYBOARD SHORTCUTS ==========
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeSidebar();
+            }
+        });
+    </script>
 </body>
 </html>

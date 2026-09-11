@@ -27,15 +27,28 @@ $pending_app = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
     csrf_verify();
-    $amount_requested = sanitize($_POST['amount_requested'] ?? 0);
-    $purpose          = sanitize($_POST['purpose']);
-    $household_size   = sanitize($_POST['household_size'] ?? 1);
-    $special_needs    = sanitize($_POST['special_needs'] ?? '');
-    $monthly_income   = sanitize($_POST['amount_requested'] ?? 0);
     
-    $db->beginTransaction();
-    
-    try {
+    // Check if user has active/pending application
+    if ($pending_app && $pending_app['status'] !== 'rejected') {
+        $error = "You already have an active application. Please wait for it to be resolved.";
+    } 
+    // Server-side validation for required files
+    elseif (!isset($_FILES['valid_id']) || $_FILES['valid_id']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A valid ID is required.";
+    } elseif (!isset($_FILES['barangay_certificate']) || $_FILES['barangay_certificate']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A barangay certificate is required.";
+    } elseif (!isset($_FILES['house_photo']) || $_FILES['house_photo']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A house photo is required.";
+    } else {
+        $amount_requested = sanitize($_POST['amount_requested'] ?? 0);
+        $purpose          = sanitize($_POST['purpose']);
+        $household_size   = sanitize($_POST['household_size'] ?? 1);
+        $special_needs    = sanitize($_POST['special_needs'] ?? '');
+        $monthly_income   = sanitize($_POST['amount_requested'] ?? 0);
+        
+        $db->beginTransaction();
+        
+        try {
         $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, status) 
                   VALUES (:user_id, 'food', :amount, 'submitted')";
         $stmt = $db->prepare($query);
@@ -96,9 +109,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $db->commit();
         $success = "Application submitted successfully! Your tracking number is: <strong>$tracking</strong>";
         
+        // Send email confirmation
+        try {
+            require_once __DIR__ . '/includes/Mailer.php';
+            $mailer = new Mailer();
+            $user_query = "SELECT email, first_name, last_name FROM users WHERE user_id = :user_id";
+            $user_stmt = $db->prepare($user_query);
+            $user_stmt->bindParam(':user_id', $_SESSION['user_id']);
+            $user_stmt->execute();
+            $user_info = $user_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user_info && !empty($user_info['email'])) {
+                $user_name = $user_info['first_name'] . ' ' . $user_info['last_name'];
+                $aics_data = [
+                    'aics_id' => $aics_id,
+                    'request_type' => 'food',
+                    'user_id' => $_SESSION['user_id']
+                ];
+                $mailer->sendAICSConfirmation($user_info['email'], $user_name, $aics_data);
+            }
+        } catch (Exception $e) {
+            error_log("AICS food submission email confirmation failed: " . $e->getMessage());
+        }
+        
     } catch (Exception $e) {
         $db->rollBack();
         $error = "Application failed: " . $e->getMessage();
+    }
     }
 }
 ?>

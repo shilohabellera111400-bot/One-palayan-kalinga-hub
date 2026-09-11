@@ -30,10 +30,89 @@ if ($tracking_number) {
         
         if ($stmt->rowCount() > 0) {
             $request = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Handle comment submission for residents
+            if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_comment' && isLoggedIn() && $_SESSION['user_id'] == $request['user_id']) {
+                $comment_text = sanitize($_POST['comment_text'] ?? '');
+                if (!empty($comment_text)) {
+                    $user_id = $_SESSION['user_id'];
+                    $attachment_path = null;
+                    
+                    // Handle attachment upload
+                    if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+                        $file_tmp = $_FILES['attachment']['tmp_name'];
+                        $file_name = $_FILES['attachment']['name'];
+                        $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+                        $allowed_exts = ['pdf', 'jpg', 'jpeg', 'png'];
+                        
+                        if (in_array($file_ext, $allowed_exts)) {
+                            $new_filename = uniqid('comment_', true) . '_' . time() . '.' . $file_ext;
+                            $upload_dir = __DIR__ . '/uploads/aics/';
+                            if (!is_dir($upload_dir)) {
+                                mkdir($upload_dir, 0755, true);
+                            }
+                            
+                            $dest_path = $upload_dir . $new_filename;
+                            if (move_uploaded_file($file_tmp, $dest_path)) {
+                                $attachment_path = 'uploads/aics/' . $new_filename;
+                                
+                                // Record in aics_documents
+                                $doc_query = "INSERT INTO aics_documents (aics_id, document_type, document_name, document_path) 
+                                              VALUES (:aics_id, 'supporting_document', :doc_name, :doc_path)";
+                                $doc_stmt = $db->prepare($doc_query);
+                                $doc_stmt->bindValue(':aics_id', $id);
+                                $doc_stmt->bindValue(':doc_name', 'Resident Attachment: ' . $file_name);
+                                $doc_stmt->bindValue(':doc_path', $attachment_path);
+                                $doc_stmt->execute();
+                            }
+                        }
+                    }
+                    
+                    // Insert comment
+                    $insert_query = "INSERT INTO aics_comments (aics_id, user_id, comment_text, attachment_path) 
+                                     VALUES (:aics_id, :user_id, :comment_text, :attachment_path)";
+                    $insert_stmt = $db->prepare($insert_query);
+                    $insert_stmt->bindValue(':aics_id', $id);
+                    $insert_stmt->bindValue(':user_id', $user_id);
+                    $insert_stmt->bindValue(':comment_text', $comment_text);
+                    $insert_stmt->bindValue(':attachment_path', $attachment_path);
+                    $insert_stmt->execute();
+                    
+                    header("Location: track-aics.php?tracking=" . $tracking_number . "&success=Comment posted!");
+                    exit;
+                }
+            }
+            
+            // Fetch comments
+            $comments_query = "SELECT c.*, u.first_name, u.last_name, u.role 
+                               FROM aics_comments c 
+                               JOIN users u ON c.user_id = u.user_id 
+                               WHERE c.aics_id = :id 
+                               ORDER BY c.created_at ASC";
+            $comments_stmt = $db->prepare($comments_query);
+            $comments_stmt->bindParam(':id', $id);
+            $comments_stmt->execute();
+            $comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
             $error = "No request found with tracking number: " . htmlspecialchars($tracking_number);
         }
     }
+}
+
+// Clean document path helper
+function cleanDocumentPath($path) {
+    if (empty($path)) return '';
+    $path = ltrim($path, '/');
+    if (strpos($path, 'uploads/aics/') !== false) {
+        $parts = explode('uploads/aics/', $path);
+        $filename = end($parts);
+    } elseif (strpos($path, 'aics/') !== false) {
+        $parts = explode('aics/', $path);
+        $filename = end($parts);
+    } else {
+        $filename = basename($path);
+    }
+    return 'uploads/aics/' . ltrim($filename, '/');
 }
 
 // Get recent stats (last 30 days)
@@ -83,17 +162,18 @@ if ($request) {
             --light-blue: #96C0CE;
             --alabaster: #E3E7EB;
             
-            --bg-primary: #EFF1F4;
+            /* Stronger contrast: darker page bg vs pure-white cards */
+            --bg-primary: #E8ECF2;
             --bg-card: #FFFFFF;
             --text-primary: #263238;
             --text-secondary: #3A4A5A;
             --text-muted: #6B7A8A;
-            --border-color: #D5DBE1;
+            --border-color: #C4CDD8;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 10px 30px rgba(15, 65, 74, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-lg: 0 16px 40px rgba(15, 65, 74, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
+            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
+            --shadow-md: 0 6px 24px rgba(15,65,74,0.13), 0 2px 8px rgba(0,0,0,0.07);
+            --shadow-lg: 0 14px 44px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-hover: 0 12px 40px rgba(127,3,3,0.18);
             
             --radius-card: 24px;
             --radius-element: 16px;
@@ -103,7 +183,7 @@ if ($request) {
             --color-danger: #d32f2f;
             --color-info: #0288d1;
             
-            --stepper-track-bg: #E4E7E9;
+            --stepper-track-bg: #D4DAE4;
             --stepper-track-active: #2e7d32;
         }
 
@@ -990,7 +1070,13 @@ if ($request) {
                                 </div>
                                 <div class="step-content">
                                     <h4>Under Review</h4>
-                                    <p><?php echo $request['review_date'] ? date('M d, Y', strtotime($request['review_date'])) : 'Pending Review'; ?></p>
+                                    <?php if ($request['status'] == 'reviewing'): ?>
+                                        <p style="color: var(--color-warning); font-weight: 600; font-size: 0.8rem;">Please visit CSWDO Office at Window 1, 2, or 3 for interview & assessment.</p>
+                                    <?php elseif (in_array($request['status'], ['approved', 'released'])): ?>
+                                        <p style="color: var(--color-success); font-size: 0.8rem;">Interview & assessment completed.</p>
+                                    <?php else: ?>
+                                        <p><?php echo $request['review_date'] ? date('M d, Y', strtotime($request['review_date'])) : 'Pending Review/Interview'; ?></p>
+                                    <?php endif; ?>
                                 </div>
                             </li>
                             
@@ -1012,7 +1098,13 @@ if ($request) {
                                 </div>
                                 <div class="step-content">
                                     <h4>Approved</h4>
-                                    <p><?php echo $request['approval_date'] ? date('M d, Y', strtotime($request['approval_date'])) : 'Pending Approval'; ?></p>
+                                    <?php if ($request['status'] == 'approved'): ?>
+                                        <p style="color: var(--color-success); font-weight: 600; font-size: 0.8rem;">Approved! Forwarded to City Budget Office for voucher processing.</p>
+                                    <?php elseif ($request['status'] == 'released'): ?>
+                                        <p style="color: var(--color-success); font-size: 0.8rem;">Approved & voucher processed.</p>
+                                    <?php else: ?>
+                                        <p><?php echo $request['approval_date'] ? date('M d, Y', strtotime($request['approval_date'])) : 'Pending Approval / Forwarding'; ?></p>
+                                    <?php endif; ?>
                                 </div>
                             </li>
                             <?php endif; ?>
@@ -1087,6 +1179,78 @@ if ($request) {
                         </a>
                     </div>
                     <?php endif; ?>
+                    <!-- Comments & Clarifications Chat -->
+                    <div class="details-section" style="border-top: 1px solid var(--border-color); padding-top: 24px; margin-top: 24px;">
+                        <h3><i class="fas fa-comments"></i> Application Conversation & Clarifications</h3>
+                        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 15px;">Use this thread to communicate with the CSWDO staff regarding requirements, revisions, or questions about your application.</p>
+                        
+                        <div class="comments-thread" style="max-height: 350px; overflow-y: auto; padding: 15px; background: var(--bg-primary); border-radius: var(--radius-element); margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--border-color);">
+                            <?php if (count($comments) > 0): ?>
+                                <?php foreach ($comments as $comment): 
+                                    $is_staff = $comment['role'] === 'staff' || $comment['role'] === 'admin';
+                                    $bubble_align = $is_staff ? 'align-self: flex-start; background: var(--bg-card); border-left: 3px solid var(--maroon);' : 'align-self: flex-end; background: rgba(15, 65, 74, 0.06); border-left: 3px solid var(--midnight);';
+                                ?>
+                                    <div class="comment-bubble" style="max-width: 80%; padding: 10px 14px; border-radius: 12px; box-shadow: var(--shadow-sm); <?php echo $bubble_align; ?>">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 4px; font-size: 0.72rem;">
+                                            <strong style="color: var(--text-primary);"><?php echo htmlspecialchars($comment['first_name'] . ' ' . $comment['last_name']); ?> (<?php echo $is_staff ? 'CSWDO Staff' : 'You'; ?>)</strong>
+                                            <span style="color: var(--text-muted);"><?php echo date('M d, Y h:i A', strtotime($comment['created_at'])); ?></span>
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; white-space: pre-wrap;"><?php echo htmlspecialchars($comment['comment_text']); ?></div>
+                                        
+                                        <?php if (!empty($comment['attachment_path'])): 
+                                            $att_path = cleanDocumentPath($comment['attachment_path']);
+                                            $att_ext = pathinfo($comment['attachment_path'], PATHINFO_EXTENSION);
+                                            $att_is_img = in_array(strtolower($att_ext), ['jpg', 'jpeg', 'png', 'gif']);
+                                        ?>
+                                            <div class="comment-attachment" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border-color);">
+                                                <?php if ($att_is_img): ?>
+                                                    <a href="<?php echo $att_path; ?>" target="_blank">
+                                                        <img src="<?php echo $att_path; ?>" alt="Attachment" style="max-width: 100%; max-height: 120px; border-radius: 6px; box-shadow: var(--shadow-sm); margin-top: 3px; display: block;">
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a href="<?php echo $att_path; ?>" target="_blank" style="font-size: 0.74rem; font-weight: 600; color: var(--maroon-light); display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
+                                                        <i class="fas fa-file-pdf"></i> View Attached PDF
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div style="text-align: center; padding: 25px 0; color: var(--text-muted);">
+                                    <i class="fas fa-comments" style="font-size: 2rem; display: block; margin-bottom: 8px; opacity: 0.5;"></i>
+                                    <p style="font-size: 0.8rem;">No comments or messages posted yet.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <?php if (isLoggedIn() && $_SESSION['user_id'] == $request['user_id']): ?>
+                            <form action="track-aics.php?tracking=<?php echo $tracking_number; ?>" method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="action" value="add_comment">
+                                
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <textarea name="comment_text" rows="2" placeholder="Send a message or reply to CSWDO staff..." required style="width: 100%; padding: 10px; border-radius: var(--radius-element); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 0.82rem; resize: vertical; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--maroon-light)'" onblur="this.style.borderColor='var(--border-color)'"></textarea>
+                                </div>
+                                
+                                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+                                    <div class="file-upload-group" style="display: flex; align-items: center; gap: 8px;">
+                                        <label for="comment_attachment" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border-color); background: var(--bg-card); font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); transition: all 0.25s;">
+                                            <i class="fas fa-paperclip" style="color: var(--maroon-light);"></i> Attach File (Image/PDF)
+                                        </label>
+                                        <input type="file" id="comment_attachment" name="attachment" style="display: none;" onchange="document.getElementById('file_chosen_label').textContent = this.files[0] ? this.files[0].name : 'No file chosen'">
+                                        <span id="file_chosen_label" style="font-size: 0.72rem; color: var(--text-muted);">No file chosen</span>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn-track" style="padding: 8px 20px; font-size: 0.8rem; margin: 0; width: auto;"><i class="fas fa-paper-plane"></i> Send Reply</button>
+                                </div>
+                            </form>
+                        <?php else: ?>
+                            <div style="background: rgba(255, 152, 0, 0.08); border-left: 3px solid var(--color-warning); padding: 10px 14px; border-radius: 8px; font-size: 0.78rem; color: var(--text-secondary);">
+                                <i class="fas fa-circle-info" style="color: var(--color-warning); margin-right: 5px;"></i>
+                                Please <a href="login.php" style="color: var(--maroon-light); font-weight: 700; text-decoration: none;">Login to your account</a> to reply or upload requested documents directly into this conversation.
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             <?php endif; ?>

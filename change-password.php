@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 
 if (!isLoggedIn()) {
@@ -20,10 +20,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
     $confirm_password = $_POST['confirm_password'];
     
     // Validate inputs
+    $uppercase = preg_match('@[A-Z]@', $new_password);
+    $lowercase = preg_match('@[a-z]@', $new_password);
+    $number    = preg_match('@[0-9]@', $new_password);
+    
     if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
         $error = "Please fill in all fields.";
     } elseif (strlen($new_password) < 8) {
         $error = "New password must be at least 8 characters long.";
+    } elseif (!$uppercase || !$lowercase || !$number) {
+        $error = "New password must contain at least 1 uppercase letter, 1 lowercase letter, and 1 number.";
     } elseif ($new_password !== $confirm_password) {
         $error = "New password and confirmation do not match.";
     } else {
@@ -101,7 +107,7 @@ $initials = substr($initials, 0, 2);
             --midnight: #0F414A;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            --gray-50: #F8F9FC;
+            --gray-50: #E8ECF2;
             --gray-100: #F1F3F8;
             --gray-200: #E8ECF2;
             --gray-600: #6B7A8A;
@@ -481,28 +487,7 @@ $initials = substr($initials, 0, 2);
                 </div>
             </div>
             
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
-                <?php if (!isStaff() && !isAdmin()): ?>
-                <li><a href="verify-resident.php"><i class="fas fa-shield-alt"></i> Verify Residency</a></li>
-                <?php endif; ?>
-                <li><a href="appointments.php"><i class="fas fa-calendar-plus"></i> Book Appointment</a></li>
-                <li><a href="my-appointments.php"><i class="fas fa-calendar-check"></i> My Appointments</a></li>
-                <li><a href="aics.php"><i class="fas fa-hand-holding-heart"></i> Apply for AICS</a></li>
-                <li><a href="aics-requests.php"><i class="fas fa-list-alt"></i> AICS Requests</a></li>
-                <li><a href="housing-applications.php"><i class="fas fa-home"></i> Housing Applications</a></li>
-                <li><a href="my-housing.php"><i class="fas fa-building"></i> My Housing</a></li>
-                <li><a href="documents.php"><i class="fas fa-folder-open"></i> My Documents</a></li>
-                <li><a href="notifications.php"><i class="fas fa-bell"></i> Notifications</a></li>
-                <?php if (isStaff() || isAdmin()): ?>
-                <li class="menu-divider">Staff Access</li>
-                <li><a href="staff-dashboard.php"><i class="fas fa-chalkboard-user"></i> Staff Dashboard</a></li>
-                <?php endif; ?>
-                <?php if (isAdmin()): ?>
-                <li><a href="admin/dashboard.php"><i class="fas fa-crown"></i> Admin Panel</a></li>
-                <?php endif; ?>
-            </ul>
+            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
         </div>
         <div class="sidebar-footer">
             <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>

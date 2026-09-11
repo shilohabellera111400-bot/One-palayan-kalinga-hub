@@ -62,248 +62,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>AICS Assistance - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/portal-layout.css">
     <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
-            --midnight: #0F414A;
-            --white: #FFFFFF;
-            
-            --bg-primary: #F8F9FC;
-            --bg-secondary: #FFFFFF;
-            --bg-card: #FFFFFF;
-            --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
-            
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
-            
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
-            --input-bg: #FFFFFF;
-            --hero-bg: #0F414A;
-            
-            --radius-card: 20px;
-            --radius-element: 12px;
-            
-            --color-success: #4CAF50;
-            --color-warning: #FF9800;
-            --color-danger: #EF5350;
-            --color-info: #2196F3;
-            
-            --gradient-start: #7F0303;
-            --gradient-end: #5a0202;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
-            
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.20);
-            
-            --card-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
-            --input-bg: #1a2332;
-            --hero-bg: #0a0e17;
-            
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
-            
-            --color-success: #66BB6A;
-            --color-warning: #FFA726;
-            --color-danger: #EF5350;
-            --color-info: #42A5F5;
-            
-            --gradient-start: #1a2332;
-            --gradient-end: #0a0e17;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            line-height: 1.5;
-            min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .user-info-sidebar {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .user-avatar-sidebar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: var(--maroon-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1rem;
-            color: white;
-            flex-shrink: 0;
-            overflow: hidden;
-        }
-        .user-avatar-sidebar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .user-info-sidebar h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .user-info-sidebar span {
-            color: rgba(255,255,255,0.5);
-            font-size: 0.65rem;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.82rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 0.95rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-        .main-content.full-width {
-            margin-left: 0;
-        }
-
         /* ========== HERO SECTION ========== */
         .aics-hero {
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
@@ -587,68 +348,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             box-shadow: var(--shadow-md);
         }
 
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
-            text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-
         /* ========== RESPONSIVE ========== */
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
             .stats-container { grid-template-columns: repeat(2, 1fr); }
             .info-cards { grid-template-columns: 1fr; }
             .category-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
         }
         @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
             .stats-container { grid-template-columns: 1fr 1fr; }
             .aics-hero { padding: 20px; }
             .aics-hero h1 { font-size: 1.2rem; }
@@ -666,19 +372,130 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .aics-hero h1 { font-size: 1rem; }
             .aics-hero p { font-size: 0.8rem; }
         }
+
+        /* Custom Requirements Modal CSS */
+        .custom-modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+            backdrop-filter: blur(5px);
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .custom-modal-content {
+            background-color: var(--bg-card, #ffffff);
+            color: var(--text-primary, #333333);
+            margin: auto;
+            padding: 24px;
+            border: 1px solid var(--border-color, #dddddd);
+            width: 100%;
+            max-width: 550px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: modalFadeIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes modalFadeIn {
+            from { transform: translateY(-30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .custom-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color, #dddddd);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+        .custom-modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--maroon, #7F0303);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .custom-modal-close {
+            color: var(--text-muted, #777777);
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+        .custom-modal-close:hover {
+            color: var(--text-primary, #111111);
+        }
+        .custom-modal-body {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-line;
+            padding-right: 8px;
+        }
+        /* Custom scrollbar for modal body */
+        .custom-modal-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-modal-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-modal-body::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.15);
+            border-radius: 3px;
+        }
+        [data-theme="dark"] .custom-modal-body::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.15);
+        }
+        .custom-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            border-top: 1px solid var(--border-color, #dddddd);
+            padding-top: 14px;
+            margin-top: 16px;
+        }
+        .custom-modal-btn {
+            background-color: var(--maroon, #7F0303);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .custom-modal-btn:hover {
+            background-color: var(--maroon-light, #9a1515);
+        }
     </style>
 </head>
 <body>
 <div class="app-container">
+    <!-- Sidebar Overlay -->
+    <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <?php endif; ?>
+
     <!-- Sidebar - ONLY SHOWN FOR LOGGED IN RESIDENTS -->
     <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
             <div class="logo-text">
                 <h2>One Palayan-Kalinga Hub</h2>
                 <span>Integrated Service Portal</span>
             </div>
+            <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
         
         <div class="user-info-sidebar">
@@ -695,21 +512,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </div>
         
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li><a href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
-            <li><a href="update-profile-info.php"><i class="fas fa-edit"></i> Complete Profile</a></li>
-            <li><a href="verify-resident.php"><i class="fas fa-shield-alt"></i> Verify Residency</a></li>
-            <li><a href="appointments.php"><i class="fas fa-calendar-plus"></i> Book Appointment</a></li>
-            <li><a href="my-appointments.php"><i class="fas fa-calendar-check"></i> My Appointments</a></li>
-            <li><a href="aics.php" class="active"><i class="fas fa-hand-holding-heart"></i> Apply for AICS</a></li>
-            <li><a href="aics-requests.php"><i class="fas fa-list-alt"></i> AICS Requests</a></li>
-            <li><a href="housing-applications.php"><i class="fas fa-home"></i> Housing Applications</a></li>
-            <li><a href="my-housing.php"><i class="fas fa-building"></i> My Housing</a></li>
-            <li><a href="documents.php"><i class="fas fa-folder-open"></i> My Documents</a></li>
-            <li><a href="notifications.php"><i class="fas fa-bell"></i> Notifications</a></li>
-            <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
+        <?php include __DIR__ . '/includes/usersidenav.php'; ?>
         
         <div class="sidebar-footer">
             <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
@@ -721,8 +524,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <div class="main-content <?php echo (!isLoggedIn() || isStaff() || isAdmin()) ? 'full-width' : ''; ?>">
         <!-- Top Bar -->
         <div class="top-bar">
-            <div></div>
-            <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="top-bar-left">
+                <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+                <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
+                    <i class="fas fa-bars"></i>
+                    <span>Menu</span>
+                </button>
+                <?php endif; ?>
+                <div class="page-title">
+                    <h1>AICS Programs</h1>
+                    <p>Assistance to Individuals in Crisis Situations</p>
+                </div>
+            </div>
+            <div class="top-bar-actions">
                 <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
                     <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
                 </button>
@@ -778,31 +592,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         <!-- Category Grid -->
         <div class="category-grid">
-            <!-- Medical Assistance -->
-            <div class="category-card" onclick="window.location.href='aics-medical.php'">
-                <div class="card-image">
-                    <div class="icon-wrapper"><i class="fas fa-hospital-user"></i></div>
-                    <span class="card-badge popular">Most Requested</span>
-                </div>
-                <div class="card-content">
-                    <h3>🏥 Medical Assistance</h3>
-                    <p>Financial assistance for hospital bills, medicines, laboratory tests, and medical procedures.</p>
-                </div>
-                <div class="card-footer">
-                    <a href="aics-medical.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
-                    <button class="btn-requirements" onclick="event.stopPropagation();showRequirements('medical')">Requirements</button>
-                </div>
-            </div>
-
-            <!-- Funeral/Burial Assistance -->
+            <!-- Burial Assistance -->
             <div class="category-card" onclick="window.location.href='aics-funeral.php'">
-                <div class="card-image">
+                <div class="card-image" style="background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));">
                     <div class="icon-wrapper"><i class="fas fa-cross"></i></div>
                     <span class="card-badge urgent">Urgent</span>
                 </div>
                 <div class="card-content">
-                    <h3>⚰️ Funeral/Burial Assistance</h3>
-                    <p>Financial support for funeral services and burial expenses of a loved one.</p>
+                    <h3>⚰️ Burial Assistance</h3>
+                    <p>Financial support for funeral services and burial expenses of a deceased relative.</p>
                 </div>
                 <div class="card-footer">
                     <a href="aics-funeral.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
@@ -810,79 +608,36 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 </div>
             </div>
 
-            <!-- Educational Assistance -->
-            <div class="category-card" onclick="window.location.href='aics-educational.php'">
-                <div class="card-image">
-                    <div class="icon-wrapper"><i class="fas fa-graduation-cap"></i></div>
-                </div>
-                <div class="card-content">
-                    <h3>🎓 Educational Assistance</h3>
-                    <p>Support for school supplies, tuition fees, and other educational needs.</p>
-                </div>
-                <div class="card-footer">
-                    <a href="aics-educational.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
-                    <button class="btn-requirements" onclick="event.stopPropagation();showRequirements('educational')">Requirements</button>
-                </div>
-            </div>
-
-            <!-- Transportation Assistance -->
-            <div class="category-card" onclick="window.location.href='aics-transportation.php'">
-                <div class="card-image">
+            <!-- Food and Transportation Assistance -->
+            <div class="category-card">
+                <div class="card-image" style="background: linear-gradient(135deg, #2E7D32, #1B5E20);">
                     <div class="icon-wrapper"><i class="fas fa-bus"></i></div>
                 </div>
                 <div class="card-content">
-                    <h3>🚌 Transportation Assistance</h3>
-                    <p>Help with transportation expenses for medical appointments, legal matters, or other urgent needs.</p>
+                    <h3>🍲 Food & Transportation Assistance</h3>
+                    <p>Help with groceries/food packs or fare/travel expenses during crisis situations.</p>
                 </div>
-                <div class="card-footer">
-                    <a href="aics-transportation.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
-                    <button class="btn-requirements" onclick="event.stopPropagation();showRequirements('transportation')">Requirements</button>
-                </div>
-            </div>
-
-            <!-- Food Assistance -->
-            <div class="category-card" onclick="window.location.href='aics-food.php'">
-                <div class="card-image">
-                    <div class="icon-wrapper"><i class="fas fa-utensils"></i></div>
-                </div>
-                <div class="card-content">
-                    <h3>🍲 Food Assistance</h3>
-                    <p>Food packs and grocery items for families in crisis situation.</p>
-                </div>
-                <div class="card-footer">
-                    <a href="aics-food.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
-                    <button class="btn-requirements" onclick="event.stopPropagation();showRequirements('food')">Requirements</button>
+                <div class="card-footer" style="flex-wrap: wrap; gap: 8px;">
+                    <a href="aics-food.php" class="btn-apply" style="flex: 1 1 120px; font-size: 0.72rem; padding: 8px 4px;">Apply for Food</a>
+                    <a href="aics-transportation.php" class="btn-apply" style="flex: 1 1 120px; font-size: 0.72rem; padding: 8px 4px; background: var(--midnight);">Apply for Travel</a>
+                    <button class="btn-requirements" style="width: 100%; flex: none;" onclick="event.stopPropagation();showRequirements('food_transport')">Requirements</button>
                 </div>
             </div>
 
-            <!-- Cash Relief Assistance -->
-            <div class="category-card" onclick="window.location.href='aics-cash-relief.php'">
-                <div class="card-image">
-                    <div class="icon-wrapper"><i class="fas fa-money-bill-wave"></i></div>
-                    <span class="card-badge urgent">Emergency</span>
+            <!-- Medical / Financial Assistance -->
+            <div class="category-card">
+                <div class="card-image" style="background: linear-gradient(135deg, #0288D1, #01579B);">
+                    <div class="icon-wrapper"><i class="fas fa-hospital-user"></i></div>
+                    <span class="card-badge popular">Popular</span>
                 </div>
                 <div class="card-content">
-                    <h3>💰 Cash Relief Assistance</h3>
-                    <p>Financial assistance for individuals and families in crisis situation. Available for medical emergencies, natural disasters, accidents, and other urgent needs.</p>
+                    <h3>🏥 Medical & Financial Assistance</h3>
+                    <p>Financial assistance for hospital bills, doctor's prescriptions, or cash relief for emergency situations.</p>
                 </div>
-                <div class="card-footer">
-                    <a href="aics-cash-relief.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
-                    <button class="btn-requirements" onclick="event.stopPropagation();showRequirements('cashrelief')">Requirements</button>
-                </div>
-            </div>
-
-            <!-- Material Assistance -->
-            <div class="category-card" onclick="window.location.href='aics-material.php'">
-                <div class="card-image">
-                    <div class="icon-wrapper"><i class="fas fa-boxes"></i></div>
-                </div>
-                <div class="card-content">
-                    <h3>📦 Material Assistance</h3>
-                    <p>Non-food items, hygiene kits, sleeping materials, and other essential supplies.</p>
-                </div>
-                <div class="card-footer">
-                    <a href="aics-material.php" class="btn-apply">Apply Now <i class="fas fa-arrow-right"></i></a>
-                    <button class="btn-requirements" onclick="event.stopPropagation();showRequirements('material')">Requirements</button>
+                <div class="card-footer" style="flex-wrap: wrap; gap: 8px;">
+                    <a href="aics-medical.php" class="btn-apply" style="flex: 1 1 120px; font-size: 0.72rem; padding: 8px 4px;">Apply for Medical</a>
+                    <a href="aics-cash-relief.php" class="btn-apply" style="flex: 1 1 120px; font-size: 0.72rem; padding: 8px 4px; background: var(--maroon);">Apply for Cash</a>
+                    <button class="btn-requirements" style="width: 100%; flex: none;" onclick="event.stopPropagation();showRequirements('medical_financial')">Requirements</button>
                 </div>
             </div>
         </div>
@@ -910,6 +665,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 </div>
 
 <script>
+// ========== MOBILE SIDEBAR TOGGLE ==========
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const sidebarClose = document.getElementById('sidebarClose');
+
+function openSidebar() {
+    if (sidebar && sidebarOverlay) {
+        sidebar.classList.add('open');
+        sidebarOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeSidebar() {
+    if (sidebar && sidebarOverlay) {
+        sidebar.classList.remove('open');
+        sidebarOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+if (hamburgerBtn) hamburgerBtn.addEventListener('click', openSidebar);
+if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
 // ========== THEME TOGGLE ==========
 const themeToggle = document.getElementById('themeToggle');
 const html = document.documentElement;
@@ -920,38 +701,83 @@ const currentTheme = localStorage.getItem('theme') ||
 function setTheme(theme) {
     html.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    const icon = themeToggle ? themeToggle.querySelector('i') : null;
+    if (icon) {
+        icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
     document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
 }
 
 setTheme(currentTheme);
 
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
+if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+        const current = html.getAttribute('data-theme');
+        setTheme(current === 'dark' ? 'light' : 'dark');
+    });
+}
+</script>
 
+<!-- Custom Requirements Modal -->
+<div id="requirementsModal" class="custom-modal">
+    <div class="custom-modal-content">
+        <div class="custom-modal-header">
+            <h3 id="modalTitle">📋 Requirements</h3>
+            <span class="custom-modal-close" onclick="closeRequirementsModal()">&times;</span>
+        </div>
+        <div class="custom-modal-body" id="modalBodyText">
+            <!-- Requirements list will load here -->
+        </div>
+        <div class="custom-modal-footer">
+            <button class="custom-modal-btn" onclick="closeRequirementsModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
 // ========== REQUIREMENTS MODAL ==========
 function showRequirements(type) {
     const requirements = {
-        medical: '📋 Medical Assistance Requirements:\n\n✓ Valid ID\n✓ Barangay Certificate of Indigency\n✓ Medical Certificate/Clinical Abstract\n✓ Hospital Bill or Statement of Account\n✓ Doctor\'s Prescription (for medicine)\n✓ Laboratory Request (for laboratory)\n\nNote: For amounts over ₱10,000, additional documents required.',
+        funeral: {
+            title: '📋 Burial Assistance Requirements',
+            text: '1. Certified True Copy of relative\'s registered death certificate\n   [From: Client / City Civil Registrar’s Office]\n\n2. Original Barangay Certificate of Residency and Indigency\n   [From: Barangay Hall of the Community where the client resides]\n\n3. Photocopy of Valid ID of the client\n   [From: Client]\n\n4. Original Funeral Contract (Unpaid)\n   [From: Funeral Parlour where funeral service was acquired]\n\n5. Written letter of request\n   [From: Client]\n\n💰 Fee Summary:\n• Total Fees: None — This service is free of charge.'
+        },
         
-        funeral: '📋 Funeral/Burial Assistance Requirements:\n\n✓ Valid ID\n✓ Death Certificate (Original or Certified True Copy)\n✓ Funeral Contract\n✓ Promissory Note or Certificate of Balance\n✓ Transfer Permit (for cadaver transfer)',
+        food_transport: {
+            title: '📋 Food & Transportation Assistance Requirements',
+            text: '1. Original Barangay Certificate of Residency and Indigency\n   [From: Barangay where the client resides]\n\n2. Photocopy of Valid ID of the client\n   [From: Client]\n\n3. Request letter\n   [From: Client]\n\n💰 Fee Summary:\n• Total Fees: None — This service is free of charge.'
+        },
         
-        educational: '📋 Educational Assistance Requirements:\n\n✓ Valid ID (Parent/Guardian)\n✓ Validated School ID of student\n✓ Enrollment Assessment Form / Certificate of Registration\n✓ Statement of Account (if applicable)',
-        
-        transportation: '📋 Transportation Assistance Requirements:\n\n✓ Valid ID\n✓ Medical Certificate or Death Certificate or Court Order\n✓ Authorization Letter (if applicable)',
-        
-        food: '📋 Food Assistance Requirements:\n\n✓ Valid ID\n✓ Barangay Certificate of Indigency\n✓ Written letter of request\n✓ Listahan ng mga kasapi ng pamilya',
-        
-        cashrelief: '📋 Cash Relief Requirements:\n\n✓ Valid ID\n✓ Barangay Certificate\n✓ Incident Report (for emergencies)\n✓ Medical Certificate (if applicable)\n✓ Police Report (if applicable)\n\nNote: Maximum amount ₱10,000 subject to assessment',
-        
-        material: '📋 Material Assistance Requirements:\n\n✓ General Intake Sheet (GIS)\n✓ Material Distribution Sheet (MDS)\n✓ Case Summary (for group clients)'
+        medical_financial: {
+            title: '📋 Medical / Financial Assistance Requirements',
+            text: '1. Original Barangay Certificate of Residency and Indigency\n   [From: Barangay where the client resides]\n\n2. Photocopy of Valid ID of the client\n   [From: Client]\n\n3. Doctor’s prescription (for medicines or laboratory request)\n   [From: Attending Physician]\n\n4. Medical Abstract / Medical Certificate\n   [From: Attending Physician]\n\n5. Hospital Bill (for payment of hospital bill)\n   [From: Hospital where the client was admitted]\n\n6. Request letter\n   [From: Client]\n\n💰 Fee Summary:\n• Total Fees: None — This service is free of charge.'
+        }
     };
     
-    alert(requirements[type] || 'Please contact CSWDO for specific requirements.');
+    const req = requirements[type];
+    if (req) {
+        document.getElementById('modalTitle').innerText = req.title;
+        document.getElementById('modalBodyText').innerText = req.text;
+        
+        const modal = document.getElementById('requirementsModal');
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // Disable page scroll when modal is open
+    }
 }
+
+function closeRequirementsModal() {
+    const modal = document.getElementById('requirementsModal');
+    modal.style.display = 'none';
+    document.body.style.overflow = ''; // Enable page scroll when modal is closed
+}
+
+// Close when clicking outside modal content
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('requirementsModal');
+    if (event.target == modal) {
+        closeRequirementsModal();
+    }
+});
 </script>
 </body>
 </html>

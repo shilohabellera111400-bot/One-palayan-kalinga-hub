@@ -171,16 +171,16 @@
 }
 
 /* ─── Auth Form Panel (right side) ─── */
-.auth-form-panel {
+.auth-form-panel, .auth-form {
     flex: 1.1;
     padding: 48px 44px;
     overflow-y: auto;
     max-height: 100vh;
 }
 
-.auth-form-panel::-webkit-scrollbar { width: 4px; }
-.auth-form-panel::-webkit-scrollbar-track { background: transparent; }
-.auth-form-panel::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 4px; }
+.auth-form-panel::-webkit-scrollbar, .auth-form::-webkit-scrollbar { width: 4px; }
+.auth-form-panel::-webkit-scrollbar-track, .auth-form::-webkit-scrollbar-track { background: transparent; }
+.auth-form-panel::-webkit-scrollbar-thumb, .auth-form::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 4px; }
 
 /* ─── Auth Header ─── */
 .auth-header {
@@ -564,7 +564,7 @@
         display: none;
     }
 
-    .auth-form-panel {
+    .auth-form-panel, .auth-form {
         padding: 32px 28px;
         max-height: none;
     }
@@ -585,7 +585,7 @@
         min-height: 120px;
     }
 
-    .auth-form-panel {
+    .auth-form-panel, .auth-form {
         padding: 24px 20px;
     }
 
@@ -597,4 +597,117 @@
         grid-template-columns: 1fr;
         gap: 0;
     }
+}
+
+/* =====================================================================
+   Forgot/Reset Password Custom Branding Layout
+   ===================================================================== */
+.auth-brand .logo-circle {
+    width: 120px;
+    height: 120px;
+    background: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s;
+}
+
+.auth-brand .logo-circle:hover {
+    transform: scale(1.05);
+}
+
+.auth-brand .logo-circle img {
+    width: 110px;
+    height: auto;
+}
+
+.auth-brand .brand-logo {
+    text-align: center;
+    margin-bottom: 40px;
+    position: relative;
+    z-index: 2;
+    display: block;
+}
+
+.auth-brand .brand-logo h2 {
+    color: white;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 0;
+}
+
+.auth-brand .brand-logo p {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+    margin-top: 5px;
+}
+
+.auth-brand .brand-features {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.auth-brand .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+    text-align: left;
+}
+
+.auth-brand .feature-item i {
+    width: 45px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    color: #D8BA98;
+    flex-shrink: 0;
+}
+
+.auth-brand .feature-item h4 {
+    color: white;
+    font-size: 1rem;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.auth-brand .feature-item p {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.75rem;
+    margin: 0;
+}
+
+.auth-brand .brand-quote {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    z-index: 2;
+    text-align: left;
+}
+
+.auth-brand .brand-quote p {
+    color: rgba(255, 255, 255, 0.9);
+    font-style: italic;
+    font-size: 0.9rem;
+    margin-bottom: 0;
+}
+
+.auth-brand .brand-quote span {
+    display: block;
+    margin-top: 10px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.6);
 }

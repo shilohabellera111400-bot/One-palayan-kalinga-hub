@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // staff/manage-housing.php
 require_once __DIR__ . '/../config/database.php';
 
@@ -189,7 +189,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --midnight: #0F414A;
             --white: #FFFFFF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -200,11 +200,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --text-muted: #6B7A8A;
             --text-sidebar: rgba(255,255,255,0.7);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
+            --border-color: #C8D0DC;
             
             --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
             --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.10);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
+            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
             
             --stat-bg: #FFFFFF;

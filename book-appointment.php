@@ -27,47 +27,65 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (strtotime($appointment_date) < strtotime(date('Y-m-d'))) {
         $error = "Appointment date cannot be in the past.";
     }
-    // Check if slot is available
+    // Check daily and slot availability
     else {
-        $check_query = "SELECT COUNT(*) as count FROM appointments 
-                        WHERE appointment_date = :date AND appointment_time = :time 
-                        AND status != 'cancelled'";
-        $check_stmt = $db->prepare($check_query);
-        $check_stmt->bindParam(':date', $appointment_date);
-        $check_stmt->bindParam(':time', $appointment_time);
-        $check_stmt->execute();
-        $result = $check_stmt->fetch(PDO::FETCH_ASSOC);
+        // Fetch max appointments limit setting
+        $limit_stmt = $db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'max_appointments_per_day'");
+        $limit_stmt->execute();
+        $limit_row = $limit_stmt->fetch(PDO::FETCH_ASSOC);
+        $max_per_day = intval($limit_row['setting_value'] ?? 15);
+
+        // Check daily limit
+        $daily_check_query = "SELECT COUNT(*) as count FROM appointments 
+                              WHERE appointment_date = :date AND status != 'cancelled'";
+        $daily_check_stmt = $db->prepare($daily_check_query);
+        $daily_check_stmt->bindParam(':date', $appointment_date);
+        $daily_check_stmt->execute();
+        $daily_result = $daily_check_stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($result['count'] >= 5) { // Limit 5 appointments per time slot
-            $error = "This time slot is fully booked. Please choose another time.";
+        if ($daily_result['count'] >= $max_per_day) {
+            $error = "Patawad, ang araw na ito ay puno na ng appointment. Mangyaring pumili ng ibang petsa.";
         } else {
-            // Create appointment
-            $query = "INSERT INTO appointments (user_id, service_id, appointment_date, appointment_time, purpose, status) 
-                      VALUES (:user_id, :service_id, :date, :time, :purpose, 'pending')";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':user_id', $_SESSION['user_id']);
-            $stmt->bindParam(':service_id', $service_id);
-            $stmt->bindParam(':date', $appointment_date);
-            $stmt->bindParam(':time', $appointment_time);
-            $stmt->bindParam(':purpose', $purpose);
+            $check_query = "SELECT COUNT(*) as count FROM appointments 
+                            WHERE appointment_date = :date AND appointment_time = :time 
+                            AND status != 'cancelled'";
+            $check_stmt = $db->prepare($check_query);
+            $check_stmt->bindParam(':date', $appointment_date);
+            $check_stmt->bindParam(':time', $appointment_time);
+            $check_stmt->execute();
+            $result = $check_stmt->fetch(PDO::FETCH_ASSOC);
             
-            if ($stmt->execute()) {
-                $appointment_id = $db->lastInsertId();
-                
-                // Create notification
-                $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
-                                VALUES (:user_id, 'Appointment Confirmed', 
-                                'Your appointment has been scheduled for " . date('F d, Y', strtotime($appointment_date)) . " at " . date('h:i A', strtotime($appointment_time)) . "', 'appointment')";
-                $notif_stmt = $db->prepare($notif_query);
-                $notif_stmt->bindParam(':user_id', $_SESSION['user_id']);
-                $notif_stmt->execute();
-                
-                $success = "Appointment booked successfully! Please upload your requirements.";
-                
-                // Redirect to document upload after 2 seconds
-                header("refresh:2;url=upload-documents.php?appointment_id=" . $appointment_id);
+            if ($result['count'] >= 5) { // Limit 5 appointments per time slot
+                $error = "This time slot is fully booked. Please choose another time.";
             } else {
-                $error = "Failed to book appointment. Please try again.";
+                // Create appointment
+                $query = "INSERT INTO appointments (user_id, service_id, appointment_date, appointment_time, purpose, status) 
+                          VALUES (:user_id, :service_id, :date, :time, :purpose, 'pending')";
+                $stmt = $db->prepare($query);
+                $stmt->bindParam(':user_id', $_SESSION['user_id']);
+                $stmt->bindParam(':service_id', $service_id);
+                $stmt->bindParam(':date', $appointment_date);
+                $stmt->bindParam(':time', $appointment_time);
+                $stmt->bindParam(':purpose', $purpose);
+                
+                if ($stmt->execute()) {
+                    $appointment_id = $db->lastInsertId();
+                    
+                    // Create notification
+                    $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
+                                    VALUES (:user_id, 'Appointment Confirmed', 
+                                    'Your appointment has been scheduled for " . date('F d, Y', strtotime($appointment_date)) . " at " . date('h:i A', strtotime($appointment_time)) . "', 'appointment')";
+                    $notif_stmt = $db->prepare($notif_query);
+                    $notif_stmt->bindParam(':user_id', $_SESSION['user_id']);
+                    $notif_stmt->execute();
+                    
+                    $success = "Appointment booked successfully! Please upload your requirements.";
+                    
+                    // Redirect to document upload after 2 seconds
+                    header("refresh:2;url=upload-documents.php?appointment_id=" . $appointment_id);
+                } else {
+                    $error = "Failed to book appointment. Please try again.";
+                }
             }
         }
     }
@@ -91,18 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <h3><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></h3>
                 <p>Resident</p>
             </div>
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php">Dashboard</a></li>
-                <li><a href="profile.php">My Profile</a></li>
-                <li><a href="book-appointment.php" class="active">Book Appointment</a></li>
-                <li><a href="my-appointments.php">My Appointments</a></li>
-                <li><a href="apply-aics.php">Apply for AICS</a></li>
-                <li><a href="my-aics.php">My AICS Requests</a></li>
-                <li><a href="apply-housing.php">Apply for Housing</a></li>
-                <li><a href="my-documents.php">My Documents</a></li>
-                <li><a href="notifications.php">Notifications</a></li>
-                <li><a href="logout.php">Logout</a></li>
-            </ul>
+            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
         </div>
         
         <div class="main-content">

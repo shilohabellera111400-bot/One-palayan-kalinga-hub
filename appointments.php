@@ -82,276 +82,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/portal-layout.css">
     <style>
-        /* ========== COLOR PALETTE & GLOBAL THEMING ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
-            --midnight: #0F414A;
-            --white: #FFFFFF;
-            --gold: #C9A86C;
-            --gold-light: #E8D5A8;
-            --light-blue: #96C0CE;
-            --alabaster: #E3E7EB;
-            
-            --bg-primary: #EFF1F4;
-            --bg-secondary: #FFFFFF;
-            --bg-card: #FFFFFF;
-            --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #D5DBE1;
-            
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 10px 30px rgba(15, 65, 74, 0.09), 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-lg: 0 16px 40px rgba(15, 65, 74, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
-            
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
-            --input-bg: #FFFFFF;
-            --hero-bg: #0F414A;
-            
-            --radius-card: 24px;
-            --radius-element: 16px;
-            
-            --color-success: #2e7d32;
-            --color-warning: #ed6c02;
-            --color-danger: #d32f2f;
-            --color-info: #0288d1;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
-            --alabaster: #161e2a;
-            
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.5);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.15);
-            
-            --card-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
-            --input-bg: #1a2332;
-            --hero-bg: #0a0e17;
-            
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
-            
-            --color-success: #4caf50;
-            --color-warning: #ff9800;
-            --color-danger: #f44336;
-            --color-info: #2196f3;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            line-height: 1.5;
-            min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        /* ========== SIDEBAR LAYOUT SYSTEM ========== */
-        .dashboard-container { display: flex; min-height: 100vh; }
-
-        .sidebar {
-            width: 280px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--white);
-            font-size: 1.3rem;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.05rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .user-info-sidebar {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .user-avatar-sidebar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: var(--maroon-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1rem;
-            color: white;
-            flex-shrink: 0;
-            overflow: hidden;
-        }
-        .user-avatar-sidebar img { width: 100%; height: 100%; object-fit: cover; }
-        .user-info-sidebar h4 { color: var(--text-sidebar-active); font-size: 0.85rem; font-weight: 600; }
-        .user-info-sidebar span { color: rgba(255,255,255,0.5); font-size: 0.65rem; }
-
-        .sidebar-menu { list-style: none; padding: 12px 14px; flex: 1; }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 11px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.82rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 0.95rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active { background: var(--bg-sidebar-active); color: var(--text-sidebar-active); }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-
-        .sidebar-footer { padding: 16px; border-top: 1px solid var(--divider); }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-        .main-content.full-width { margin-left: 0; padding: 40px 24px; }
-
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 35px;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        .page-title h1 {
-            font-size: 1.8rem;
-            color: var(--text-primary);
-            font-weight: 800;
-            letter-spacing: -0.5px;
-        }
-        .page-title p { color: var(--text-muted); font-size: 0.88rem; margin-top: 2px; }
-        
-        .top-bar-actions { display: flex; gap: 12px; align-items: center; }
-        .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-        }
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-            transition: all 0.3s;
-        }
-        .top-icon:hover { color: var(--text-primary); transform: translateY(-2px); }
-
-        /* ========== LAYOUT GRID ========== */
         .appointments-grid {
             display: grid;
             grid-template-columns: 1.2fr 1fr;
@@ -436,11 +168,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         /* STEP 1: Visual Service Card Grid */
         .services-cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
             margin-bottom: 25px;
-            max-height: 380px;
-            overflow-y: auto;
             padding: 5px;
         }
         .service-select-card {
@@ -1010,15 +740,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 </head>
 <body>
     <div class="dashboard-container">
+        <!-- Sidebar Overlay -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <?php endif; ?>
+
         <!-- Sidebar Menu -->
         <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
                 <div class="logo-text">
                     <h2>One Palayan-Kalinga</h2>
                     <span>Resident Portal</span>
                 </div>
+                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
             <div class="user-info-sidebar">
@@ -1035,21 +773,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 </div>
             </div>
             
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
-                <li><a href="update-profile-info.php"><i class="fas fa-edit"></i> Complete Profile</a></li>
-                <li><a href="verify-resident.php"><i class="fas fa-shield-alt"></i> Verify Residency</a></li>
-                <li><a href="appointments.php" class="active"><i class="fas fa-calendar-plus"></i> Book Appointment</a></li>
-                <li><a href="my-appointments.php"><i class="fas fa-calendar-check"></i> My Appointments</a></li>
-                <li><a href="aics.php"><i class="fas fa-hand-holding-heart"></i> Apply for AICS</a></li>
-                <li><a href="aics-requests.php"><i class="fas fa-list-alt"></i> AICS Requests</a></li>
-                <li><a href="housing-applications.php"><i class="fas fa-home"></i> Housing Applications</a></li>
-                <li><a href="my-housing.php"><i class="fas fa-building"></i> My Housing</a></li>
-                <li><a href="documents.php"><i class="fas fa-folder-open"></i> My Documents</a></li>
-                <li><a href="notifications.php"><i class="fas fa-bell"></i> Notifications</a></li>
-                <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
+            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
             
             <div class="sidebar-footer">
                 <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
@@ -1061,9 +785,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <div class="main-content <?php echo (!isLoggedIn() || isStaff() || isAdmin()) ? 'full-width' : ''; ?>">
             <!-- Top Bar Actions -->
             <div class="top-bar">
-                <div class="page-title">
-                    <h1>Appointments Scheduling</h1>
-                    <p>Schedule your resident support visit at CSWDO Palayan City.</p>
+                <div class="top-bar-left">
+                    <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
+                        <i class="fas fa-bars"></i>
+                        <span>Menu</span>
+                    </button>
+                    <?php endif; ?>
+                    <div class="page-title">
+                        <h1>Appointments Scheduling</h1>
+                        <p>Schedule your resident support visit at CSWDO Palayan City.</p>
+                    </div>
                 </div>
                 <div class="top-bar-actions">
                     <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
@@ -1120,32 +852,104 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <!-- STEP 1: SERVICE SELECT GRID -->
                         <div class="step-container active" id="step1">
                             <h2 style="margin-bottom: 15px;"><i class="fas fa-concierge-bell"></i> Choose service category</h2>
-                            <div class="services-cards-grid">
-                                <?php foreach ($services as $service): 
-                                    // Assign distinct icons based on services names
-                                    $serviceName = strtolower($service['service_name']);
-                                    $iconClass = 'fa-circle-info';
-                                    if (strpos($serviceName, 'medical') !== false) {
-                                        $iconClass = 'fa-hand-holding-medical';
-                                    } elseif (strpos($serviceName, 'educational') !== false || strpos($serviceName, 'school') !== false) {
-                                        $iconClass = 'fa-graduation-cap';
-                                    } elseif (strpos($serviceName, 'burial') !== false || strpos($serviceName, 'funeral') !== false) {
-                                        $iconClass = 'fa-monument';
-                                    } elseif (strpos($serviceName, 'food') !== false || strpos($serviceName, 'relief') !== false) {
-                                        $iconClass = 'fa-basket-shopping';
-                                    } elseif (strpos($serviceName, 'housing') !== false || strpos($serviceName, 'relocation') !== false) {
-                                        $iconClass = 'fa-house-chimney';
-                                    } elseif (strpos($serviceName, 'transport') !== false || strpos($serviceName, 'cash') !== false) {
-                                        $iconClass = 'fa-bus-simple';
-                                    }
-                                ?>
-                                <div class="service-select-card" 
-                                     onclick="selectServiceCard(this, <?php echo $service['service_id']; ?>, '<?php echo htmlspecialchars($service['service_name']); ?>', '<?php echo htmlspecialchars($service['processing_time'] ?? 'Standard'); ?>')">
-                                    <i class="fas <?php echo $iconClass; ?>"></i>
-                                    <h4><?php echo htmlspecialchars($service['service_name']); ?></h4>
-                                    <span class="duration"><i class="fas fa-clock"></i> <?php echo htmlspecialchars($service['processing_time']); ?></span>
+                            <div class="services-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
+                                <!-- Card 1: Burial Assistance -->
+                                <div class="category-card service-select-card" style="background: var(--bg-card); border-radius: var(--radius-card); border: 2px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s ease;" onclick="selectServiceCard(this, 7, 'AICS - Funeral/Burial Assistance', '1-3 days')">
+                                    <div class="card-image" style="background: linear-gradient(135deg, #7F0303, #4d0000); padding: 24px; text-align: center; position: relative;">
+                                        <div class="icon-wrapper" style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; margin: 0 auto;">
+                                            <i class="fas fa-cross"></i>
+                                        </div>
+                                        <span class="card-badge urgent" style="position: absolute; top: 12px; right: 12px; background: #e53935; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">Urgent</span>
+                                    </div>
+                                    <div class="card-content" style="padding: 20px; flex: 1; text-align: center;">
+                                        <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">⚰️ Burial Assistance</h3>
+                                        <p style="font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">Financial support for funeral services and burial expenses of a deceased relative.</p>
+                                    </div>
+                                    <div class="select-indicator" style="padding: 10px; text-align: center; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                                        <i class="fas fa-hand-pointer"></i> Click to select service
+                                    </div>
                                 </div>
-                                <?php endforeach; ?>
+
+                                <!-- Card 2: Food & Transportation Assistance -->
+                                <div class="category-card service-select-card" style="background: var(--bg-card); border-radius: var(--radius-card); border: 2px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s ease;" onclick="selectServiceCard(this, 10, 'AICS - Food Assistance', '1-2 days')">
+                                    <div class="card-image" style="background: linear-gradient(135deg, #2E7D32, #1B5E20); padding: 24px; text-align: center; position: relative;">
+                                        <div class="icon-wrapper" style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; margin: 0 auto;">
+                                            <i class="fas fa-bus"></i>
+                                        </div>
+                                    </div>
+                                    <div class="card-content" style="padding: 20px; flex: 1; text-align: center;">
+                                        <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">🍲 Food & Transportation Assistance</h3>
+                                        <p style="font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">Help with groceries/food packs or fare/travel expenses during crisis situations.</p>
+                                    </div>
+                                    <div class="select-indicator" style="padding: 10px; text-align: center; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                                        <i class="fas fa-hand-pointer"></i> Click to select service
+                                    </div>
+                                </div>
+
+                                <!-- Card 3: Medical & Financial Assistance -->
+                                <div class="category-card service-select-card" style="background: var(--bg-card); border-radius: var(--radius-card); border: 2px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s ease;" onclick="selectServiceCard(this, 6, 'AICS - Medical Assistance', '3-5 days')">
+                                    <div class="card-image" style="background: linear-gradient(135deg, #0288D1, #01579B); padding: 24px; text-align: center; position: relative;">
+                                        <div class="icon-wrapper" style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; margin: 0 auto;">
+                                            <i class="fas fa-hospital-user"></i>
+                                        </div>
+                                        <span class="card-badge popular" style="position: absolute; top: 12px; right: 12px; background: #f57c00; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">Popular</span>
+                                    </div>
+                                    <div class="card-content" style="padding: 20px; flex: 1; text-align: center;">
+                                        <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">🏥 Medical & Financial Assistance</h3>
+                                        <p style="font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">Financial assistance for hospital bills, doctor's prescriptions, or cash relief for emergency situations.</p>
+                                    </div>
+                                    <div class="select-indicator" style="padding: 10px; text-align: center; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                                        <i class="fas fa-hand-pointer"></i> Click to select service
+                                    </div>
+                                </div>
+
+                                <!-- Card 4: Housing Assistance -->
+                                <div class="category-card service-select-card" style="background: var(--bg-card); border-radius: var(--radius-card); border: 2px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s ease;" onclick="selectServiceCard(this, 4, 'Housing Application - Akap Village', '5-7 days')">
+                                    <div class="card-image" style="background: linear-gradient(135deg, #e65100, #bf360c); padding: 24px; text-align: center; position: relative;">
+                                        <div class="icon-wrapper" style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; margin: 0 auto;">
+                                            <i class="fas fa-house-user"></i>
+                                        </div>
+                                    </div>
+                                    <div class="card-content" style="padding: 20px; flex: 1; text-align: center;">
+                                        <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">🏠 Housing Assistance</h3>
+                                        <p style="font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">Subsidized socialized housing programs including Akap Village and San Lorenzo NHA resettlement.</p>
+                                    </div>
+                                    <div class="select-indicator" style="padding: 10px; text-align: center; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                                        <i class="fas fa-hand-pointer"></i> Click to select service
+                                    </div>
+                                </div>
+
+                                <!-- Card 5: Senior Citizen Services -->
+                                <div class="category-card service-select-card" style="background: var(--bg-card); border-radius: var(--radius-card); border: 2px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s ease;" onclick="selectServiceCard(this, 2, 'Senior Citizen Pension', '3-5 days')">
+                                    <div class="card-image" style="background: linear-gradient(135deg, #5d4037, #3e2723); padding: 24px; text-align: center; position: relative;">
+                                        <div class="icon-wrapper" style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; margin: 0 auto;">
+                                            <i class="fas fa-person-cane"></i>
+                                        </div>
+                                    </div>
+                                    <div class="card-content" style="padding: 20px; flex: 1; text-align: center;">
+                                        <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">👴 Senior Citizen Services</h3>
+                                        <p style="font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">Social pension registration, senior citizen ID application, and stipend benefits for elderly residents.</p>
+                                    </div>
+                                    <div class="select-indicator" style="padding: 10px; text-align: center; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                                        <i class="fas fa-hand-pointer"></i> Click to select service
+                                    </div>
+                                </div>
+
+                                <!-- Card 6: PWD Services -->
+                                <div class="category-card service-select-card" style="background: var(--bg-card); border-radius: var(--radius-card); border: 2px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s ease;" onclick="selectServiceCard(this, 3, 'PWD Registration and Benefits', '3-5 days')">
+                                    <div class="card-image" style="background: linear-gradient(135deg, #4a148c, #311b92); padding: 24px; text-align: center; position: relative;">
+                                        <div class="icon-wrapper" style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; margin: 0 auto;">
+                                            <i class="fas fa-wheelchair"></i>
+                                        </div>
+                                    </div>
+                                    <div class="card-content" style="padding: 20px; flex: 1; text-align: center;">
+                                        <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">♿ PWD Services</h3>
+                                        <p style="font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">Persons with Disability ID registration, discount booklets, and special assistance privileges.</p>
+                                    </div>
+                                    <div class="select-indicator" style="padding: 10px; text-align: center; background: rgba(0,0,0,0.03); border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                                        <i class="fas fa-hand-pointer"></i> Click to select service
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Prerequisite Alert display -->
@@ -1370,6 +1174,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             'Barangay Certificate of Indigency (Original)',
             'Valid Government ID of the patient & applicant'
         ],
+        'cash relief assistance': [
+            'Barangay Certificate of Indigency (Original)',
+            'Valid Government ID of applicant',
+            'Incident/Blotter Report or Social Worker Assessment Report'
+        ],
         'educational assistance': [
             'Certificate of Enrollment or Certificate of Registration (latest semester)',
             'School ID photocopy (front and back)',
@@ -1404,6 +1213,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             'Valid ID of the traveler',
             'Referral Letter or Medical Abstract (if traveling for medical treatments)'
         ],
+        'housing application': [
+            'Letter of Intent addressed to CSWDO committee',
+            'Barangay Clearance/Indigency (Original)',
+            'Government Valid ID',
+            'Photos of Current House condition',
+            'Utility Proof of Billing'
+        ],
         'housing program': [
             'Letter of Intent addressed to CSWDO committee',
             'Barangay Clearance/Indigency (Original)',
@@ -1411,36 +1227,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             'Photos of Current House condition',
             'Utility Proof of Billing'
         ],
-        'relocation': [
-            'Letter of Intent addressed to CSWDO committee',
-            'Barangay Clearance/Indigency (Original)',
-            'Government Valid ID',
-            'Photos of Current House condition',
-            'Utility Proof of Billing'
+        'senior citizen pension': [
+            'Proof of Age (Birth Certificate, Senior Citizen ID or Barangay Certification)',
+            'Barangay Certificate of Indigency (Original)',
+            'Valid Government ID',
+            '1x1 or 2x2 ID Photo (2 copies)'
+        ],
+        'pwd registration and benefits': [
+            'Medical Certificate specifying type of disability (issued by licensed physician)',
+            'Barangay Certificate of Residency',
+            '2 pcs 1x1 recent ID photos',
+            'Valid Government ID or Birth Certificate of PWD'
         ]
     };
-
-    // ========== THEME TOGGLE ==========
-    const themeToggle = document.getElementById('themeToggle');
-    const html = document.documentElement;
-
-    const currentTheme = localStorage.getItem('theme') || 
-                        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-    function setTheme(theme) {
-        html.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-        const icon = themeToggle.querySelector('i');
-        icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-    }
-
-    setTheme(currentTheme);
-
-    themeToggle.addEventListener('click', () => {
-        const current = html.getAttribute('data-theme');
-        setTheme(current === 'dark' ? 'light' : 'dark');
-    });
 
     // ========== STEP NAVIGATION WIZARD ==========
     function goToStep(step) {
@@ -1471,14 +1270,48 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             document.getElementById('summaryDuration').textContent = selectedServiceDuration;
             
             const rawDate = document.getElementById('appointment_date').value;
-            const dateObj = new Date(rawDate);
-            const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-            document.getElementById('summaryDate').textContent = formattedDate;
+            if (rawDate) {
+                const dateObj = new Date(rawDate);
+                const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                document.getElementById('summaryDate').textContent = formattedDate;
+            }
 
             const timeLabel = document.querySelector('.time-slot-btn.selected .slot-time')?.textContent || '-';
             document.getElementById('summaryTime').textContent = timeLabel;
             
             toggleBookingSubmit();
+        }
+    }
+
+    // Show requirements helper function
+    function showRequirements(categoryKey) {
+        let matchedReqs = [];
+        if (categoryKey === 'funeral') {
+            matchedReqs = serviceRequirementsMap['burial assistance'] || serviceRequirementsMap['funeral assistance'] || [];
+        } else if (categoryKey === 'food_transport') {
+            matchedReqs = [...(serviceRequirementsMap['food assistance'] || []), ...(serviceRequirementsMap['transportation assistance'] || [])];
+        } else if (categoryKey === 'medical_financial') {
+            matchedReqs = [...(serviceRequirementsMap['medical assistance'] || []), ...(serviceRequirementsMap['cash relief assistance'] || [])];
+        } else if (categoryKey === 'housing') {
+            matchedReqs = serviceRequirementsMap['housing application'] || serviceRequirementsMap['housing program'] || [];
+        } else if (categoryKey === 'senior') {
+            matchedReqs = serviceRequirementsMap['senior citizen pension'] || [];
+        } else if (categoryKey === 'pwd') {
+            matchedReqs = serviceRequirementsMap['pwd registration and benefits'] || [];
+        }
+
+        const alertBox = document.getElementById('requirementsAlert');
+        const listContainer = document.getElementById('requirementsList');
+        if (alertBox && listContainer) {
+            listContainer.innerHTML = '';
+            if (matchedReqs.length > 0) {
+                matchedReqs.forEach(req => {
+                    const li = document.createElement('li');
+                    li.textContent = req;
+                    listContainer.appendChild(li);
+                });
+                alertBox.style.display = 'block';
+            }
         }
     }
 
@@ -1489,9 +1322,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         selectedServiceDuration = duration;
         document.getElementById('service_id').value = serviceId;
 
-        // Select highlights toggle
-        document.querySelectorAll('.service-select-card').forEach(card => card.classList.remove('selected'));
-        cardElement.classList.add('selected');
+        // Reset all card selections
+        document.querySelectorAll('.service-select-card').forEach(card => {
+            card.style.borderColor = 'var(--border-color)';
+            card.style.boxShadow = 'none';
+            card.style.background = 'var(--bg-card)';
+            const indicator = card.querySelector('.select-indicator');
+            if (indicator) {
+                indicator.innerHTML = '<i class="fas fa-hand-pointer"></i> Click to select service';
+                indicator.style.background = 'rgba(0,0,0,0.03)';
+                indicator.style.color = 'var(--text-muted)';
+            }
+        });
+
+        // Highlight selected card
+        const card = cardElement.classList.contains('service-select-card') ? cardElement : cardElement.closest('.service-select-card');
+        if (card) {
+            card.style.borderColor = 'var(--maroon)';
+            card.style.boxShadow = '0 8px 24px rgba(127, 3, 3, 0.18)';
+            card.style.background = 'rgba(127, 3, 3, 0.03)';
+            const indicator = card.querySelector('.select-indicator');
+            if (indicator) {
+                indicator.innerHTML = '<i class="fas fa-check-circle" style="color: #2E7D32;"></i> Selected';
+                indicator.style.background = 'rgba(46, 125, 50, 0.12)';
+                indicator.style.color = '#2E7D32';
+            }
+        }
 
         // Dynamic Document loading
         const normName = name.toLowerCase();
@@ -1499,7 +1355,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         
         // Find requirements matches
         for (let key in serviceRequirementsMap) {
-            if (normName.indexOf(key) !== -1) {
+            if (normName.indexOf(key) !== -1 || key.indexOf(normName) !== -1) {
                 matchedReqs = serviceRequirementsMap[key];
                 break;
             }
@@ -1509,7 +1365,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         const listContainer = document.getElementById('requirementsList');
         listContainer.innerHTML = '';
 
-        if (matchedReqs.length > 0) {
+        if (matchedReqs && matchedReqs.length > 0) {
             matchedReqs.forEach(req => {
                 const li = document.createElement('li');
                 li.textContent = req;
@@ -1517,8 +1373,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             });
             alertBox.style.display = 'block';
         } else {
-            // Default generic requirement list
-            const defaults = serviceRequirementsMap['general consultation / case study / others'];
+            // Default requirement list
+            const defaults = serviceRequirementsMap['burial assistance'] || [];
             defaults.forEach(req => {
                 const li = document.createElement('li');
                 li.textContent = req;
@@ -1716,6 +1572,58 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         if (event.target.classList.contains('modal')) {
             event.target.classList.remove('show');
         }
+    }
+
+    // ========== MOBILE SIDEBAR TOGGLE ==========
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const hamburgerBtn = document.getElementById('hamburgerBtn');
+    const sidebarClose = document.getElementById('sidebarClose');
+
+    function openSidebar() {
+        if (sidebar && sidebarOverlay) {
+            sidebar.classList.add('open');
+            sidebarOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    function closeSidebar() {
+        if (sidebar && sidebarOverlay) {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+    }
+
+    if (hamburgerBtn) hamburgerBtn.addEventListener('click', openSidebar);
+    if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+    if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
+    // ========== THEME TOGGLE ==========
+    const themeToggle = document.getElementById('themeToggle');
+    const html = document.documentElement;
+
+    const currentTheme = localStorage.getItem('theme') || 
+                        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+    function setTheme(theme) {
+        html.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        const icon = themeToggle ? themeToggle.querySelector('i') : null;
+        if (icon) {
+            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+        document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
+    }
+
+    setTheme(currentTheme);
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const current = html.getAttribute('data-theme');
+            setTheme(current === 'dark' ? 'light' : 'dark');
+        });
     }
     </script>
 </body>

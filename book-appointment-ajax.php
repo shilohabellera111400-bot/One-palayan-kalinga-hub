@@ -35,6 +35,20 @@ if (strtotime($appointment_date) < strtotime(date('Y-m-d'))) {
 $database = new Database();
 $db = $database->getConnection();
 
+// Check if user already has an active appointment on the same date for this service
+$dup_check = $db->prepare("SELECT appointment_id FROM appointments 
+                          WHERE user_id = :user_id AND service_id = :service_id 
+                          AND appointment_date = :date AND status IN ('pending', 'approved', 'scheduled', 'confirmed')");
+$dup_check->bindParam(':user_id', $_SESSION['user_id']);
+$dup_check->bindParam(':service_id', $service_id);
+$dup_check->bindParam(':date', $appointment_date);
+$dup_check->execute();
+
+if ($dup_check->rowCount() > 0) {
+    echo json_encode(['success' => false, 'message' => 'Meron ka nang active appointment para sa serbisyong ito sa napiling petsa.']);
+    exit;
+}
+
 // Check if slot is available
 $check_query = "SELECT COUNT(*) as count FROM appointments 
                 WHERE appointment_date = :date AND appointment_time = :time 

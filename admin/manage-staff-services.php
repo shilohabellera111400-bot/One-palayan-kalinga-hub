@@ -212,7 +212,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --midnight: #0F414A;
             --white: #FFFFFF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -223,11 +223,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --text-muted: #6B7A8A;
             --text-sidebar: rgba(255,255,255,0.7);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
+            --border-color: #C8D0DC;
             
             --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
             --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.10);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
+            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
             
             --search-bg: #FFFFFF;
@@ -926,11 +926,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         
         <ul class="sidebar-menu">
             <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+            <li><a href="announcements.php"><i class="fas fa-bullhorn"></i> Announcements</a></li>
+            <li><a href="calendar.php"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
             <li class="menu-divider">User Management</li>
             <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
             <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
             <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php" class="active"><i class="fas fa-user-tag"></i> Staff Services</a></li>
+            <li><a href="manage-staff-services.php" class="active`><i class="fas fa-user-tag"></i> Staff Services</a></li>
+            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
             <li class="menu-divider">System</li>
             <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
             <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
@@ -1011,10 +1014,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <?php if($current_staff): 
             $staff_initials = strtoupper(substr($current_staff['first_name'], 0, 1) . substr($current_staff['last_name'], 0, 1));
             $service_icons = [
-                'AICS' => '🏥',
-                'Housing' => '🏠',
-                'Senior Citizen' => '👴',
-                'PWD' => '♿'
+                'AICS' => '??',
+                'Housing' => '??',
+                'Senior Citizen' => '??',
+                'PWD' => '?'
             ];
             $service_colors = [
                 'AICS' => 'var(--color-aics)',
@@ -1038,7 +1041,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             <div class="permissions-grid">
                 <?php foreach($all_services as $service): 
                     $is_assigned = in_array($service, $assigned_names);
-                    $icon = $service_icons[$service] ?? '📋';
+                    $icon = $service_icons[$service] ?? '??';
                     $color = $service_colors[$service] ?? 'var(--text-muted)';
                 ?>
                 <div class="permission-group">
@@ -1048,7 +1051,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                             <?php echo htmlspecialchars($service); ?>
                         </div>
                         <span class="status-badge <?php echo $is_assigned ? 'assigned' : 'unassigned'; ?>">
-                            <?php echo $is_assigned ? '✓ Assigned' : '✗ Unassigned'; ?>
+                            <?php echo $is_assigned ? '? Assigned' : '? Unassigned'; ?>
                         </span>
                     </div>
                     <div class="permission-actions">
@@ -1146,3 +1149,6 @@ document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
 </script>
 </body>
 </html>
+
+
+

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config/database.php';
 
 $database = new Database();
@@ -50,16 +50,16 @@ if (isLoggedIn()) {
             --light-blue: #96C0CE;
             --alabaster: #EFE8DF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: #E8ECF2;
             --bg-card: #FFFFFF;
             --text-primary: #263238;
             --text-secondary: #3A4A5A;
             --text-muted: #6B7A8A;
-            --border-color: #E8ECF2;
+            --border-color: #C8D0DC;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
+            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
+            --shadow-md: 0 6px 24px rgba(15,65,74,0.12), 0 2px 8px rgba(0,0,0,0.07);
+            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
             --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
             
             --radius-card: 24px;

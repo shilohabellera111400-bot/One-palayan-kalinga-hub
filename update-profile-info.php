@@ -218,338 +218,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>Complete Your Profile - One Palayan-Kalinga Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/portal-layout.css">
     <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
-            --midnight: #0F414A;
-            --white: #FFFFFF;
-            
-            --bg-primary: #F8F9FC;
-            --bg-secondary: #FFFFFF;
-            --bg-card: #FFFFFF;
-            --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #E8ECF2;
-            
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
-            
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
-            --input-bg: #FFFFFF;
-            
-            --radius-card: 20px;
-            --radius-element: 12px;
-            
-            --color-success: #4CAF50;
-            --color-warning: #FF9800;
-            --color-danger: #EF5350;
-            --color-info: #2196F3;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
-            
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.20);
-            
-            --card-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
-            --input-bg: #1a2332;
-            
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
-            
-            --color-success: #66BB6A;
-            --color-warning: #FFA726;
-            --color-danger: #EF5350;
-            --color-info: #42A5F5;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            line-height: 1.5;
-            min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .user-info-sidebar {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .user-avatar-sidebar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: var(--maroon-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1rem;
-            color: white;
-            flex-shrink: 0;
-            overflow: hidden;
-        }
-        .user-avatar-sidebar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .user-info-sidebar h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .user-info-sidebar span {
-            color: rgba(255,255,255,0.5);
-            font-size: 0.65rem;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.82rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 0.95rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .page-title h1 {
-            font-size: 1.5rem;
-            color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
-        }
-        .page-title p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
-        }
-        .top-bar-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
-            text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-
-        /* ========== ALERTS ========== */
-        .alert {
-            padding: 16px 20px;
-            border-radius: var(--radius-element);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            box-shadow: var(--shadow-sm);
-            border-left: 4px solid transparent;
-        }
-        .alert-success {
-            background: rgba(76, 175, 80, 0.12);
-            color: var(--color-success);
-            border-left-color: var(--color-success);
-        }
-        .alert-error {
-            background: rgba(244, 67, 54, 0.12);
-            color: var(--color-danger);
-            border-left-color: var(--color-danger);
-        }
-        .alert-info {
-            background: rgba(33, 150, 243, 0.12);
-            color: var(--color-info);
-            border-left-color: var(--color-info);
-        }
-        .alert-warning {
-            background: rgba(255, 152, 0, 0.12);
-            color: var(--color-warning);
-            border-left-color: var(--color-warning);
-        }
-        .alert i { font-size: 1.2rem; }
-
         /* ========== VERIFICATION BANNER ========== */
         .verification-banner {
             background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
@@ -768,6 +438,194 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--text-muted);
         }
 
+        /* ========== MULTI-STEP STEPPER ========== */
+        .verification-stepper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 35px;
+            padding: 10px 0;
+            position: relative;
+        }
+        .step-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+            flex: 1;
+        }
+        .step-circle {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--badge-bg);
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .step-label {
+            margin-top: 8px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-align: center;
+            transition: all 0.4s;
+            max-width: 100px;
+        }
+        .step-line {
+            height: 2px;
+            background: var(--border-color);
+            flex: 1;
+            margin: 0 -10px;
+            position: relative;
+            top: -18px; /* align with vertical center of circle */
+            z-index: 1;
+            transition: all 0.4s;
+        }
+        .step-item.active .step-circle {
+            background: var(--white);
+            border-color: var(--gold);
+            color: var(--gold);
+            box-shadow: 0 0 0 4px rgba(201, 168, 108, 0.15);
+        }
+        .step-item.active .step-label {
+            color: var(--gold);
+            font-weight: 700;
+        }
+        .step-item.completed .step-circle {
+            background: var(--maroon);
+            border-color: var(--maroon);
+            color: white;
+        }
+        .step-item.completed .step-label {
+            color: var(--text-primary);
+        }
+        .step-line.filled {
+            background: var(--maroon);
+        }
+
+        /* ========== STEP CONTENT ========== */
+        .step-content {
+            display: none;
+            border: none;
+            padding: 0;
+            margin: 0;
+            animation: fadeIn 0.4s ease both;
+        }
+        .step-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== SUMMARY BLOCK ========== */
+        .summary-block {
+            background: var(--badge-bg);
+            border-radius: var(--radius-element);
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+        .summary-grid-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            border-bottom: 1.5px solid var(--border-color);
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .summary-grid-title i {
+            color: var(--maroon-light);
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .summary-grid:last-of-type {
+            margin-bottom: 0;
+        }
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .summary-label {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .summary-val {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.88rem;
+        }
+
+        /* ========== ACTIONS ROW ========== */
+        .step-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 24px;
+            gap: 16px;
+        }
+        .btn-action {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-action.prev {
+            background: var(--badge-bg);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+        .btn-action.prev:hover {
+            background: var(--border-color);
+        }
+        .btn-action.next {
+            background: var(--maroon);
+            color: white;
+            flex: 1;
+            justify-content: center;
+        }
+        .btn-action.next:hover {
+            background: var(--maroon-light);
+            transform: translateY(-1px);
+        }
+
+        .alert-mini {
+            background: rgba(244, 67, 54, 0.08);
+            border: 1px solid rgba(244, 67, 54, 0.15);
+            color: var(--color-danger);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            margin-bottom: 12px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
         /* ========== RESPONSIVE ========== */
         @media (max-width: 992px) {
             .sidebar { transform: translateX(-100%); position: fixed; }
@@ -792,67 +650,65 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     </style>
 </head>
 <body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-user-edit"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Integrated Service Portal</span>
-            </div>
-        </div>
-        
-        <div class="user-info-sidebar">
-            <div class="user-avatar-sidebar">
-                <?php if(!empty($avatar_url)): ?>
-                    <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
-                <?php else: ?>
-                    <?php echo $initials; ?>
-                <?php endif; ?>
-            </div>
-            <div>
-                <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                <span>Resident</span>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li><a href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
-            <li><a href="update-profile-info.php" class="active"><i class="fas fa-edit"></i> Complete Profile</a></li>
-            <li><a href="verify-resident.php"><i class="fas fa-shield-alt"></i> Verify Residency</a></li>
-            <li><a href="appointments.php"><i class="fas fa-calendar-plus"></i> Book Appointment</a></li>
-            <li><a href="my-appointments.php"><i class="fas fa-calendar-check"></i> My Appointments</a></li>
-            <li><a href="aics.php"><i class="fas fa-hand-holding-heart"></i> Apply for AICS</a></li>
-            <li><a href="aics-requests.php"><i class="fas fa-list-alt"></i> AICS Requests</a></li>
-            <li><a href="housing-applications.php"><i class="fas fa-home"></i> Housing Applications</a></li>
-            <li><a href="my-housing.php"><i class="fas fa-building"></i> My Housing</a></li>
-            <li><a href="documents.php"><i class="fas fa-folder-open"></i> My Documents</a></li>
-            <li><a href="notifications.php"><i class="fas fa-bell"></i> Notifications</a></li>
-            <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
-        </div>
-    </div>
+    <div class="app-container">
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-edit" style="color: var(--maroon-light); margin-right: 10px;"></i> Complete Your Profile</h1>
-                <p>Fill out your complete information to help us serve you better</p>
-            </div>
-            <div class="top-bar-actions">
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon"><i class="fas fa-user-edit"></i></div>
+                <div class="logo-text">
+                    <h2>One Palayan-Kalinga Hub</h2>
+                    <span>Integrated Service Portal</span>
+                </div>
+                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+                    <i class="fas fa-times"></i>
                 </button>
-                <a href="dashboard.php" class="top-icon"><i class="fas fa-tachometer-alt"></i></a>
+            </div>
+            
+            <div class="user-info-sidebar">
+                <div class="user-avatar-sidebar">
+                    <?php if (!empty($avatar_url)): ?>
+                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
+                    <?php else: ?>
+                        <?php echo $initials; ?>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
+                    <span>Resident</span>
+                </div>
+            </div>
+            
+            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
+            
+            <div class="sidebar-footer">
+                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
             </div>
         </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
+                        <i class="fas fa-bars"></i>
+                        <span>Menu</span>
+                    </button>
+                    <div class="page-title">
+                        <h1><i class="fas fa-edit" style="color: var(--maroon-light); margin-right: 10px;"></i> Complete Your Profile</h1>
+                        <p>Fill out your complete information to help us serve you better</p>
+                    </div>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
+                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
+                    </button>
+                    <a href="dashboard.php" class="top-icon"><i class="fas fa-tachometer-alt"></i></a>
+                </div>
+            </div>
 
         <!-- Verification Status Banner -->
         <div class="verification-banner">
@@ -883,7 +739,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <?php endif; ?>
 
         <!-- Form -->
-        <div class="profile-form-container <?php echo ($verification_status != 'verified') ? 'form-disabled' : ''; ?>">
+        <div class="profile-form-container">
             <div class="form-header">
                 <i class="fas fa-user-edit"></i>
                 <h2>Profile Information</h2>
@@ -900,7 +756,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 </div>
             <?php endif; ?>
             
-            <?php if(!$existing_resident && $verification_status == 'verified'): ?>
+            <?php if(!$existing_resident): ?>
             <div class="alert alert-info">
                 <i class="fas fa-info-circle"></i> <strong>Complete your profile to proceed.</strong> Your information will be kept secure and confidential.
             </div>
@@ -916,189 +772,345 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
             <?php endif; ?>
 
-            <form method="POST" action="">
-                <!-- Personal Information -->
-                <div class="form-section">
-                    <h3><i class="fas fa-user-circle"></i> Personal Information</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>First Name <span class="required-star">*</span></label>
-                            <input type="text" name="first_name" value="<?php echo htmlspecialchars($resident['first_name'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
+            <!-- Profile Stepper -->
+            <div class="verification-stepper">
+                <div class="step-item active" data-step="1">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Personal Info</div>
+                </div>
+                <div class="step-line" data-line="1"></div>
+                <div class="step-item" data-step="2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Address Details</div>
+                </div>
+                <div class="step-line" data-line="2"></div>
+                <div class="step-item" data-step="3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Economic Info</div>
+                </div>
+                <div class="step-line" data-line="3"></div>
+                <div class="step-item" data-step="4">
+                    <div class="step-circle">4</div>
+                    <div class="step-label">Emergency Details</div>
+                </div>
+                <div class="step-line" data-line="4"></div>
+                <div class="step-item" data-step="5">
+                    <div class="step-circle">5</div>
+                    <div class="step-label">Review & Save</div>
+                </div>
+            </div>
+
+            <!-- Live validation warning alert -->
+            <div class="alert-mini" id="stepAlert"><i class="fas fa-exclamation-triangle"></i> <span id="stepAlertText"></span></div>
+
+            <form method="POST" action="" id="profileForm">
+                <!-- STEP 1: Personal Information -->
+                <fieldset class="step-content active" data-fieldset="1">
+                    <div class="form-section">
+                        <h3><i class="fas fa-user-circle"></i> Personal Information</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>First Name <span class="required-star">*</span></label>
+                                <input type="text" name="first_name" id="first_name" value="<?php echo htmlspecialchars($resident['first_name'] ?? ''); ?>" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Last Name <span class="required-star">*</span></label>
+                                <input type="text" name="last_name" id="last_name" value="<?php echo htmlspecialchars($resident['last_name'] ?? ''); ?>" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Middle Name</label>
+                                <input type="text" name="middle_name" id="middle_name" value="<?php echo htmlspecialchars($resident['middle_name'] ?? ''); ?>" >
+                            </div>
+                            <div class="form-group">
+                                <label>Suffix</label>
+                                <select name="suffix" id="suffix" >
+                                    <option value="">None</option>
+                                    <option value="Jr." <?php echo ($resident['suffix'] ?? '') == 'Jr.' ? 'selected' : ''; ?>>Jr.</option>
+                                    <option value="Sr." <?php echo ($resident['suffix'] ?? '') == 'Sr.' ? 'selected' : ''; ?>>Sr.</option>
+                                    <option value="III" <?php echo ($resident['suffix'] ?? '') == 'III' ? 'selected' : ''; ?>>III</option>
+                                    <option value="IV" <?php echo ($resident['suffix'] ?? '') == 'IV' ? 'selected' : ''; ?>>IV</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Gender <span class="required-star">*</span></label>
+                                <select name="gender" id="gender" required>
+                                    <option value="">Select Gender</option>
+                                    <option value="Male" <?php echo ($resident['gender'] ?? '') == 'Male' ? 'selected' : ''; ?>>Male</option>
+                                    <option value="Female" <?php echo ($resident['gender'] ?? '') == 'Female' ? 'selected' : ''; ?>>Female</option>
+                                    <option value="Other" <?php echo ($resident['gender'] ?? '') == 'Other' ? 'selected' : ''; ?>>Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Birth Date <span class="required-star">*</span></label>
+                                <input type="date" name="birth_date" id="birth_date" value="<?php echo htmlspecialchars($resident['birth_date'] ?? ''); ?>" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Civil Status <span class="required-star">*</span></label>
+                                <select name="civil_status" id="civil_status" required>
+                                    <option value="">Select Status</option>
+                                    <option value="Single" <?php echo ($resident['civil_status'] ?? '') == 'Single' ? 'selected' : ''; ?>>Single</option>
+                                    <option value="Married" <?php echo ($resident['civil_status'] ?? '') == 'Married' ? 'selected' : ''; ?>>Married</option>
+                                    <option value="Widowed" <?php echo ($resident['civil_status'] ?? '') == 'Widowed' ? 'selected' : ''; ?>>Widowed</option>
+                                    <option value="Divorced" <?php echo ($resident['civil_status'] ?? '') == 'Divorced' ? 'selected' : ''; ?>>Divorced</option>
+                                    <option value="Separated" <?php echo ($resident['civil_status'] ?? '') == 'Separated' ? 'selected' : ''; ?>>Separated</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Number <span class="required-star">*</span></label>
+                                <input type="text" name="contact_number" id="contact_number" value="<?php echo htmlspecialchars($resident['contact_number'] ?? ''); ?>" placeholder="09123456789" required>
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label>Last Name <span class="required-star">*</span></label>
-                            <input type="text" name="last_name" value="<?php echo htmlspecialchars($resident['last_name'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
+                            <label>Email Address</label>
+                            <input type="email" name="email" id="email" value="<?php echo htmlspecialchars($resident['email'] ?? $user['email']); ?>" readonly class="disabled-field">
+                            <small>Email cannot be changed</small>
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Middle Name</label>
-                            <input type="text" name="middle_name" value="<?php echo htmlspecialchars($resident['middle_name'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
+                </fieldset>
+
+                <!-- STEP 2: Address Information -->
+                <fieldset class="step-content" data-fieldset="2">
+                    <div class="form-section">
+                        <h3><i class="fas fa-map-marker-alt"></i> Address Information</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Street/Block/Lot <span class="required-star">*</span></label>
+                                <input type="text" name="street" id="street" value="<?php echo htmlspecialchars($resident['street'] ?? ''); ?>" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Barangay <span class="required-star">*</span></label>
+                                <input type="text" name="barangay" id="barangay" value="<?php echo htmlspecialchars($resident['barangay'] ?? ''); ?>" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>City/Municipality <span class="required-star">*</span></label>
+                                <input type="text" name="city" id="city" value="<?php echo htmlspecialchars($resident['city'] ?? 'Palayan City'); ?>" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Province <span class="required-star">*</span></label>
+                                <input type="text" name="province" id="province" value="<?php echo htmlspecialchars($resident['province'] ?? 'Nueva Ecija'); ?>" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Postal Code</label>
+                                <input type="text" name="postal_code" id="postal_code" value="<?php echo htmlspecialchars($resident['postal_code'] ?? '3132'); ?>" >
+                            </div>
+                            <div class="form-group">
+                                <label>Household Number</label>
+                                <input type="text" name="household_number" id="household_number" value="<?php echo htmlspecialchars($resident['household_number'] ?? ''); ?>" placeholder="Optional" >
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- STEP 3: Employment & Economic Information -->
+                <fieldset class="step-content" data-fieldset="3">
+                    <div class="form-section">
+                        <h3><i class="fas fa-briefcase"></i> Employment & Economic Information</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Occupation</label>
+                                <input type="text" name="occupation" id="occupation" value="<?php echo htmlspecialchars($resident['occupation'] ?? ''); ?>" >
+                            </div>
+                            <div class="form-group">
+                                <label>Monthly Income (₱)</label>
+                                <input type="number" name="monthly_income" id="monthly_income" step="0.01" value="<?php echo htmlspecialchars($resident['monthly_income'] ?? 0); ?>" >
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label>Suffix</label>
-                            <select name="suffix" <?php echo ($verification_status != 'verified') ? 'disabled' : ''; ?>>
-                                <option value="">None</option>
-                                <option value="Jr." <?php echo ($resident['suffix'] ?? '') == 'Jr.' ? 'selected' : ''; ?>>Jr.</option>
-                                <option value="Sr." <?php echo ($resident['suffix'] ?? '') == 'Sr.' ? 'selected' : ''; ?>>Sr.</option>
-                                <option value="III" <?php echo ($resident['suffix'] ?? '') == 'III' ? 'selected' : ''; ?>>III</option>
-                                <option value="IV" <?php echo ($resident['suffix'] ?? '') == 'IV' ? 'selected' : ''; ?>>IV</option>
+                            <label>Educational Attainment</label>
+                            <select name="educational_attainment" id="educational_attainment" >
+                                <option value="">Select</option>
+                                <option value="No Formal Education" <?php echo ($resident['educational_attainment'] ?? '') == 'No Formal Education' ? 'selected' : ''; ?>>No Formal Education</option>
+                                <option value="Elementary Level" <?php echo ($resident['educational_attainment'] ?? '') == 'Elementary Level' ? 'selected' : ''; ?>>Elementary Level</option>
+                                <option value="Elementary Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'Elementary Graduate' ? 'selected' : ''; ?>>Elementary Graduate</option>
+                                <option value="High School Level" <?php echo ($resident['educational_attainment'] ?? '') == 'High School Level' ? 'selected' : ''; ?>>High School Level</option>
+                                <option value="High School Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'High School Graduate' ? 'selected' : ''; ?>>High School Graduate</option>
+                                <option value="College Level" <?php echo ($resident['educational_attainment'] ?? '') == 'College Level' ? 'selected' : ''; ?>>College Level</option>
+                                <option value="College Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'College Graduate' ? 'selected' : ''; ?>>College Graduate</option>
+                                <option value="Post Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'Post Graduate' ? 'selected' : ''; ?>>Post Graduate</option>
+                                <option value="Vocational" <?php echo ($resident['educational_attainment'] ?? '') == 'Vocational' ? 'selected' : ''; ?>>Vocational</option>
                             </select>
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Gender <span class="required-star">*</span></label>
-                            <select name="gender" <?php echo ($verification_status != 'verified') ? 'disabled' : 'required'; ?>>
-                                <option value="">Select Gender</option>
-                                <option value="Male" <?php echo ($resident['gender'] ?? '') == 'Male' ? 'selected' : ''; ?>>Male</option>
-                                <option value="Female" <?php echo ($resident['gender'] ?? '') == 'Female' ? 'selected' : ''; ?>>Female</option>
-                                <option value="Other" <?php echo ($resident['gender'] ?? '') == 'Other' ? 'selected' : ''; ?>>Other</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Birth Date <span class="required-star">*</span></label>
-                            <input type="date" name="birth_date" value="<?php echo htmlspecialchars($resident['birth_date'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Civil Status <span class="required-star">*</span></label>
-                            <select name="civil_status" <?php echo ($verification_status != 'verified') ? 'disabled' : 'required'; ?>>
-                                <option value="">Select Status</option>
-                                <option value="Single" <?php echo ($resident['civil_status'] ?? '') == 'Single' ? 'selected' : ''; ?>>Single</option>
-                                <option value="Married" <?php echo ($resident['civil_status'] ?? '') == 'Married' ? 'selected' : ''; ?>>Married</option>
-                                <option value="Widowed" <?php echo ($resident['civil_status'] ?? '') == 'Widowed' ? 'selected' : ''; ?>>Widowed</option>
-                                <option value="Divorced" <?php echo ($resident['civil_status'] ?? '') == 'Divorced' ? 'selected' : ''; ?>>Divorced</option>
-                                <option value="Separated" <?php echo ($resident['civil_status'] ?? '') == 'Separated' ? 'selected' : ''; ?>>Separated</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Contact Number</label>
-                            <input type="text" name="contact_number" value="<?php echo htmlspecialchars($resident['contact_number'] ?? ''); ?>" placeholder="09123456789" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" name="email" value="<?php echo htmlspecialchars($resident['email'] ?? $user['email']); ?>" readonly class="disabled-field">
-                        <small>Email cannot be changed</small>
-                    </div>
-                </div>
+                </fieldset>
 
-                <!-- Address Information -->
-                <div class="form-section">
-                    <h3><i class="fas fa-map-marker-alt"></i> Address Information</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Street/Block/Lot <span class="required-star">*</span></label>
-                            <input type="text" name="street" value="<?php echo htmlspecialchars($resident['street'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
+                <!-- STEP 4: Emergency Contact -->
+                <fieldset class="step-content" data-fieldset="4">
+                    <div class="form-section">
+                        <h3><i class="fas fa-phone-alt"></i> Emergency Contact</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Emergency Contact Name</label>
+                                <input type="text" name="emergency_contact_name" id="emergency_contact_name" value="<?php echo htmlspecialchars($resident['emergency_contact_name'] ?? ''); ?>" >
+                            </div>
+                            <div class="form-group">
+                                <label>Emergency Contact Number</label>
+                                <input type="text" name="emergency_contact_number" id="emergency_contact_number" value="<?php echo htmlspecialchars($resident['emergency_contact_number'] ?? ''); ?>" >
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label>Barangay <span class="required-star">*</span></label>
-                            <input type="text" name="barangay" value="<?php echo htmlspecialchars($resident['barangay'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>City/Municipality <span class="required-star">*</span></label>
-                            <input type="text" name="city" value="<?php echo htmlspecialchars($resident['city'] ?? 'Palayan City'); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
-                        </div>
-                        <div class="form-group">
-                            <label>Province <span class="required-star">*</span></label>
-                            <input type="text" name="province" value="<?php echo htmlspecialchars($resident['province'] ?? 'Nueva Ecija'); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : 'required'; ?>>
+                            <label>Relationship to Emergency Contact</label>
+                            <input type="text" name="relationship" id="relationship" value="<?php echo htmlspecialchars($resident['relationship'] ?? ''); ?>" >
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Postal Code</label>
-                            <input type="text" name="postal_code" value="<?php echo htmlspecialchars($resident['postal_code'] ?? '3132'); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
-                        </div>
-                        <div class="form-group">
-                            <label>Household Number</label>
-                            <input type="text" name="household_number" value="<?php echo htmlspecialchars($resident['household_number'] ?? ''); ?>" placeholder="Optional" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
-                        </div>
-                    </div>
-                </div>
+                </fieldset>
 
-                <!-- Employment & Economic Information -->
-                <div class="form-section">
-                    <h3><i class="fas fa-briefcase"></i> Employment & Economic Information</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Occupation</label>
-                            <input type="text" name="occupation" value="<?php echo htmlspecialchars($resident['occupation'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
-                        </div>
-                        <div class="form-group">
-                            <label>Monthly Income (₱)</label>
-                            <input type="number" name="monthly_income" step="0.01" value="<?php echo htmlspecialchars($resident['monthly_income'] ?? 0); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
+                <!-- STEP 5: Special Categories & Summary Review -->
+                <fieldset class="step-content" data-fieldset="5">
+                    <div class="form-section">
+                        <h3><i class="fas fa-tags"></i> Special Categories</h3>
+                        <div class="checkbox-group">
+                            <label>
+                                <input type="checkbox" name="senior_citizen" id="senior_citizen" value="1" <?php echo ($resident['senior_citizen'] ?? 0) == 1 ? 'checked' : ''; ?> >
+                                Senior Citizen
+                            </label>
+                            <label>
+                                <input type="checkbox" name="pwd" id="pwd" value="1" <?php echo ($resident['pwd'] ?? 0) == 1 ? 'checked' : ''; ?> >
+                                Person with Disability (PWD)
+                            </label>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Educational Attainment</label>
-                        <select name="educational_attainment" <?php echo ($verification_status != 'verified') ? 'disabled' : ''; ?>>
-                            <option value="">Select</option>
-                            <option value="No Formal Education" <?php echo ($resident['educational_attainment'] ?? '') == 'No Formal Education' ? 'selected' : ''; ?>>No Formal Education</option>
-                            <option value="Elementary Level" <?php echo ($resident['educational_attainment'] ?? '') == 'Elementary Level' ? 'selected' : ''; ?>>Elementary Level</option>
-                            <option value="Elementary Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'Elementary Graduate' ? 'selected' : ''; ?>>Elementary Graduate</option>
-                            <option value="High School Level" <?php echo ($resident['educational_attainment'] ?? '') == 'High School Level' ? 'selected' : ''; ?>>High School Level</option>
-                            <option value="High School Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'High School Graduate' ? 'selected' : ''; ?>>High School Graduate</option>
-                            <option value="College Level" <?php echo ($resident['educational_attainment'] ?? '') == 'College Level' ? 'selected' : ''; ?>>College Level</option>
-                            <option value="College Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'College Graduate' ? 'selected' : ''; ?>>College Graduate</option>
-                            <option value="Post Graduate" <?php echo ($resident['educational_attainment'] ?? '') == 'Post Graduate' ? 'selected' : ''; ?>>Post Graduate</option>
-                            <option value="Vocational" <?php echo ($resident['educational_attainment'] ?? '') == 'Vocational' ? 'selected' : ''; ?>>Vocational</option>
-                        </select>
-                    </div>
-                </div>
 
-                <!-- Emergency Contact -->
-                <div class="form-section">
-                    <h3><i class="fas fa-phone-alt"></i> Emergency Contact</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Emergency Contact Name</label>
-                            <input type="text" name="emergency_contact_name" value="<?php echo htmlspecialchars($resident['emergency_contact_name'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
+                    <!-- Summary Grid Block -->
+                    <div class="summary-block">
+                        <div class="summary-grid-title"><i class="fas fa-user"></i> Personal Details</div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Full Name</span>
+                                <span class="summary-val" id="sumFullName">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Gender</span>
+                                <span class="summary-val" id="sumGender">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Birth Date</span>
+                                <span class="summary-val" id="sumBirthDate">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Civil Status</span>
+                                <span class="summary-val" id="sumCivilStatus">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Contact Number</span>
+                                <span class="summary-val" id="sumContact">-</span>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Emergency Contact Number</label>
-                            <input type="text" name="emergency_contact_number" value="<?php echo htmlspecialchars($resident['emergency_contact_number'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
+
+                        <div class="summary-grid-title" style="margin-top: 20px;"><i class="fas fa-map-marker-alt"></i> Address Details</div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Complete Address</span>
+                                <span class="summary-val" id="sumAddress">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Household Number</span>
+                                <span class="summary-val" id="sumHousehold">-</span>
+                            </div>
+                        </div>
+
+                        <div class="summary-grid-title" style="margin-top: 20px;"><i class="fas fa-briefcase"></i> Economic Info</div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Occupation</span>
+                                <span class="summary-val" id="sumOccupation">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Monthly Income</span>
+                                <span class="summary-val" id="sumIncome">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Educational Attainment</span>
+                                <span class="summary-val" id="sumEducation">-</span>
+                            </div>
+                        </div>
+
+                        <div class="summary-grid-title" style="margin-top: 20px;"><i class="fas fa-phone-alt"></i> Emergency Info</div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Emergency Contact</span>
+                                <span class="summary-val" id="sumEmergName">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Contact Number</span>
+                                <span class="summary-val" id="sumEmergContact">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Relationship</span>
+                                <span class="summary-val" id="sumRelationship">-</span>
+                            </div>
+                        </div>
+
+                        <div class="summary-grid-title" style="margin-top: 20px;"><i class="fas fa-tags"></i> Special Categories</div>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Senior Citizen</span>
+                                <span class="summary-val" id="sumSenior">-</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Person with Disability (PWD)</span>
+                                <span class="summary-val" id="sumPwd">-</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Relationship to Emergency Contact</label>
-                        <input type="text" name="relationship" value="<?php echo htmlspecialchars($resident['relationship'] ?? ''); ?>" <?php echo ($verification_status != 'verified') ? 'readonly class="disabled-field"' : ''; ?>>
-                    </div>
-                </div>
+                </fieldset>
 
-                <!-- Special Categories -->
-                <div class="form-section">
-                    <h3><i class="fas fa-tags"></i> Special Categories</h3>
-                    <div class="checkbox-group">
-                        <label>
-                            <input type="checkbox" name="senior_citizen" value="1" <?php echo ($resident['senior_citizen'] ?? 0) == 1 ? 'checked' : ''; ?> <?php echo ($verification_status != 'verified') ? 'disabled' : ''; ?>>
-                            Senior Citizen
-                        </label>
-                        <label>
-                            <input type="checkbox" name="pwd" value="1" <?php echo ($resident['pwd'] ?? 0) == 1 ? 'checked' : ''; ?> <?php echo ($verification_status != 'verified') ? 'disabled' : ''; ?>>
-                            Person with Disability (PWD)
-                        </label>
-                    </div>
+                <!-- STEPPER NAVIGATION BUTTONS -->
+                <div class="step-actions">
+                    <button type="button" class="btn-action prev" id="prevBtn" style="display: none;">
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </button>
+                    <button type="button" class="btn-action next" id="nextBtn">
+                        Next Step <i class="fas fa-chevron-right"></i>
+                    </button>
+                    
+                    <?php if($verification_status == 'verified'): ?>
+                    <button type="submit" name="update_profile_info" class="btn-action next" id="submitBtn" style="display: none;">
+                        <i class="fas fa-save"></i> Save Profile Details
+                    </button>
+                    <?php else: ?>
+                    <button type="button" class="btn-action next" id="submitBtn" style="display: none;" disabled>
+                        <i class="fas fa-lock"></i> Verification Required
+                    </button>
+                    <?php endif; ?>
                 </div>
-
-                <?php if($verification_status == 'verified'): ?>
-                <button type="submit" name="update_profile_info" class="btn-primary">
-                    <i class="fas fa-save"></i> Save Profile Information
-                </button>
-                <?php else: ?>
-                <button type="button" class="btn-primary" disabled>
-                    <i class="fas fa-lock"></i> Complete Verification First
-                </button>
-                <?php endif; ?>
             </form>
         </div>
     </div>
 </div>
 
 <script>
+// ========== MOBILE SIDEBAR TOGGLE ==========
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const sidebarClose = document.getElementById('sidebarClose');
+
+function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+if (hamburgerBtn) hamburgerBtn.addEventListener('click', openSidebar);
+if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
 // ========== THEME TOGGLE ==========
 const themeToggle = document.getElementById('themeToggle');
 const html = document.documentElement;
@@ -1109,17 +1121,236 @@ const currentTheme = localStorage.getItem('theme') ||
 function setTheme(theme) {
     html.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    const icon = themeToggle ? themeToggle.querySelector('i') : null;
+    if (icon) {
+        icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
     document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
 }
 
 setTheme(currentTheme);
 
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
+if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+        const current = html.getAttribute('data-theme');
+        setTheme(current === 'dark' ? 'light' : 'dark');
+    });
+}
+
+// ========== STEPPER SYSTEM ==========
+let currentStep = 1;
+const totalSteps = 5;
+
+const profileForm = document.getElementById('profileForm');
+if (profileForm) {
+    const nextBtn = document.getElementById('nextBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const stepAlert = document.getElementById('stepAlert');
+    const stepAlertText = document.getElementById('stepAlertText');
+
+    function showAlert(message) {
+        stepAlertText.textContent = message;
+        stepAlert.style.display = 'flex';
+        window.scrollTo({ top: stepAlert.offsetTop - 100, behavior: 'smooth' });
+    }
+
+    function hideAlert() {
+        stepAlert.style.display = 'none';
+    }
+
+    function updateStepperUI() {
+        hideAlert();
+        document.querySelectorAll('.step-item').forEach((item, index) => {
+            const stepNum = index + 1;
+            item.classList.remove('active', 'completed');
+            if (stepNum === currentStep) {
+                item.classList.add('active');
+            } else if (stepNum < currentStep) {
+                item.classList.add('completed');
+            }
+        });
+
+        document.querySelectorAll('.step-line').forEach((line, index) => {
+            const lineNum = index + 1;
+            line.classList.remove('filled');
+            if (lineNum < currentStep) {
+                line.classList.add('filled');
+            }
+        });
+
+        document.querySelectorAll('.step-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.querySelector(`.step-content[data-fieldset="${currentStep}"]`).classList.add('active');
+
+        // Control buttons display
+        if (currentStep === 1) {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'inline-flex';
+            submitBtn.style.display = 'none';
+        } else if (currentStep === totalSteps) {
+            prevBtn.style.display = 'inline-flex';
+            nextBtn.style.display = 'none';
+            submitBtn.style.display = 'inline-flex';
+            buildSummary();
+        } else {
+            prevBtn.style.display = 'inline-flex';
+            nextBtn.style.display = 'inline-flex';
+            submitBtn.style.display = 'none';
+        }
+    }
+
+    // Step validation checks
+    function validateCurrentStep() {
+        if (currentStep === 1) {
+            const firstName = document.getElementById('first_name').value.trim();
+            const lastName = document.getElementById('last_name').value.trim();
+            const gender = document.getElementById('gender').value;
+            const birthDate = document.getElementById('birth_date').value;
+            const civilStatus = document.getElementById('civil_status').value;
+            const contactNumber = document.getElementById('contact_number').value.trim();
+
+            if (!firstName) {
+                showAlert("Please enter your First Name.");
+                return false;
+            }
+            if (!lastName) {
+                showAlert("Please enter your Last Name.");
+                return false;
+            }
+            if (!gender) {
+                showAlert("Please select your Gender.");
+                return false;
+            }
+            if (!birthDate) {
+                showAlert("Please enter your Birth Date.");
+                return false;
+            }
+            if (!civilStatus) {
+                showAlert("Please select your Civil Status.");
+                return false;
+            }
+            if (!contactNumber) {
+                showAlert("Please enter your Contact Number.");
+                return false;
+            }
+            return true;
+        }
+
+        if (currentStep === 2) {
+            const street = document.getElementById('street').value.trim();
+            const barangay = document.getElementById('barangay').value.trim();
+            const city = document.getElementById('city').value.trim();
+            const province = document.getElementById('province').value.trim();
+
+            if (!street) {
+                showAlert("Please enter your Street/Block/Lot.");
+                return false;
+            }
+            if (!barangay) {
+                showAlert("Please enter your Barangay.");
+                return false;
+            }
+            if (!city) {
+                showAlert("Please enter your City/Municipality.");
+                return false;
+            }
+            if (!province) {
+                showAlert("Please enter your Province.");
+                return false;
+            }
+            return true;
+        }
+
+        return true;
+    }
+
+    nextBtn.addEventListener('click', () => {
+        if (validateCurrentStep()) {
+            currentStep++;
+            updateStepperUI();
+        }
+    });
+
+    prevBtn.addEventListener('click', () => {
+        currentStep--;
+        updateStepperUI();
+    });
+
+    // ========== BUILD SUMMARY BLOCK ==========
+    function buildSummary() {
+        const firstName = document.getElementById('first_name').value.trim();
+        const middleName = document.getElementById('middle_name').value.trim();
+        const lastName = document.getElementById('last_name').value.trim();
+        const suffix = document.getElementById('suffix').value;
+        const gender = document.getElementById('gender').value;
+        const birthDate = document.getElementById('birth_date').value;
+        const civilStatus = document.getElementById('civil_status').value;
+        const contactNumber = document.getElementById('contact_number').value.trim();
+
+        const street = document.getElementById('street').value.trim();
+        const barangay = document.getElementById('barangay').value.trim();
+        const city = document.getElementById('city').value.trim();
+        const province = document.getElementById('province').value.trim();
+        const postalCode = document.getElementById('postal_code').value.trim();
+        const householdNumber = document.getElementById('household_number').value.trim();
+
+        const occupation = document.getElementById('occupation').value.trim();
+        const monthlyIncome = document.getElementById('monthly_income').value.trim();
+        const educationalAttainment = document.getElementById('educational_attainment').value;
+
+        const emergName = document.getElementById('emergency_contact_name').value.trim();
+        const emergContact = document.getElementById('emergency_contact_number').value.trim();
+        const relationship = document.getElementById('relationship').value.trim();
+
+        const seniorChecked = document.getElementById('senior_citizen').checked;
+        const pwdChecked = document.getElementById('pwd').checked;
+
+        // Build full name representation
+        let fullName = `${lastName}, ${firstName}`;
+        if (middleName) fullName += ` ${middleName}`;
+        if (suffix) fullName += ` ${suffix}`;
+
+        // Build complete address representation
+        let fullAddress = `${street}, ${barangay}`;
+        if (city) fullAddress += `, ${city}`;
+        if (province) fullAddress += `, ${province}`;
+        if (postalCode) fullAddress += ` ${postalCode}`;
+
+        document.getElementById('sumFullName').textContent = fullName;
+        document.getElementById('sumGender').textContent = gender || '-';
+        document.getElementById('sumBirthDate').textContent = birthDate || '-';
+        document.getElementById('sumCivilStatus').textContent = civilStatus || '-';
+        document.getElementById('sumContact').textContent = contactNumber || '-';
+
+        document.getElementById('sumAddress').textContent = fullAddress;
+        document.getElementById('sumHousehold').textContent = householdNumber || 'N/A';
+
+        document.getElementById('sumOccupation').textContent = occupation || 'N/A';
+        document.getElementById('sumIncome').textContent = monthlyIncome ? `₱${parseFloat(monthlyIncome).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '₱0.00';
+        document.getElementById('sumEducation').textContent = educationalAttainment || 'N/A';
+
+        document.getElementById('sumEmergName').textContent = emergName || 'N/A';
+        document.getElementById('sumEmergContact').textContent = emergContact || 'N/A';
+        document.getElementById('sumRelationship').textContent = relationship || 'N/A';
+
+        document.getElementById('sumSenior').textContent = seniorChecked ? 'Yes' : 'No';
+        document.getElementById('sumPwd').textContent = pwdChecked ? 'Yes' : 'No';
+    }
+
+    // Submit Validation Check
+    profileForm.addEventListener('submit', function(e) {
+        if (!validateCurrentStep()) {
+            e.preventDefault();
+            return false;
+        }
+        return true;
+    });
+
+    // Start Step 1
+    updateStepperUI();
+}
 </script>
 </body>
 </html>

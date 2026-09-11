@@ -110,6 +110,7 @@ $staff_stmt = $db->query($staff_query);
                 <li><a href="audit-logs.php">Audit Logs</a></li>
                 <li><a href="../logout.php">Logout</a></li>            
                 <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
+            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
             </ul>
         </div>
         
@@ -342,3 +343,5 @@ $staff_stmt = $db->query($staff_query);
     <script src="../js/main.js"></script>
 </body>
 </html>
+
+

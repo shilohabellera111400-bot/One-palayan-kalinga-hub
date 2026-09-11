@@ -248,8 +248,79 @@ require_once __DIR__ . '/config/database.php';
             font-size: 1.1rem;
         }
 
-        .requirements-list li strong {
+        .secure-source {
+            display: block;
+            font-size: 0.8rem;
+            color: #ff6600;
+            margin-top: 3px;
+            font-style: italic;
+        }
+
+        /* Step-by-Step Table */
+        .process-table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .process-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.95rem;
+            background: white;
+            min-width: 800px;
+        }
+        .process-table th, .process-table td {
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            border-right: 1px solid #e0e0e0;
+            vertical-align: top;
+        }
+        .process-table th:last-child, .process-table td:last-child {
+            border-right: none;
+        }
+        .process-table th {
+            background: #003366;
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        .process-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        .process-table td strong {
             color: #003366;
+        }
+        .process-table td .time-badge {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #0d47a1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        .process-table td .fee-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #1b5e20;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        .process-table tr.total-row {
+            background: #003366 !important;
+            color: white;
+            font-weight: bold;
+        }
+        .process-table tr.total-row td {
+            border-top: 2px solid #ff6600;
+            border-right-color: rgba(255,255,255,0.1);
         }
 
         /* Procedures Section */
@@ -548,11 +619,26 @@ require_once __DIR__ . '/config/database.php';
                         </div>
                         <div class="card-body">
                             <ul class="requirements-list">
-                                <li><strong>Certified True Copy</strong> of relative's registered death certificate</li>
-                                <li><strong>Original Barangay Certificate</strong> of Residency and Indigency</li>
-                                <li><strong>Photocopy</strong> of Valid ID of the client</li>
-                                <li><strong>Original Funeral Contract</strong> (Unpaid)</li>
-                                <li><strong>Written letter</strong> of request</li>
+                                <li>
+                                    <strong>Certified True Copy of relative's registered death certificate</strong>
+                                    <span class="secure-source">Secure from: Client / City Civil Registrar’s Office</span>
+                                </li>
+                                <li>
+                                    <strong>Original Barangay Certificate of Residency and Indigency</strong>
+                                    <span class="secure-source">Secure from: Barangay Hall of the Community where the client resides</span>
+                                </li>
+                                <li>
+                                    <strong>Photocopy of Valid ID of the client</strong>
+                                    <span class="secure-source">Secure from: Client</span>
+                                </li>
+                                <li>
+                                    <strong>Original Funeral Contract (Unpaid)</strong>
+                                    <span class="secure-source">Secure from: Funeral Parlour where funeral service was acquired</span>
+                                </li>
+                                <li>
+                                    <strong>Written letter of request</strong>
+                                    <span class="secure-source">Secure from: Client</span>
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -565,9 +651,18 @@ require_once __DIR__ . '/config/database.php';
                         </div>
                         <div class="card-body">
                             <ul class="requirements-list">
-                                <li><strong>Original Barangay Certificate</strong> of Residency and Indigency</li>
-                                <li><strong>Photocopy</strong> of Valid ID of the client</li>
-                                <li><strong>Request letter</strong></li>
+                                <li>
+                                    <strong>Original Barangay Certificate of Residency and Indigency</strong>
+                                    <span class="secure-source">Secure from: Barangay where the client resides</span>
+                                </li>
+                                <li>
+                                    <strong>Photocopy of Valid ID of the client</strong>
+                                    <span class="secure-source">Secure from: Client</span>
+                                </li>
+                                <li>
+                                    <strong>Request letter</strong>
+                                    <span class="secure-source">Secure from: Client</span>
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -580,132 +675,130 @@ require_once __DIR__ . '/config/database.php';
                         </div>
                         <div class="card-body">
                             <ul class="requirements-list">
-                                <li><strong>Original Barangay Certificate</strong> of Residency and Indigency</li>
-                                <li><strong>Photocopy</strong> of Valid ID of the client</li>
-                                <li><strong>Doctor's prescription</strong> (for medicines or laboratory request)</li>
-                                <li><strong>Medical Abstract</strong> / Medical Certificate</li>
-                                <li><strong>Hospital Bill</strong> (for payment of hospital bill)</li>
-                                <li><strong>Request letter</strong></li>
+                                <li>
+                                    <strong>Original Barangay Certificate of Residency and Indigency</strong>
+                                    <span class="secure-source">Secure from: Barangay where the client resides</span>
+                                </li>
+                                <li>
+                                    <strong>Photocopy of Valid ID of the client</strong>
+                                    <span class="secure-source">Secure from: Client</span>
+                                </li>
+                                <li>
+                                    <strong>Doctor’s prescription (for medicines or laboratory request)</strong>
+                                    <span class="secure-source">Secure from: Attending Physician</span>
+                                </li>
+                                <li>
+                                    <strong>Medical Abstract / Medical Certificate</strong>
+                                    <span class="secure-source">Secure from: Attending Physician</span>
+                                </li>
+                                <li>
+                                    <strong>Hospital Bill (for payment of hospital bill)</strong>
+                                    <span class="secure-source">Secure from: Hospital where the client was admitted</span>
+                                </li>
+                                <li>
+                                    <strong>Request letter</strong>
+                                    <span class="secure-source">Secure from: Client</span>
+                                </li>
                             </ul>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Procedures Section -->
+            <!-- Procedures Section (Citizen's Charter Table) -->
             <div class="procedures-section">
                 <div class="section-header">
                     <i class="fas fa-list-ol"></i>
-                    <h3>CLIENT STEPS & AGENCY ACTION</h3>
+                    <h3>STEP-BY-STEP PROCESS</h3>
                 </div>
 
-                <div class="procedures-grid">
-                    <!-- Client Steps -->
-                    <div class="procedure-card">
-                        <div class="procedure-header">
-                            <i class="fas fa-user"></i>
-                            <h4>CLIENT STEPS</h4>
-                        </div>
-                        <div class="procedure-body">
-                            <ul class="steps-list">
-                                <li>
-                                    <span class="step-number">1</span>
-                                    <div class="step-content">
-                                        <strong>Register on the client's log book</strong>
-                                        <p>Register your name, address, gender, contact number and purpose of visit either in Window 1, 2 or 3.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">2</span>
-                                    <div class="step-content">
-                                        <strong>Submit required documents</strong>
-                                        <p>Submit required documents either in Window 1, 2 or 3 for initial assessment and verification.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">3</span>
-                                    <div class="step-content">
-                                        <strong>Submit oneself for an interview</strong>
-                                        <p>Undergo interview with social worker for assessment.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">4</span>
-                                    <div class="step-content">
-                                        <strong>Wait for notification</strong>
-                                        <p>Client will be informed through text/call or through brgy. officials/volunteers once his/her medical/financial assistance is available or ready for release.</p>
-                                    </div>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- Agency Action -->
-                    <div class="procedure-card">
-                        <div class="procedure-header" style="background: #003366;">
-                            <i class="fas fa-users-cog"></i>
-                            <h4>AGENCY ACTION</h4>
-                        </div>
-                        <div class="procedure-body">
-                            <ul class="steps-list">
-                                <li>
-                                    <span class="step-number">1</span>
-                                    <div class="step-content">
-                                        <strong>Assist client</strong>
-                                        <p>Assist the client during their registration.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">2</span>
-                                    <div class="step-content">
-                                        <strong>Receive & Review documents</strong>
-                                        <p>Receive & Review required documents and check for completeness.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">3</span>
-                                    <div class="step-content">
-                                        <strong>Conduct interview and assessment</strong>
-                                        <p>Conduct an interview and assessment to the client to gather relevant information.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">4</span>
-                                    <div class="step-content">
-                                        <strong>Prepare documents</strong>
-                                        <p>Preparation of Justification/Social Case Study Report, Certificate of Eligibility and voucher.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">5</span>
-                                    <div class="step-content">
-                                        <strong>Review and approval</strong>
-                                        <p>Review and approval of recommendation.</p>
-                                    </div>
-                                </li>
-                                <li>
-                                    <span class="step-number">6</span>
-                                    <div class="step-content">
-                                        <strong>Submission to City Budget Office</strong>
-                                        <p>Forward approved documents to City Budget Office.</p>
-                                    </div>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
+                <div class="process-table-container">
+                    <table class="process-table">
+                        <thead>
+                            <tr>
+                                <th>Client Steps</th>
+                                <th>Agency Action</th>
+                                <th>Fees to be Paid</th>
+                                <th>Processing Time</th>
+                                <th>Person Responsible</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <strong>1. Register on the client's log book</strong> either in Window 1, 2 or 3.<br>
+                                    <small style="color: #666;">(Register your name, address, gender, contact number and purpose of visit)</small>
+                                </td>
+                                <td>1. Assist the client during their registration.</td>
+                                <td><span class="fee-badge">None</span></td>
+                                <td><span class="time-badge">1 minute</span></td>
+                                <td>Any CSWDO staff (CSWDO)</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>2. Submit required documents</strong> either in Window 1, 2 or 3 for initial assessment and verification.
+                                </td>
+                                <td>2. Receive & Review required documents and check for completeness.</td>
+                                <td><span class="fee-badge">None</span></td>
+                                <td><span class="time-badge">2 minutes</span></td>
+                                <td>Social Welfare Officer (CSWDO)</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>3. Submit oneself for an interview</strong>
+                                </td>
+                                <td>3. Conducts an interview and assessment to the client to gather relevant information.</td>
+                                <td><span class="fee-badge">None</span></td>
+                                <td><span class="time-badge">15 minutes</span></td>
+                                <td>Social Welfare Officer (CSWDO)</td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>4. Client will be informed</strong> through text/ call or through brgy. officials/ volunteers once his/her medical/financial assistance is available or ready for release.
+                                </td>
+                                <td>
+                                    4. Preparation of Justification/ Social Case Study Report, Certificate of Eligibility and voucher.
+                                </td>
+                                <td><span class="fee-badge">None</span></td>
+                                <td><span class="time-badge">1 hour</span></td>
+                                <td>Social Welfare Officer (CSWDO)</td>
+                            </tr>
+                            <tr>
+                                <td>—</td>
+                                <td>4.1 Review and approval.</td>
+                                <td><span class="fee-badge">None</span></td>
+                                <td><span class="time-badge">15 minutes</span></td>
+                                <td>Social Welfare Officer (CSWDO)</td>
+                            </tr>
+                            <tr>
+                                <td>—</td>
+                                <td>4.2 Submission to City Budget Office.</td>
+                                <td><span class="fee-badge">None</span></td>
+                                <td><span class="time-badge">10 minutes</span></td>
+                                <td>Social Welfare Officer (CSWDO) / Aide (CSWDO)</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td>TOTAL</td>
+                                <td>Approved Process Flow</td>
+                                <td>NONE</td>
+                                <td>1 HOUR AND 43 MINUTES</td>
+                                <td>CSWDO Team</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-
-            <!-- Total -->
-            <div class="agency-actions">
-                <h4><i class="fas fa-clock"></i> PROCESSING TIME</h4>
-                <p><strong>Total:</strong> None (Varies based on case assessment and fund availability)</p>
             </div>
 
             <!-- Certificate of Indigency Info -->
             <div class="footer-note">
                 <i class="fas fa-info-circle"></i>
                 <strong>Note:</strong> The Certificate of Indigency or a Certificate of Low Income is a document that is sometimes required for an individual's financial stability assessment.
+            </div>
+
+            <!-- Fee Summary -->
+            <div class="footer-note" style="border-left-color: #2e7d32; background: #e8f5e9; color: #1b5e20;">
+                <i class="fas fa-hand-holding-usd" style="color: #2e7d32;"></i>
+                <strong>Fee Summary:</strong> Total Fees: None — this service is free of charge.
             </div>
 
             <!-- Action Buttons -->

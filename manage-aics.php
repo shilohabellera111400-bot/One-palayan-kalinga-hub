@@ -75,7 +75,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
         $update_stmt = $db->prepare($update_query);
         $update_stmt->bindParam(':status', $new_status);
         $update_stmt->bindParam(':amount', $amount_approved);
-        $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        
+        if ($new_status == 'reviewing' || $new_status == 'approved') {
+            $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        }
         
         if ($new_status == 'rejected') {
             $update_stmt->bindParam(':remarks', $remarks);

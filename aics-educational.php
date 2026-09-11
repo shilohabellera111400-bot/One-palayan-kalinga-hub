@@ -1,4 +1,6 @@
 <?php
+header("Location: aics.php");
+exit();
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/FileUploader.php';
 
@@ -27,18 +29,31 @@ $pending_app = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
     csrf_verify();
-    $amount_requested  = sanitize($_POST['amount_requested']);
-    $purpose           = sanitize($_POST['purpose']);
-    $student_name      = sanitize($_POST['student_name']);
-    $school_name       = sanitize($_POST['school_name']);
-    $grade_level       = sanitize($_POST['grade_level']);
-    $school_year       = sanitize($_POST['school_year']);
-    $tuition_fee       = sanitize($_POST['tuition_fee'] ?? 0);
-    $enrollment_status = sanitize($_POST['enrollment_status'] ?? 'enrolled');
     
-    $db->beginTransaction();
-    
-    try {
+    // Check if user has active/pending application
+    if ($pending_app && $pending_app['status'] !== 'rejected') {
+        $error = "You already have an active application. Please wait for it to be resolved.";
+    } 
+    // Server-side validation for required files
+    elseif (!isset($_FILES['valid_id']) || $_FILES['valid_id']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A valid ID is required.";
+    } elseif (!isset($_FILES['school_id']) || $_FILES['school_id']['error'] !== UPLOAD_ERR_OK) {
+        $error = "A school ID is required.";
+    } elseif (!isset($_FILES['enrollment_form']) || $_FILES['enrollment_form']['error'] !== UPLOAD_ERR_OK) {
+        $error = "An enrollment form is required.";
+    } else {
+        $amount_requested  = sanitize($_POST['amount_requested']);
+        $purpose           = sanitize($_POST['purpose']);
+        $student_name      = sanitize($_POST['student_name']);
+        $school_name       = sanitize($_POST['school_name']);
+        $grade_level       = sanitize($_POST['grade_level']);
+        $school_year       = sanitize($_POST['school_year']);
+        $tuition_fee       = sanitize($_POST['tuition_fee'] ?? 0);
+        $enrollment_status = sanitize($_POST['enrollment_status'] ?? 'enrolled');
+        
+        $db->beginTransaction();
+        
+        try {
         $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, status) 
                   VALUES (:user_id, 'educational', :amount, 'submitted')";
         $stmt = $db->prepare($query);
@@ -103,9 +118,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $db->commit();
         $success = "Application submitted successfully! Your tracking number is: <strong>$tracking</strong>";
         
+        // Send email confirmation
+        try {
+            require_once __DIR__ . '/includes/Mailer.php';
+            $mailer = new Mailer();
+            $user_query = "SELECT email, first_name, last_name FROM users WHERE user_id = :user_id";
+            $user_stmt = $db->prepare($user_query);
+            $user_stmt->bindParam(':user_id', $_SESSION['user_id']);
+            $user_stmt->execute();
+            $user_info = $user_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user_info && !empty($user_info['email'])) {
+                $user_name = $user_info['first_name'] . ' ' . $user_info['last_name'];
+                $aics_data = [
+                    'aics_id' => $aics_id,
+                    'request_type' => 'educational',
+                    'user_id' => $_SESSION['user_id']
+                ];
+                $mailer->sendAICSConfirmation($user_info['email'], $user_name, $aics_data);
+            }
+        } catch (Exception $e) {
+            error_log("AICS educational submission email confirmation failed: " . $e->getMessage());
+        }
+        
     } catch (Exception $e) {
         $db->rollBack();
         $error = "Application failed: " . $e->getMessage();
+    }
     }
 }
 ?>
