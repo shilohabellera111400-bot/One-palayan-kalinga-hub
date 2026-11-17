@@ -22,25 +22,31 @@ $stmt->execute();
     <meta charset="UTF-8">
     <title>My AICS Requests - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
-    
-    <div class="dashboard-container">
-        <div class="sidebar">
-            <div class="user-profile">
-                <h3><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></h3>
-                <p>Resident</p>
-            </div>
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-        </div>
+    <div class="app-container">
+        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
         
         <div class="main-content">
-            <h1>My AICS Requests</h1>
-            
-            <div class="action-bar">
-                <a href="apply-aics.php" class="btn-primary">+ New Application</a>
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Page Title Subheader -->
+            <div class="portal-page-subheader" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding: 4px 6px;">
+                <div class="page-title">
+                    <h1 style="font-size: 1.4rem; font-weight: 800; color: var(--ref-text, #191D1E); margin: 0; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-list-alt" style="color: #7F0303;"></i> My AICS Requests
+                    </h1>
+                    <p style="font-size: 0.85rem; color: var(--ref-muted, #71818B); margin: 4px 0 0;">View and track your welfare assistance filings</p>
+                </div>
+                <div>
+                    <a href="apply-aics.php" class="btn btn-primary" style="background: #7F0303; border-radius: 20px; padding: 8px 18px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; color: #fff; text-decoration: none;">+ New Application</a>
+                </div>
             </div>
             
             <?php if($stmt->rowCount() > 0): ?>
@@ -115,5 +121,7 @@ $stmt->execute();
     </style>
     
     <script src="js/main.js"></script>
+    <!-- Search Modal (Req 7) -->
+    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

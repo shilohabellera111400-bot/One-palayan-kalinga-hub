@@ -1,16 +1,78 @@
 <?php
 // admin/manage-residents.php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/features.php';
 
 if (!isAdmin()) {
     redirect('../login.php');
 }
+
+$is_pwd_senior_enabled = false;
 
 $database = new Database();
 $db = $database->getConnection();
 
 $error = '';
 $success = '';
+
+// Official Palayan City Barangays & Canonical Normalization Map
+$palayan_official_barangays = [
+    'Atate',
+    'Aulo',
+    'Bagong Buhay',
+    'Baryo Militar',
+    'Caballero',
+    'Caimito',
+    'Doña Josefa',
+    'Ganaderia',
+    'Imelda Valley',
+    'Imelda Valley I',
+    'Imelda Valley II',
+    'Langka',
+    'Malate',
+    'Maligaya',
+    'Manacnac',
+    'Mapaet',
+    'Marcos Village',
+    'Popolon (Pagas)',
+    'Santolan',
+    'Sapang Buho',
+    'Singalat'
+];
+
+$canonical_barangays = [
+    'atate' => 'Atate',
+    'aulo' => 'Aulo',
+    'bagong buhay' => 'Bagong Buhay',
+    'baryo militar' => 'Baryo Militar',
+    'bo. militar' => 'Baryo Militar',
+    'bo militar' => 'Baryo Militar',
+    'militar' => 'Baryo Militar',
+    'caballero' => 'Caballero',
+    'caimito' => 'Caimito',
+    'dona josefa' => 'Doña Josefa',
+    'doña josefa' => 'Doña Josefa',
+    'ganaderia' => 'Ganaderia',
+    'imelda valley' => 'Imelda Valley',
+    'imelda valley i' => 'Imelda Valley I',
+    'imelda valley ii' => 'Imelda Valley II',
+    'langka' => 'Langka',
+    'malate' => 'Malate',
+    'malate (poblacion)' => 'Malate',
+    'malate poblacion' => 'Malate',
+    'maligaya' => 'Maligaya',
+    'manacnac' => 'Manacnac',
+    'mapaet' => 'Mapaet',
+    'mapait' => 'Mapaet',
+    'marcos village' => 'Marcos Village',
+    'popolon (pagas)' => 'Popolon (Pagas)',
+    'popolon(pagas)' => 'Popolon (Pagas)',
+    'popolon' => 'Popolon (Pagas)',
+    'pagas' => 'Popolon (Pagas)',
+    'santolan' => 'Santolan',
+    'sapang buho' => 'Sapang Buho',
+    'singalat' => 'Singalat'
+];
 
 // Handle resident creation
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_resident'])) {
@@ -24,9 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_resident'])) {
     $contact_number = sanitize($_POST['contact_number']);
     $email = sanitize($_POST['email'] ?? '');
     $street = sanitize($_POST['street']);
-    $barangay = sanitize($_POST['barangay']);
-    $city = sanitize($_POST['city']);
-    $province = sanitize($_POST['province']);
+    $raw_barangay = sanitize($_POST['barangay'] ?? '');
+    $city = 'PALAYAN CITY';
+    $province = 'Nueva Ecija';
     $postal_code = sanitize($_POST['postal_code'] ?? '');
     $household_number = sanitize($_POST['household_number'] ?? '');
     $senior_citizen = isset($_POST['senior_citizen']) ? 1 : 0;
@@ -37,12 +99,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_resident'])) {
     $emergency_contact_name = sanitize($_POST['emergency_contact_name'] ?? '');
     $emergency_contact_number = sanitize($_POST['emergency_contact_number'] ?? '');
     $relationship = sanitize($_POST['relationship'] ?? '');
+
+    // Validate barangay against official Palayan City list
+    $barangay_key = strtolower(trim($raw_barangay));
+    if (empty($raw_barangay) || !isset($canonical_barangays[$barangay_key])) {
+        $error = "Please select a valid official barangay of Palayan City.";
+    } else {
+        $barangay = $canonical_barangays[$barangay_key];
+    }
     
     // Validate required fields
-    if (empty($first_name) || empty($last_name) || empty($gender) || empty($birth_date) || 
-        empty($civil_status) || empty($street) || empty($barangay) || empty($city) || empty($province)) {
-        $error = "Please fill in all required fields";
-    } else {
+    if (empty($error)) {
+        if (empty($first_name) || empty($last_name) || empty($gender) || empty($birth_date) || 
+            empty($civil_status) || empty($street) || empty($barangay)) {
+            $error = "Please fill in all required fields";
+        }
+    }
+    
+    if (empty($error)) {
         // Generate resident ID (format: RES-YYYY-XXXX)
         $year = date('Y');
         $count_query = "SELECT COUNT(*) as count FROM residents WHERE YEAR(created_at) = $year";
@@ -124,9 +198,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_resident'])) {
     $contact_number = sanitize($_POST['contact_number']);
     $email = sanitize($_POST['email'] ?? '');
     $street = sanitize($_POST['street']);
-    $barangay = sanitize($_POST['barangay']);
-    $city = sanitize($_POST['city']);
-    $province = sanitize($_POST['province']);
+    $raw_barangay = sanitize($_POST['barangay'] ?? '');
+    $city = 'PALAYAN CITY';
+    $province = 'Nueva Ecija';
     $postal_code = sanitize($_POST['postal_code'] ?? '');
     $household_number = sanitize($_POST['household_number'] ?? '');
     $senior_citizen = isset($_POST['senior_citizen']) ? 1 : 0;
@@ -137,50 +211,67 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_resident'])) {
     $emergency_contact_name = sanitize($_POST['emergency_contact_name'] ?? '');
     $emergency_contact_number = sanitize($_POST['emergency_contact_number'] ?? '');
     $relationship = sanitize($_POST['relationship'] ?? '');
-    
-    $query = "UPDATE residents SET 
-              first_name = :first_name, last_name = :last_name, middle_name = :middle_name,
-              suffix = :suffix, gender = :gender, birth_date = :birth_date,
-              civil_status = :civil_status, contact_number = :contact_number, email = :email,
-              street = :street, barangay = :barangay, city = :city, province = :province,
-              postal_code = :postal_code, household_number = :household_number,
-              senior_citizen = :senior_citizen, pwd = :pwd,
-              occupation = :occupation, monthly_income = :monthly_income,
-              educational_attainment = :educational_attainment,
-              emergency_contact_name = :emergency_contact_name,
-              emergency_contact_number = :emergency_contact_number, relationship = :relationship
-              WHERE id = :resident_id";
-    
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(':resident_id', $resident_id);
-    $stmt->bindParam(':first_name', $first_name);
-    $stmt->bindParam(':last_name', $last_name);
-    $stmt->bindParam(':middle_name', $middle_name);
-    $stmt->bindParam(':suffix', $suffix);
-    $stmt->bindParam(':gender', $gender);
-    $stmt->bindParam(':birth_date', $birth_date);
-    $stmt->bindParam(':civil_status', $civil_status);
-    $stmt->bindParam(':contact_number', $contact_number);
-    $stmt->bindParam(':email', $email);
-    $stmt->bindParam(':street', $street);
-    $stmt->bindParam(':barangay', $barangay);
-    $stmt->bindParam(':city', $city);
-    $stmt->bindParam(':province', $province);
-    $stmt->bindParam(':postal_code', $postal_code);
-    $stmt->bindParam(':household_number', $household_number);
-    $stmt->bindParam(':senior_citizen', $senior_citizen);
-    $stmt->bindParam(':pwd', $pwd);
-    $stmt->bindParam(':occupation', $occupation);
-    $stmt->bindParam(':monthly_income', $monthly_income);
-    $stmt->bindParam(':educational_attainment', $educational_attainment);
-    $stmt->bindParam(':emergency_contact_name', $emergency_contact_name);
-    $stmt->bindParam(':emergency_contact_number', $emergency_contact_number);
-    $stmt->bindParam(':relationship', $relationship);
-    
-    if ($stmt->execute()) {
-        $success = "Resident information updated successfully!";
+
+    // Validate barangay against official Palayan City list
+    $barangay_key = strtolower(trim($raw_barangay));
+    if (empty($raw_barangay) || !isset($canonical_barangays[$barangay_key])) {
+        $error = "Please select a valid official barangay of Palayan City.";
     } else {
-        $error = "Failed to update resident information";
+        $barangay = $canonical_barangays[$barangay_key];
+    }
+    
+    if (empty($error)) {
+        if (empty($first_name) || empty($last_name) || empty($gender) || empty($birth_date) || 
+            empty($civil_status) || empty($street) || empty($barangay)) {
+            $error = "Please fill in all required fields";
+        }
+    }
+    
+    if (empty($error)) {
+        $query = "UPDATE residents SET 
+                  first_name = :first_name, last_name = :last_name, middle_name = :middle_name,
+                  suffix = :suffix, gender = :gender, birth_date = :birth_date,
+                  civil_status = :civil_status, contact_number = :contact_number, email = :email,
+                  street = :street, barangay = :barangay, city = :city, province = :province,
+                  postal_code = :postal_code, household_number = :household_number,
+                  senior_citizen = :senior_citizen, pwd = :pwd,
+                  occupation = :occupation, monthly_income = :monthly_income,
+                  educational_attainment = :educational_attainment,
+                  emergency_contact_name = :emergency_contact_name,
+                  emergency_contact_number = :emergency_contact_number, relationship = :relationship
+                  WHERE id = :resident_id";
+        
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(':resident_id', $resident_id);
+        $stmt->bindParam(':first_name', $first_name);
+        $stmt->bindParam(':last_name', $last_name);
+        $stmt->bindParam(':middle_name', $middle_name);
+        $stmt->bindParam(':suffix', $suffix);
+        $stmt->bindParam(':gender', $gender);
+        $stmt->bindParam(':birth_date', $birth_date);
+        $stmt->bindParam(':civil_status', $civil_status);
+        $stmt->bindParam(':contact_number', $contact_number);
+        $stmt->bindParam(':email', $email);
+        $stmt->bindParam(':street', $street);
+        $stmt->bindParam(':barangay', $barangay);
+        $stmt->bindParam(':city', $city);
+        $stmt->bindParam(':province', $province);
+        $stmt->bindParam(':postal_code', $postal_code);
+        $stmt->bindParam(':household_number', $household_number);
+        $stmt->bindParam(':senior_citizen', $senior_citizen);
+        $stmt->bindParam(':pwd', $pwd);
+        $stmt->bindParam(':occupation', $occupation);
+        $stmt->bindParam(':monthly_income', $monthly_income);
+        $stmt->bindParam(':educational_attainment', $educational_attainment);
+        $stmt->bindParam(':emergency_contact_name', $emergency_contact_name);
+        $stmt->bindParam(':emergency_contact_number', $emergency_contact_number);
+        $stmt->bindParam(':relationship', $relationship);
+        
+        if ($stmt->execute()) {
+            $success = "Resident information updated successfully!";
+        } else {
+            $error = "Failed to update resident information";
+        }
     }
 }
 
@@ -328,9 +419,14 @@ $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
 $stmt->execute();
 $residents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get unique barangays for filter (without pagination)
-$barangays_query = "SELECT DISTINCT barangay FROM residents WHERE barangay IS NOT NULL AND barangay != '' ORDER BY barangay";
-$barangays = $db->query($barangays_query)->fetchAll(PDO::FETCH_ASSOC);
+// Get unique barangays for filter (without pagination), combining official Palayan City barangays and existing data
+$db_barangays = $db->query("SELECT DISTINCT barangay FROM residents WHERE barangay IS NOT NULL AND barangay != ''")->fetchAll(PDO::FETCH_COLUMN);
+$all_filter_barangays = array_values(array_unique(array_merge($palayan_official_barangays, $db_barangays)));
+natcasesort($all_filter_barangays);
+$barangays = [];
+foreach ($all_filter_barangays as $b_name) {
+    $barangays[] = ['barangay' => $b_name];
+}
 
 // Get resident for editing if requested
 $edit_resident = null;
@@ -359,17 +455,11 @@ foreach($name_parts as $part) {
 }
 $initials = substr($initials, 0, 2);
 
-// Check for dark mode preference
-$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+// Page configuration
+$page_title = 'Manage Residents';
+$active_sidebar = 'residents';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Residents - Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
@@ -455,265 +545,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            object-fit: contain;
-            background: rgba(255,255,255,0.10);
-            padding: 4px;
-            flex-shrink: 0;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-            flex-shrink: 0;
-        }
-        .logo-text {
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 16px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 12px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-        }
-        .sidebar-footer .avatar {
-            width: 38px;
-            height: 38px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.8rem;
-        }
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .sidebar-footer .user-details p {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.7rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .page-title h1 {
-            font-size: 1.5rem;
-            color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
-        }
-        .page-title p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
-        }
-        .top-bar-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        .search-box {
-            display: flex;
-            align-items: center;
-            background: var(--search-bg);
-            border-radius: 50px;
-            padding: 8px 16px;
-            border: 1px solid var(--border-color);
-            gap: 10px;
-            transition: background 0.3s ease, border-color 0.3s ease;
-            box-shadow: var(--shadow-sm);
-        }
-        .search-box input {
-            border: none;
-            outline: none;
-            font-size: 0.85rem;
-            background: transparent;
-            min-width: 180px;
-            color: var(--text-primary);
-        }
-        .search-box input::placeholder { color: var(--text-muted); }
-        .search-box i { color: var(--text-muted); }
-
-        .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
-            text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-
         /* ========== ALERTS ========== */
         .alert {
             padding: 16px 20px;
@@ -1346,71 +1177,51 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     </style>
 </head>
 <body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <!-- LOGO IMAGE - Replace the src path with your actual logo file path -->
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li><a href="announcements.php"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-            <li><a href="calendar.php"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php" class="active"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <p>Administrator</p>
-                </div>
-            </div>
-        </div>
-    </div>
+<style>
+    .main-content {
+        padding: 24px 32px !important;
+    }
+    @font-face {
+        font-family: 'Bulgash';
+        src: url('../fonts/Bulgash.otf') format('opentype'),
+             url('fonts/Bulgash.otf') format('opentype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+    }
+    .dash-cursive-branding-inline {
+        margin-left: auto;
+        padding-right: 4px;
+    }
+    .dash-cursive-title {
+        font-family: 'Bulgash', 'Playfair Display', cursive, serif !important;
+        font-size: 2.1rem !important;
+        font-weight: normal !important;
+        font-style: normal !important;
+        color: var(--ref-maroon, #7F0303) !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+        user-select: none;
+    }
+    [data-theme="dark"] .dash-cursive-title {
+        color: #F87171 !important;
+    }
+</style>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-user-friends" style="color: var(--maroon-light); margin-right: 10px;"></i> Manage Residents</h1>
-                <p>View and manage all registered residents</p>
-            </div>
-            <div class="top-bar-actions">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search residents..." id="globalSearch">
-                </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="audit-logs.php" class="top-icon"><i class="fas fa-bell"></i></a>
-                <a href="settings.php" class="top-icon"><i class="fas fa-cog"></i></a>
-            </div>
-        </div>
-        
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-users" style="color: var(--ref-maroon);"></i> Manage Residents</h1>
+        <p>View and manage all registered Palayan City residents and family profiling</p>
+    </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One Palayan - Kalinga Hub</h2>
+    </div>
+</div>
+
         <?php if($error): ?>
             <div class="alert alert-error">
                 <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($error); ?>
@@ -1438,36 +1249,18 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <p>Active Residents</p>
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-residents.php?search=&barangay=&status='">
-                <div class="stat-icon senior"><i class="fas fa-user-graduate"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $senior_count; ?></h3>
-                    <p>Senior Citizens</p>
-                </div>
-            </div>
-            <div class="stat-card" onclick="window.location.href='manage-residents.php?search=&barangay=&status='">
-                <div class="stat-icon pwd"><i class="fas fa-wheelchair"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $pwd_count; ?></h3>
-                    <p>PWDs</p>
-                </div>
-            </div>
         </div>
         
-        <!-- Quick Actions Bar -->
-        <div class="quick-actions-bar">
-            <div class="resident-info">
-                <h4>Total Registered Residents</h4>
-                <div class="count"><?php echo $total_residents; ?></div>
-            </div>
-            <div class="quick-actions">
-                <button onclick="openModal()" class="quick-btn">
-                    <i class="fas fa-user-plus"></i> Add New Resident
-                </button>
-                <a href="export-residents.php" class="quick-btn">
-                    <i class="fas fa-download"></i> Export Data
-                </a>
-            </div>
+        <!-- Quick Actions Row -->
+        <div style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 22px;">
+            <button type="button" onclick="openModal()" class="portal-hdr-pill" style="cursor: pointer; border: none; background: var(--ref-maroon, #7F0303); color: #fff; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 22px; border-radius: 50px; font-size: 0.85rem; box-shadow: 0 4px 14px rgba(127,3,3,0.22); transition: all 0.2s ease;">
+                <i class="fas fa-user-plus"></i>
+                <span>Add New Resident</span>
+            </button>
+            <a href="export-residents.php" class="portal-hdr-pill" style="text-decoration: none; border: 1.5px solid var(--ref-border, #cbd5e1); background: var(--ref-card, #fff); color: var(--ref-text, #334155); display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 20px; border-radius: 50px; font-size: 0.85rem; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s ease;">
+                <i class="fas fa-download" style="color: #059669;"></i>
+                <span>Export Data</span>
+            </a>
         </div>
         
         <!-- Filter Bar -->
@@ -1523,14 +1316,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <th>Contact</th>
                         <th>Age</th>
                         <th>Status</th>
-                        <th>Categories</th>
                         <th style="text-align: center;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if(empty($residents)): ?>
                         <tr>
-                            <td colspan="8">
+                            <td colspan="7">
                                 <div class="no-data">
                                     <i class="fas fa-users"></i>
                                     <p>No residents found</p>
@@ -1541,8 +1333,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <?php foreach($residents as $resident): 
                             $age = date_diff(date_create($resident['birth_date']), date_create('today'))->y;
                             $categories = [];
-                            if($resident['senior_citizen']) $categories[] = ['label' => 'Senior', 'class' => 'senior'];
-                            if($resident['pwd']) $categories[] = ['label' => 'PWD', 'class' => 'pwd'];
+                            if (!empty($is_pwd_senior_enabled)) {
+                                if($resident['senior_citizen']) $categories[] = ['label' => 'Senior', 'class' => 'senior'];
+                                if($resident['pwd']) $categories[] = ['label' => 'PWD', 'class' => 'pwd'];
+                            }
                             
                             $resident_initials = strtoupper(substr($resident['first_name'], 0, 1) . substr($resident['last_name'], 0, 1));
                             $profile_pic = !empty($resident['profile_picture']) && file_exists(__DIR__ . '/../' . $resident['profile_picture']) 
@@ -1572,19 +1366,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                                     <?php echo $resident['is_active'] == 1 ? 'Active' : 'Inactive'; ?>
                                 </span>
                             </td>
-                            <td>
-                                <?php if(!empty($categories)): ?>
-                                    <?php foreach($categories as $cat): ?>
-                                        <span class="category-badge <?php echo $cat['class']; ?>"><?php echo $cat['label']; ?></span>
-                                    <?php endforeach; ?>
-                                <?php else: ?>
-                                    <span style="color: var(--text-muted); font-size: 0.7rem;">-</span>
-                                <?php endif; ?>
-                            </td>
                             <td style="text-align: center;">
                                 <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
-                                    <button onclick="openEditModal(<?php echo htmlspecialchars(json_encode($resident)); ?>)" class="btn-sm btn-edit">
-                                        <i class="fas fa-edit"></i> Edit
+                                    <button type="button" onclick="openEditModal(this)" class="btn-sm btn-edit" data-resident="<?php echo htmlspecialchars(json_encode($resident), ENT_QUOTES, 'UTF-8'); ?>" title="Edit Resident">
+                                        <i class="fas fa-edit" style="pointer-events: none;"></i> Edit
                                     </button>
                                     <a href="?toggle_status=1&id=<?php echo $resident['id']; ?>" class="btn-sm btn-toggle" onclick="return confirm('Toggle resident status?')">
                                         <i class="fas fa-toggle-<?php echo $resident['is_active'] == 1 ? 'off' : 'on'; ?>"></i>
@@ -1651,8 +1436,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
             <?php endif; ?>
         </div>
-    </div>
-</div>
 
 <!-- Add Resident Modal -->
 <div id="residentModal" class="modal">
@@ -1728,21 +1511,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <div class="form-row">
                     <div class="form-group">
                         <label>Street/Block/Lot <span class="required">*</span></label>
-                        <input type="text" name="street" required placeholder="Street address">
+                        <input type="text" name="street" required placeholder="e.g. Saphire St., Purok 3">
                     </div>
                     <div class="form-group">
                         <label>Barangay <span class="required">*</span></label>
-                        <input type="text" name="barangay" required placeholder="Barangay name">
+                        <select name="barangay" id="add_barangay" required>
+                            <option value="">Select Barangay</option>
+                            <?php foreach ($palayan_official_barangays as $bgy): ?>
+                                <option value="<?php echo htmlspecialchars($bgy); ?>"><?php echo htmlspecialchars($bgy); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>City/Municipality <span class="required">*</span></label>
-                        <input type="text" name="city" required placeholder="City name">
+                        <input type="text" name="city" id="add_city" value="PALAYAN CITY" required readonly style="background-color: var(--badge-bg); cursor: not-allowed;" title="Palayan City is the default jurisdiction">
                     </div>
                     <div class="form-group">
                         <label>Province <span class="required">*</span></label>
-                        <input type="text" name="province" required placeholder="Province name">
+                        <input type="text" name="province" id="add_province" value="Nueva Ecija" required readonly style="background-color: var(--badge-bg); cursor: not-allowed;">
                     </div>
                 </div>
                 <div class="form-row">
@@ -1794,6 +1582,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <label>Relationship to Emergency Contact</label>
                     <input type="text" name="relationship" placeholder="e.g., Spouse, Parent">
                 </div>
+                <?php if (!empty($is_pwd_senior_enabled)): ?>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="checkbox-label">
@@ -1806,6 +1595,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         </label>
                     </div>
                 </div>
+                <?php endif; ?>
             </div>
             <div class="modal-footer">
                 <button type="button" onclick="closeModal()" class="btn-secondary">
@@ -1898,17 +1688,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     </div>
                     <div class="form-group">
                         <label>Barangay <span class="required">*</span></label>
-                        <input type="text" name="barangay" id="edit_barangay" required>
+                        <select name="barangay" id="edit_barangay" required>
+                            <option value="">Select Barangay</option>
+                            <?php foreach ($palayan_official_barangays as $bgy): ?>
+                                <option value="<?php echo htmlspecialchars($bgy); ?>"><?php echo htmlspecialchars($bgy); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>City/Municipality <span class="required">*</span></label>
-                        <input type="text" name="city" id="edit_city" required>
+                        <input type="text" name="city" id="edit_city" value="PALAYAN CITY" required readonly style="background-color: var(--badge-bg); cursor: not-allowed;" title="Palayan City is the default jurisdiction">
                     </div>
                     <div class="form-group">
                         <label>Province <span class="required">*</span></label>
-                        <input type="text" name="province" id="edit_province" required>
+                        <input type="text" name="province" id="edit_province" value="Nueva Ecija" required readonly style="background-color: var(--badge-bg); cursor: not-allowed;">
                     </div>
                 </div>
                 <div class="form-row">
@@ -1960,6 +1755,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <label>Relationship to Emergency Contact</label>
                     <input type="text" name="relationship" id="edit_relationship">
                 </div>
+                <?php if (!empty($is_pwd_senior_enabled)): ?>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="checkbox-label">
@@ -1972,6 +1768,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         </label>
                     </div>
                 </div>
+                <?php endif; ?>
             </div>
             <div class="modal-footer">
                 <button type="button" onclick="closeEditModal()" class="btn-secondary">
@@ -2020,14 +1817,43 @@ document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
 
 // ========== MODAL FUNCTIONS ==========
 function openModal() {
-    document.getElementById('residentModal').classList.add('active');
+    const modal = document.getElementById('residentModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    void modal.offsetWidth;
+    modal.classList.add('active');
 }
 
 function closeModal() {
-    document.getElementById('residentModal').classList.remove('active');
+    const modal = document.getElementById('residentModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 200);
 }
 
-function openEditModal(resident) {
+function openEditModal(target) {
+    const editModal = document.getElementById('editModal');
+    if (!editModal) return;
+
+    let resident = target;
+    if (target instanceof Element) {
+        const raw = target.getAttribute('data-resident') || target.dataset.resident;
+        try {
+            resident = JSON.parse(raw);
+        } catch(e) {
+            console.error('Invalid resident JSON:', e);
+            return;
+        }
+    } else if (typeof target === 'string') {
+        try {
+            resident = JSON.parse(target);
+        } catch(e) {
+            console.error('Invalid resident JSON:', e);
+            return;
+        }
+    }
+    if (!resident || typeof resident !== 'object') return;
+
     document.getElementById('edit_resident_id').value = resident.id;
     document.getElementById('edit_first_name').value = resident.first_name || '';
     document.getElementById('edit_last_name').value = resident.last_name || '';
@@ -2039,9 +1865,41 @@ function openEditModal(resident) {
     document.getElementById('edit_contact_number').value = resident.contact_number || '';
     document.getElementById('edit_email').value = resident.email || '';
     document.getElementById('edit_street').value = resident.street || '';
-    document.getElementById('edit_barangay').value = resident.barangay || '';
-    document.getElementById('edit_city').value = resident.city || '';
-    document.getElementById('edit_province').value = resident.province || '';
+    
+    // Populate Barangay dropdown with smart canonical matching
+    const bgySelect = document.getElementById('edit_barangay');
+    const residentBgy = (resident.barangay || '').trim();
+    let matched = false;
+
+    // Remove any previously appended temporary warning option
+    const prevTemp = document.getElementById('temp_legacy_bgy');
+    if (prevTemp) prevTemp.remove();
+
+    if (residentBgy) {
+        for (let i = 0; i < bgySelect.options.length; i++) {
+            const optVal = bgySelect.options[i].value;
+            if (optVal.toLowerCase() === residentBgy.toLowerCase() ||
+                optVal.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === residentBgy.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()) {
+                bgySelect.selectedIndex = i;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            const invalidOpt = document.createElement('option');
+            invalidOpt.id = 'temp_legacy_bgy';
+            invalidOpt.value = residentBgy;
+            invalidOpt.textContent = residentBgy + ' (Invalid - Please Select Palayan Barangay)';
+            invalidOpt.style.color = '#DC2626';
+            bgySelect.appendChild(invalidOpt);
+            bgySelect.value = residentBgy;
+        }
+    } else {
+        bgySelect.value = '';
+    }
+
+    document.getElementById('edit_city').value = 'PALAYAN CITY';
+    document.getElementById('edit_province').value = 'Nueva Ecija';
     document.getElementById('edit_postal_code').value = resident.postal_code || '';
     document.getElementById('edit_household_number').value = resident.household_number || '';
     document.getElementById('edit_occupation').value = resident.occupation || '';
@@ -2050,14 +1908,23 @@ function openEditModal(resident) {
     document.getElementById('edit_emergency_contact_name').value = resident.emergency_contact_name || '';
     document.getElementById('edit_emergency_contact_number').value = resident.emergency_contact_number || '';
     document.getElementById('edit_relationship').value = resident.relationship || '';
-    document.getElementById('edit_senior_citizen').checked = resident.senior_citizen == 1;
-    document.getElementById('edit_pwd').checked = resident.pwd == 1;
+    if (document.getElementById('edit_senior_citizen')) {
+        document.getElementById('edit_senior_citizen').checked = resident.senior_citizen == 1;
+    }
+    if (document.getElementById('edit_pwd')) {
+        document.getElementById('edit_pwd').checked = resident.pwd == 1;
+    }
     
-    document.getElementById('editModal').classList.add('active');
+    editModal.style.display = 'flex';
+    void editModal.offsetWidth;
+    editModal.classList.add('active');
 }
 
 function closeEditModal() {
-    document.getElementById('editModal').classList.remove('active');
+    const editModal = document.getElementById('editModal');
+    if (!editModal) return;
+    editModal.classList.remove('active');
+    setTimeout(() => { editModal.style.display = 'none'; }, 200);
 }
 
 // Close modals on outside click
@@ -2072,8 +1939,7 @@ window.onclick = function(event) {
     }
 }
 </script>
-</body>
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>
 
 
 

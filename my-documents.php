@@ -635,7 +635,7 @@ $appointments = $appointments_stmt->fetchAll(PDO::FETCH_ASSOC);
                     </div>
                     <div class="stat-details">
                         <h3><?php echo $stats['rejected'] ?? 0; ?></h3>
-                        <p>Rejected</p>
+                        <p>Disapproved</p>
                     </div>
                 </div>
             </div>
@@ -652,7 +652,7 @@ $appointments = $appointments_stmt->fetchAll(PDO::FETCH_ASSOC);
                             <option value="all" <?php echo $filter_type == 'all' ? 'selected' : ''; ?>>All Documents</option>
                             <option value="pending" <?php echo $filter_type == 'pending' ? 'selected' : ''; ?>>Pending</option>
                             <option value="verified" <?php echo $filter_type == 'verified' ? 'selected' : ''; ?>>Verified</option>
-                            <option value="rejected" <?php echo $filter_type == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
+                            <option value="rejected" <?php echo $filter_type == 'rejected' ? 'selected' : ''; ?>>Disapproved</option>
                             <option value="appointment" <?php echo $filter_type == 'appointment' ? 'selected' : ''; ?>>Appointment Related</option>
                             <option value="aics" <?php echo $filter_type == 'aics' ? 'selected' : ''; ?>>AICS Related</option>
                             <option value="housing" <?php echo $filter_type == 'housing' ? 'selected' : ''; ?>>Housing Related</option>
@@ -795,7 +795,7 @@ $appointments = $appointments_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <ul>
                     <li><i class="fas fa-check-circle" style="color: #4CAF50;"></i> <strong>Verified</strong> documents are valid and accepted</li>
                     <li><i class="fas fa-clock" style="color: #ff9800;"></i> <strong>Pending</strong> documents are still being reviewed by staff</li>
-                    <li><i class="fas fa-times-circle" style="color: #f44336;"></i> <strong>Rejected</strong> documents need to be re-uploaded with corrections</li>
+                    <li><i class="fas fa-times-circle" style="color: #f44336;"></i> <strong>Disapproved</strong> documents need to be re-uploaded with corrections</li>
                     <li><i class="fas fa-trash" style="color: #666;"></i> You can only delete documents that are still pending verification</li>
                 </ul>
             </div>

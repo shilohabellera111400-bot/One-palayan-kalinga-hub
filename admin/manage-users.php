@@ -12,6 +12,15 @@ $db = $database->getConnection();
 $error = '';
 $success = '';
 
+if (isset($_SESSION['user_action_success'])) {
+    $success = $_SESSION['user_action_success'];
+    unset($_SESSION['user_action_success']);
+}
+if (isset($_SESSION['user_action_error'])) {
+    $error = $_SESSION['user_action_error'];
+    unset($_SESSION['user_action_error']);
+}
+
 // Handle password reset
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reset_password'])) {
     csrf_verify();
@@ -66,6 +75,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
     } else {
         $db->beginTransaction();
         try {
+            // Check previous verification status for email notifications
+            $old_v_stmt = $db->prepare("SELECT verification_status FROM users WHERE user_id = :id");
+            $old_v_stmt->execute([':id' => $user_id]);
+            $old_verification_status = $old_v_stmt->fetchColumn();
+
+            $role_id = match($role) {
+                'admin' => 1,
+                'staff' => 2,
+                default => 3
+            };
+
             // Update users table
             $query = "UPDATE users SET 
                         first_name = :first_name, 
@@ -73,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
                         email = :email, 
                         contact_number = :contact_number, 
                         role = :role, 
+                        role_id = :role_id, 
                         status = :status, 
                         verification_status = :verification_status 
                       WHERE user_id = :id";
@@ -82,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
             $stmt->bindParam(':email', $email);
             $stmt->bindParam(':contact_number', $contact_number);
             $stmt->bindParam(':role', $role);
+            $stmt->bindParam(':role_id', $role_id);
             $stmt->bindParam(':status', $status);
             $stmt->bindParam(':verification_status', $verification_status);
             $stmt->bindParam(':id', $user_id);
@@ -95,10 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
                 $res_check_stmt->execute();
                 if ($res_check_stmt->rowCount() == 0) {
                     // Create resident profile
-                    $year = date('Y');
-                    $count_query = "SELECT COUNT(*) as count FROM residents";
-                    $count = $db->query($count_query)->fetch(PDO::FETCH_ASSOC)['count'];
-                    $res_num = 'RES-' . $year . '-' . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+                    $res_num = generateResidentNumber($db);
 
                     $ins = "INSERT INTO residents (user_id, resident_number, first_name, last_name, contact_number, is_active) 
                             VALUES (:id, :res_num, :first_name, :last_name, :contact, 1)";
@@ -150,7 +169,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
                 }
             }
 
+            // Optional password update from unified edit modal
+            if (!empty($_POST['new_password'])) {
+                $new_password = $_POST['new_password'];
+                if (strlen($new_password) < 8) {
+                    throw new Exception("New password must be at least 8 characters long.");
+                }
+                $hashed_pwd = password_hash($new_password, PASSWORD_DEFAULT);
+                $pwd_stmt = $db->prepare("UPDATE users SET password = :pwd WHERE user_id = :id");
+                $pwd_stmt->execute([':pwd' => $hashed_pwd, ':id' => $user_id]);
+            }
+
             $db->commit();
+
+            // If verification status changed to verified or rejected, send notification email
+            if ($old_verification_status !== $verification_status && !empty($email)) {
+                try {
+                    require_once __DIR__ . '/../includes/Mailer.php';
+                    $mailer = new Mailer();
+                    $recipient_name = trim($first_name . ' ' . $last_name) ?: 'Resident';
+                    if ($verification_status === 'verified') {
+                        $mailer->sendVerificationApprovedEmail($email, $recipient_name, $user_id);
+                    } elseif ($verification_status === 'rejected') {
+                        $mailer->sendVerificationRejectedEmail($email, $recipient_name, 'Verification disapproved during administrator account review.', $user_id);
+                    }
+                } catch (Exception $mailEx) {
+                    error_log("Failed to send verification status email from manage-users: " . $mailEx->getMessage());
+                }
+            }
 
             // Log activity
             $log_query = "INSERT INTO audit_logs (user_id, action, table_affected, new_values) VALUES (:admin_id, 'edit_user', 'users', :details)";
@@ -160,7 +206,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
             $log_stmt->bindParam(':details', $details);
             $log_stmt->execute();
 
-            $success = "User account updated successfully.";
+            $_SESSION['user_action_success'] = "User account <strong>" . htmlspecialchars($first_name . ' ' . $last_name) . "</strong> updated successfully.";
+            header("Location: manage-users.php");
+            exit();
         } catch (Exception $e) {
             $db->rollBack();
             $error = "Failed to update user account: " . $e->getMessage();
@@ -195,9 +243,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_user'])) {
         } else {
             $db->beginTransaction();
             try {
+                $role_id = match($role) {
+                    'admin' => 1,
+                    'staff' => 2,
+                    default => 3
+                };
                 $hashed = password_hash($password, PASSWORD_DEFAULT);
-                $query = "INSERT INTO users (username, password, email, first_name, last_name, contact_number, role, status, verification_status) 
-                          VALUES (:username, :password, :email, :first_name, :last_name, :contact_number, :role, :status, 'verified')";
+                $query = "INSERT INTO users (username, password, email, first_name, last_name, contact_number, role, role_id, status, verification_status) 
+                          VALUES (:username, :password, :email, :first_name, :last_name, :contact_number, :role, :role_id, :status, 'verified')";
                 $stmt = $db->prepare($query);
                 $stmt->bindParam(':username', $username);
                 $stmt->bindParam(':password', $hashed);
@@ -206,6 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_user'])) {
                 $stmt->bindParam(':last_name', $last_name);
                 $stmt->bindParam(':contact_number', $contact_number);
                 $stmt->bindParam(':role', $role);
+                $stmt->bindParam(':role_id', $role_id);
                 $stmt->bindParam(':status', $status);
                 $stmt->execute();
                 
@@ -213,9 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_user'])) {
 
                 // Profile initialization
                 if ($role === 'resident') {
-                    $year = date('Y');
-                    $count = $db->query("SELECT COUNT(*) as count FROM residents")->fetch(PDO::FETCH_ASSOC)['count'];
-                    $res_num = 'RES-' . $year . '-' . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+                    $res_num = generateResidentNumber($db);
 
                     $ins = "INSERT INTO residents (user_id, resident_number, first_name, last_name, contact_number, is_active) 
                             VALUES (:id, :res_num, :first_name, :last_name, :contact, 1)";
@@ -263,55 +315,164 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_user'])) {
     }
 }
 
-// Handle user deletion
-if (isset($_GET['delete_id'])) {
-    $delete_id = intval($_GET['delete_id']);
-    if ($delete_id == $_SESSION['user_id']) {
-        $error = "You cannot delete your own admin account.";
+// Handle user deletion & deactivation
+$is_delete_req = ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], ['delete_user', 'archive_user'])) 
+                 || (isset($_GET['delete_id']));
+
+if ($is_delete_req) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        csrf_verify();
+        $target_id = intval($_POST['user_id'] ?? 0);
+        $req_action = $_POST['action'] ?? 'delete_user';
     } else {
-        $db->beginTransaction();
-        try {
-            // Disable foreign key checks temporarily
-            $db->exec("SET FOREIGN_KEY_CHECKS = 0");
+        $target_id = intval($_GET['delete_id'] ?? 0);
+        $req_action = 'delete_user';
+    }
 
-            // Delete child dependencies
-            $db->exec("DELETE FROM residents WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM staff WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM verification_requests WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM notifications WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM appointments WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM audit_logs WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM documents WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM email_logs WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM housing_beneficiaries WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM aics_requests WHERE user_id = $delete_id");
-            $db->exec("DELETE FROM aics_requests_backup WHERE user_id = $delete_id");
+    if ($target_id <= 0) {
+        $error = "Invalid user account specified.";
+    } elseif ($target_id === intval($_SESSION['user_id'] ?? 0)) {
+        $error = "You cannot delete or deactivate your own admin account.";
+    } else {
+        // Fetch target user info
+        $t_stmt = $db->prepare("SELECT * FROM users WHERE user_id = :id");
+        $t_stmt->execute([':id' => $target_id]);
+        $target_user = $t_stmt->fetch(PDO::FETCH_ASSOC);
 
-            // Delete the main user record
-            $del_user = "DELETE FROM users WHERE user_id = :id";
-            $stmt = $db->prepare($del_user);
-            $stmt->bindParam(':id', $delete_id);
-            $stmt->execute();
+        if (!$target_user) {
+            $error = "User account not found or has already been removed.";
+        } else {
+            $user_display_name = trim(($target_user['first_name'] ?? '') . ' ' . ($target_user['last_name'] ?? ''));
+            if (empty($user_display_name)) {
+                $user_display_name = $target_user['username'];
+            }
 
-            // Re-enable foreign key checks
-            $db->exec("SET FOREIGN_KEY_CHECKS = 1");
+            if ($req_action === 'archive_user') {
+                // Deactivate / Soft Archive
+                try {
+                    $db->beginTransaction();
+                    $db->prepare("UPDATE users SET status = 'inactive' WHERE user_id = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE staff SET is_active = 0 WHERE user_id = :id")->execute([':id' => $target_id]);
 
-            $db->commit();
+                    $log_query = "INSERT INTO audit_logs (user_id, action, table_affected, new_values) VALUES (:admin_id, 'archive_user', 'users', :details)";
+                    $log_stmt = $db->prepare($log_query);
+                    $details = "Deactivated User: " . $user_display_name . " (@" . $target_user['username'] . ", ID: " . $target_id . ")";
+                    $log_stmt->bindParam(':admin_id', $_SESSION['user_id']);
+                    $log_stmt->bindParam(':details', $details);
+                    $log_stmt->execute();
 
-            // Log activity (logged under admin's ID, so it remains intact)
-            $log_query = "INSERT INTO audit_logs (user_id, action, table_affected, new_values) VALUES (:admin_id, 'delete_user', 'users', :details)";
-            $log_stmt = $db->prepare($log_query);
-            $details = "Deleted User ID: " . $delete_id;
-            $log_stmt->bindParam(':admin_id', $_SESSION['user_id']);
-            $log_stmt->bindParam(':details', $details);
-            $log_stmt->execute();
+                    $db->commit();
+                    $_SESSION['user_action_success'] = "User account <strong>" . htmlspecialchars($user_display_name) . "</strong> (@" . htmlspecialchars($target_user['username']) . ") has been deactivated.";
+                    header("Location: manage-users.php");
+                    exit();
+                } catch (Exception $e) {
+                    $db->rollBack();
+                    $error = "Failed to deactivate user: " . $e->getMessage();
+                }
+            } else {
+                // Permanent Cascade Delete
+                $db->beginTransaction();
+                try {
+                    // 1. Clear foreign key reviewer/approver/verifier references on other records
+                    $db->prepare("UPDATE users SET verified_by = NULL WHERE verified_by = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE verification_requests SET reviewed_by = NULL WHERE reviewed_by = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE aics_requests SET reviewed_by = NULL WHERE reviewed_by = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE aics_requests SET approved_by = NULL WHERE approved_by = :id")->execute([':id' => $target_id]);
+                    try {
+                        $db->prepare("UPDATE aics_requests_backup SET reviewed_by = NULL WHERE reviewed_by = :id")->execute([':id' => $target_id]);
+                        $db->prepare("UPDATE aics_requests_backup SET approved_by = NULL WHERE approved_by = :id")->execute([':id' => $target_id]);
+                    } catch (Exception $e) {}
+                    $db->prepare("UPDATE housing_beneficiaries SET interviewed_by = NULL WHERE interviewed_by = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE housing_beneficiaries SET approved_by = NULL WHERE approved_by = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE documents SET verified_by = NULL WHERE verified_by = :id")->execute([':id' => $target_id]);
+                    $db->prepare("UPDATE appointments SET staff_id = NULL WHERE staff_id = :id")->execute([':id' => $target_id]);
 
-            $success = "User account deleted successfully.";
-        } catch (Exception $e) {
-            $db->rollBack();
-            // Ensure foreign key checks are re-enabled even on failure
-            try { $db->exec("SET FOREIGN_KEY_CHECKS = 1"); } catch(Exception $ex) {}
-            $error = "Failed to delete user account: " . $e->getMessage();
+                    // 2. Clear AICS applicant requests and sub-details
+                    $aics_stmt = $db->prepare("SELECT aics_id FROM aics_requests WHERE user_id = :id");
+                    $aics_stmt->execute([':id' => $target_id]);
+                    $aics_ids = $aics_stmt->fetchAll(PDO::FETCH_COLUMN);
+                    if (!empty($aics_ids)) {
+                        $in_clause = implode(',', array_map('intval', $aics_ids));
+                        $detail_tables = ['aics_medical_details', 'aics_funeral_details', 'aics_educational_details', 'aics_food_details', 'aics_material_details', 'aics_cash_relief_details', 'aics_transportation_details', 'aics_documents', 'aics_comments'];
+                        foreach ($detail_tables as $tbl) {
+                            try { $db->exec("DELETE FROM $tbl WHERE aics_id IN ($in_clause)"); } catch (Exception $e) {}
+                        }
+                        $db->exec("DELETE FROM aics_requests WHERE user_id = $target_id");
+                    }
+                    try { $db->exec("DELETE FROM aics_comments WHERE user_id = $target_id"); } catch (Exception $e) {}
+                    try { $db->exec("DELETE FROM aics_requests_backup WHERE user_id = $target_id"); } catch (Exception $e) {}
+
+                    // 3. Clear Housing records
+                    $db->prepare("DELETE FROM housing_beneficiaries WHERE user_id = :id")->execute([':id' => $target_id]);
+
+                    // 4. Clear Documents & requests
+                    $db->prepare("DELETE FROM documents WHERE user_id = :id")->execute([':id' => $target_id]);
+                    try { $db->prepare("DELETE FROM document_requests WHERE user_id = :id")->execute([':id' => $target_id]); } catch (Exception $e) {}
+
+                    // 5. Clear Resident & Social Applications
+                    $res_stmt = $db->prepare("SELECT id FROM residents WHERE user_id = :id");
+                    $res_stmt->execute([':id' => $target_id]);
+                    $res_id = $res_stmt->fetchColumn();
+                    if ($res_id) {
+                        try { $db->exec("DELETE FROM senior_applications WHERE resident_id = $res_id"); } catch (Exception $e) {}
+                        try { $db->exec("DELETE FROM pwd_applications WHERE resident_id = $res_id"); } catch (Exception $e) {}
+                        try { $db->exec("DELETE FROM service_requests WHERE resident_id = $res_id"); } catch (Exception $e) {}
+                    }
+                    try { $db->prepare("DELETE FROM senior_applications WHERE user_id = :id")->execute([':id' => $target_id]); } catch (Exception $e) {}
+                    try { $db->prepare("DELETE FROM pwd_applications WHERE user_id = :id")->execute([':id' => $target_id]); } catch (Exception $e) {}
+                    $db->prepare("DELETE FROM residents WHERE user_id = :id")->execute([':id' => $target_id]);
+
+                    // 6. Clear Staff & assignments
+                    $stf_stmt = $db->prepare("SELECT id FROM staff WHERE user_id = :id");
+                    $stf_stmt->execute([':id' => $target_id]);
+                    $stf_id = $stf_stmt->fetchColumn();
+                    if ($stf_id) {
+                        try { $db->exec("DELETE FROM staff_service_assignments WHERE staff_id = $stf_id"); } catch (Exception $e) {}
+                    }
+                    $db->prepare("DELETE FROM staff WHERE user_id = :id")->execute([':id' => $target_id]);
+
+                    // 7. Clear secondary user tables
+                    $db->prepare("DELETE FROM verification_requests WHERE user_id = :id")->execute([':id' => $target_id]);
+                    $db->prepare("DELETE FROM appointments WHERE user_id = :id")->execute([':id' => $target_id]);
+                    $db->prepare("DELETE FROM notifications WHERE user_id = :id")->execute([':id' => $target_id]);
+                    $db->prepare("DELETE FROM email_logs WHERE user_id = :id")->execute([':id' => $target_id]);
+                    $db->prepare("DELETE FROM password_resets WHERE user_id = :id")->execute([':id' => $target_id]);
+                    try { $db->prepare("DELETE FROM feedback WHERE user_id = :id")->execute([':id' => $target_id]); } catch (Exception $e) {}
+                    try { $db->prepare("DELETE FROM rate_limits WHERE user_id = :id")->execute([':id' => $target_id]); } catch (Exception $e) {}
+
+                    // 8. Dissociate audit logs
+                    $db->prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = :id")->execute([':id' => $target_id]);
+
+                    // 9. Delete avatar file if exists
+                    if (!empty($target_user['profile_picture'])) {
+                        $avatar_path = __DIR__ . '/../' . $target_user['profile_picture'];
+                        if (file_exists($avatar_path)) {
+                            @unlink($avatar_path);
+                        }
+                    }
+
+                    // 10. Delete main user record
+                    $del_user = $db->prepare("DELETE FROM users WHERE user_id = :id");
+                    $del_user->execute([':id' => $target_id]);
+
+                    // 11. Log deletion activity under admin's ID
+                    $log_query = "INSERT INTO audit_logs (user_id, action, table_affected, new_values) VALUES (:admin_id, 'delete_user', 'users', :details)";
+                    $log_stmt = $db->prepare($log_query);
+                    $details = "Permanently deleted user: " . $user_display_name . " (Username: " . $target_user['username'] . ", ID: " . $target_id . ")";
+                    $log_stmt->bindParam(':admin_id', $_SESSION['user_id']);
+                    $log_stmt->bindParam(':details', $details);
+                    $log_stmt->execute();
+
+                    $db->commit();
+
+                    $_SESSION['user_action_success'] = "User account <strong>" . htmlspecialchars($user_display_name) . "</strong> (@" . htmlspecialchars($target_user['username']) . ") was permanently deleted successfully.";
+                    header("Location: manage-users.php");
+                    exit();
+                } catch (Exception $e) {
+                    $db->rollBack();
+                    $error = "Failed to delete user account: " . $e->getMessage();
+                }
+            }
         }
     }
 }
@@ -384,18 +545,11 @@ foreach ($name_parts as $part) {
 }
 $initials = substr($initials, 0, 2);
 
-$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'System Users';
+$active_sidebar = 'users';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage System Users - One Palayan-Kalinga Hub</title>
-    <link rel="stylesheet" href="../css/style.css">
-    <link rel="stylesheet" href="../css/admin.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <style>
+<style>
         /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
             --tan: #D8BA98;
@@ -406,7 +560,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --white: #FFFFFF;
             
             /* Light theme defaults */
-            --bg-primary: #E8ECF2;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -438,7 +592,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         /* ========== DARK THEME ========== */
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: var(--ref-canvas, #0C1417);
             --bg-secondary: #111827;
             --bg-card: #1a2332;
             --bg-sidebar: #0f1629;
@@ -457,216 +611,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
             --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.25);
             
-            --search-bg: #1a2332;
-            --stat-bg: #1a2332;
-            --filter-bg: #1a2332;
-            --table-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
-            
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            line-height: 1.5;
-            min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            object-fit: contain;
-            background: rgba(255,255,255,0.10);
-            padding: 4px;
-            flex-shrink: 0;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-            flex-shrink: 0;
-        }
-        .logo-text {
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 16px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 12px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-        }
-        .sidebar-footer .avatar {
-            width: 38px;
-            height: 38px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.8rem;
-        }
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .sidebar-footer .user-details p {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.7rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .page-title h1 {
-            font-size: 1.5rem;
-            color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
-        }
-        .page-title p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
         }
         .top-bar-actions {
             display: flex;
@@ -1368,128 +1312,431 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .resident-cell { gap: 8px; }
             .resident-avatar { width: 24px; height: 24px; }
         }
+        /* ========== MODERN DELETE CONFIRMATION MODAL ========== */
+        .modal-modern-wrap {
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.72);
+            padding: 16px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .modal-modern-wrap.active {
+            opacity: 1;
+        }
+        .modal-modern-card {
+            background: var(--bg-card, #ffffff);
+            color: var(--text-primary, #1e293b);
+            width: 100%;
+            max-width: 480px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-color, rgba(0,0,0,0.08));
+            position: relative;
+            overflow: hidden;
+            transform: scale(0.96) translateY(10px);
+            transition: transform 0.2s ease;
+        }
+        .modal-modern-wrap.active .modal-modern-card {
+            transform: scale(1) translateY(0);
+        }
+        .modal-modern-accent {
+            height: 5px;
+            width: 100%;
+            background: linear-gradient(90deg, #b91c1c, #ef4444, #f87171);
+        }
+        .modal-modern-close {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            background: rgba(0,0,0,0.05);
+            border: none;
+            font-size: 20px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--text-muted, #64748b);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .modal-modern-close:hover {
+            background: rgba(220, 38, 38, 0.12);
+            color: #dc2626;
+            transform: rotate(90deg);
+        }
+        .modal-modern-body {
+            padding: 26px 26px 18px 26px;
+            text-align: center;
+        }
+        .danger-beacon {
+            position: relative;
+            width: 68px;
+            height: 68px;
+            margin: 0 auto 16px auto;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ef4444;
+            font-size: 28px;
+        }
+        .danger-beacon-ping {
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px solid rgba(239, 68, 68, 0.4);
+            animation: beaconPulse 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        @keyframes beaconPulse {
+            0% { transform: scale(0.9); opacity: 1; }
+            100% { transform: scale(1.35); opacity: 0; }
+        }
+        .modal-modern-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary, #0f172a);
+            margin: 0 0 6px 0;
+        }
+        .modal-modern-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted, #64748b);
+            margin: 0 0 18px 0;
+            line-height: 1.45;
+        }
+        .target-user-strip {
+            background: var(--badge-bg, rgba(0, 0, 0, 0.03));
+            border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+            border-radius: 14px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            margin-bottom: 16px;
+        }
+        .target-user-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--maroon, #7f0303);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            overflow: hidden;
+            border: 2px solid var(--border-color, rgba(255,255,255,0.2));
+        }
+        .target-user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .target-user-details {
+            flex: 1;
+            min-width: 0;
+        }
+        .target-user-name {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-primary, #0f172a);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .target-user-sub {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: var(--text-muted, #64748b);
+            margin-top: 2px;
+        }
+        .target-user-role-badge {
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 50px;
+            background: rgba(0,0,0,0.08);
+            color: var(--text-primary, #0f172a);
+        }
+        .modal-warning-callout {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px dashed rgba(245, 158, 11, 0.45);
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 0.78rem;
+            color: #b45309;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+            line-height: 1.4;
+        }
+        .modal-modern-footer {
+            padding: 14px 20px 20px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            background: var(--badge-bg, rgba(0, 0, 0, 0.02));
+            border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.06));
+            border-radius: 0 0 22px 22px;
+            flex-wrap: wrap;
+        }
+        .btn-modern-ghost {
+            background: transparent;
+            border: 1px solid var(--border-color, #cbd5e1);
+            color: var(--text-secondary, #475569);
+            padding: 9px 18px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-modern-ghost:hover {
+            background: var(--border-color, #f1f5f9);
+            color: var(--text-primary, #0f172a);
+        }
+        .btn-modern-deactivate {
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: #d97706;
+            padding: 9px 16px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-modern-deactivate:hover {
+            background: #d97706;
+            color: #ffffff;
+            border-color: #d97706;
+            transform: translateY(-1px);
+        }
+        .btn-modern-danger {
+            background: #dc2626;
+            border: none;
+            color: #ffffff;
+            padding: 9px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+        }
+        .btn-modern-danger:hover {
+            background: #b91c1c;
+            box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35);
+            transform: translateY(-1px);
+        }
+
+        /* ========== MODERN TOAST POPUP NOTIFICATIONS ========== */
+        .modern-toast-host {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 100000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+            max-width: 440px;
+            width: calc(100vw - 48px);
+        }
+        .modern-toast-card {
+            pointer-events: auto;
+            background: var(--bg-card, #ffffff);
+            color: var(--text-primary, #0f172a);
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px var(--border-color, rgba(0,0,0,0.08));
+            border-left: 5px solid #10b981;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            padding: 16px;
+            gap: 12px;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .modern-toast-card.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        .modern-toast-card.toast-error {
+            border-left-color: #ef4444;
+        }
+        .modern-toast-card.toast-info {
+            border-left-color: #0288d1;
+        }
+        .modern-toast-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 16px;
+            background: rgba(16, 185, 129, 0.14);
+            color: #10b981;
+        }
+        .toast-error .modern-toast-icon {
+            background: rgba(239, 68, 68, 0.14);
+            color: #ef4444;
+        }
+        .toast-info .modern-toast-icon {
+            background: rgba(2, 136, 209, 0.14);
+            color: #0288d1;
+        }
+        .modern-toast-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .modern-toast-title {
+            font-weight: 700;
+            font-size: 0.88rem;
+            margin-bottom: 2px;
+            color: var(--text-primary, #0f172a);
+        }
+        .modern-toast-msg {
+            font-size: 0.8rem;
+            color: var(--text-muted, #64748b);
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .modern-toast-close {
+            background: transparent;
+            border: none;
+            font-size: 18px;
+            color: var(--text-muted, #94a3b8);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 6px;
+            line-height: 1;
+            transition: all 0.2s ease;
+        }
+        .modern-toast-close:hover {
+            color: var(--text-primary, #0f172a);
+            background: rgba(0,0,0,0.05);
+        }
+        .modern-toast-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            width: 100%;
+            background: #10b981;
+            transform-origin: left;
+            animation: toastProgress 5s linear forwards;
+        }
+        .toast-error .modern-toast-bar {
+            background: #ef4444;
+        }
+        .toast-info .modern-toast-bar {
+            background: #0288d1;
+        }
+        @keyframes toastProgress {
+            0% { transform: scaleX(1); }
+            100% { transform: scaleX(0); }
+        }
     </style>
-</head>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
 
-</head>
-<body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li><a href="announcements.php"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-            <li><a href="calendar.php"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php" class="active"><i class="fas fa-users-cog"></i> System Users</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <p>Administrator</p>
-                </div>
-            </div>
-        </div>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-users-cog"></i> System Users</h1>
+        <p>Manage administrative, staff, and resident user credentials & access</p>
     </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <button onclick="openCreateModal()" class="btn-primary" style="padding:8px 18px;border-radius:50px;background:var(--dash-maroon);color:#fff;font-weight:600;font-size:0.85rem;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+            <i class="fas fa-user-plus"></i> Add New User
+        </button>
+    </div>
+</div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-users-cog" style="color: var(--maroon-light); margin-right: 10px;"></i> Manage Users</h1>
-                <p>Manage all administrative, staff, and resident user credentials</p>
-            </div>
-            <div class="top-bar-actions">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search accounts..." id="globalSearch" value="<?php echo htmlspecialchars($search); ?>" onkeyup="if(event.key === 'Enter') runSearch()">
-                </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-            </div>
-        </div>
+        <!-- Modern Floating Toast Host -->
+        <div id="modernToastContainer" class="modern-toast-host" aria-live="polite" aria-atomic="true"></div>
 
         <?php if ($error): ?>
-            <div class="alert alert-error">
-                <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($error); ?>
+            <div class="alert alert-error" id="topInlineErrorAlert" style="border-radius: 14px; display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 1.25rem;"></i>
+                    <span><?php echo $error; ?></span>
+                </div>
+                <button type="button" onclick="this.closest('.alert').remove()" style="background:none;border:none;color:inherit;font-size:1.2rem;cursor:pointer;opacity:0.7;">&times;</button>
             </div>
         <?php endif; ?>
         <?php if ($success): ?>
-            <div class="alert alert-success">
-                <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($success); ?>
+            <div class="alert alert-success" id="topInlineSuccessAlert" style="border-radius: 14px; display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-check-circle" style="font-size: 1.25rem;"></i>
+                    <span><?php echo $success; ?></span>
+                </div>
+                <button type="button" onclick="this.closest('.alert').remove()" style="background:none;border:none;color:inherit;font-size:1.2rem;cursor:pointer;opacity:0.7;">&times;</button>
             </div>
         <?php endif; ?>
 
         <!-- Stats Grid -->
-        <div class="stats-grid">
-            <div class="stat-card" onclick="window.location.href='manage-users.php'">
-                <div class="stat-icon total"><i class="fas fa-users"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $total_users; ?></h3>
-                    <p>Total Accounts</p>
+        <div class="compact-stats-grid" style="margin-bottom: 20px;">
+            <div class="stat-pill-card" onclick="window.location.href='manage-users.php'" style="cursor:pointer;">
+                <div class="stat-pill-icon maroon"><i class="fas fa-users"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $total_users; ?></span>
+                    <span class="stat-pill-lbl">Total Accounts</span>
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-users.php?status=active'">
-                <div class="stat-icon active"><i class="fas fa-user-check"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $active_users; ?></h3>
-                    <p>Active Users</p>
+            <div class="stat-pill-card" onclick="window.location.href='manage-users.php?status=active'" style="cursor:pointer;">
+                <div class="stat-pill-icon emerald"><i class="fas fa-user-check"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $active_users; ?></span>
+                    <span class="stat-pill-lbl">Active Users</span>
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-users.php?role=staff'">
-                <div class="stat-icon pwd"><i class="fas fa-user-shield"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $staff_users; ?></h3>
-                    <p>CSWDO Staff</p>
+            <div class="stat-pill-card" onclick="window.location.href='manage-users.php?role=staff'" style="cursor:pointer;">
+                <div class="stat-pill-icon sapphire"><i class="fas fa-user-shield"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $staff_users; ?></span>
+                    <span class="stat-pill-lbl">CSWDO Staff</span>
                 </div>
             </div>
-            <div class="stat-card" onclick="window.location.href='manage-users.php?role=resident'">
-                <div class="stat-icon senior"><i class="fas fa-user-friends"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $resident_users; ?></h3>
-                    <p>Residents</p>
+            <div class="stat-pill-card" onclick="window.location.href='manage-users.php?role=resident'" style="cursor:pointer;">
+                <div class="stat-pill-icon amber"><i class="fas fa-user-friends"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $resident_users; ?></span>
+                    <span class="stat-pill-lbl">Residents</span>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Actions Bar -->
-        <div class="quick-actions-bar">
-            <div class="resident-info">
-                <h4>Registered System Accounts</h4>
-                <div class="count"><?php echo $total_users; ?></div>
-            </div>
-            <div class="quick-actions">
-                <button onclick="openCreateModal()" class="quick-btn">
-                    <i class="fas fa-user-plus"></i> Add New User
-                </button>
-            </div>
-        </div>
+
 
         <!-- Filter Bar -->
         <div class="filter-bar">
@@ -1568,11 +1815,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                                 <td><span class="badge-verify verify-<?php echo $u['verification_status']; ?>"><?php echo $u['verification_status']; ?></span></td>
                                 <td><span class="badge-status status-<?php echo $u['status']; ?>"><?php echo $u['status']; ?></span></td>
                                 <td style="text-align: center;">
-                                    <div class="action-btns" style="justify-content: center;">
-                                        <button class="btn-primary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 4px;" onclick="openEditModal(<?php echo htmlspecialchars(json_encode($u)); ?>)" title="Edit User"><i class="fas fa-edit"></i></button>
-                                        <button class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 4px;" onclick="openResetModal(<?php echo $u['user_id']; ?>, '<?php echo htmlspecialchars($u['username']); ?>')" title="Reset Password"><i class="fas fa-key"></i></button>
+                                    <div class="action-btns" style="justify-content: center; gap: 6px;">
+                                        <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer;" data-user="<?php echo htmlspecialchars(json_encode($u), ENT_QUOTES, 'UTF-8'); ?>" onclick="openEditModal(this)" title="Edit User"><i class="fas fa-edit" style="pointer-events: none;"></i></button>
                                         <?php if ($u['user_id'] != $_SESSION['user_id']): ?>
-                                            <a href="manage-users.php?delete_id=<?php echo $u['user_id']; ?>" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 4px; background-color: var(--color-danger); color: white; border-color: var(--color-danger);" onclick="return confirm('Are you sure you want to delete this user?')" title="Delete User"><i class="fas fa-trash-alt"></i></a>
+                                            <button type="button" class="btn-secondary btn-delete" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; background-color: var(--color-danger); color: white; border-color: var(--color-danger); cursor: pointer;" onclick="openDeleteModal(<?php echo (int)$u['user_id']; ?>, '<?php echo htmlspecialchars(addslashes($u['username']), ENT_QUOTES); ?>', '<?php echo htmlspecialchars(addslashes(trim($u['first_name'] . ' ' . $u['last_name'])), ENT_QUOTES); ?>', '<?php echo htmlspecialchars(addslashes($u['role']), ENT_QUOTES); ?>', '<?php echo htmlspecialchars(addslashes($u['email']), ENT_QUOTES); ?>')" title="Delete User"><i class="fas fa-trash-alt"></i></button>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -1606,8 +1852,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 </div>
             </div>
         <?php endif; ?>
-    </div>
-</div>
 
 <!-- Create User Modal -->
 <div id="createModal" class="modal">
@@ -1727,8 +1971,15 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <select name="verification_status" id="edit_verification_status">
                     <option value="pending">Pending</option>
                     <option value="verified">Verified</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="rejected">Disapproved</option>
                 </select>
+            </div>
+            <div class="form-group" style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color, #cbd5e1);">
+                <label style="display: flex; align-items: center; justify-content: space-between;">
+                    <span><i class="fas fa-key" style="color: var(--maroon, #7F0303);"></i> Reset / Change Password</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted, #64748b); font-weight: normal;">(Leave blank to keep current)</span>
+                </label>
+                <input type="password" name="new_password" id="edit_new_password" placeholder="Enter new password (optional, min 8 chars)" autocomplete="new-password">
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
@@ -1767,6 +2018,57 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </form>
     </div>
+</div><!-- /#resetModal -->
+
+<!-- Modern Delete User Modal -->
+<div id="modernDeleteModal" class="modal-modern-wrap">
+    <div class="modal-modern-card" role="dialog" aria-modal="true" aria-labelledby="delModalTitle">
+        <div class="modal-modern-accent"></div>
+        <button type="button" class="modal-modern-close" onclick="closeDeleteModal()" aria-label="Close dialog">&times;</button>
+        <div class="modal-modern-body">
+            <div class="danger-beacon">
+                <div class="danger-beacon-ping"></div>
+                <i class="fas fa-trash-alt"></i>
+            </div>
+            <h3 class="modal-modern-title" id="delModalTitle">Delete User Account</h3>
+            <p class="modal-modern-desc">Are you sure you want to delete this user? Please confirm your action below.</p>
+
+            <div class="target-user-strip">
+                <div class="target-user-avatar" id="delModalAvatar">
+                    <span>U</span>
+                </div>
+                <div class="target-user-details">
+                    <div class="target-user-name" id="delModalName">User Name</div>
+                    <div class="target-user-sub">
+                        <span id="delModalUsername">@username</span>
+                        <span>&bull;</span>
+                        <span class="target-user-role-badge" id="delModalRole">resident</span>
+                    </div>
+                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;" id="delModalEmail">user@email.com</div>
+                </div>
+            </div>
+
+            <div class="modal-warning-callout">
+                <i class="fas fa-exclamation-triangle" style="font-size: 1.1rem; flex-shrink: 0;"></i>
+                <div>
+                    <strong>Permanent Action:</strong> Deleting permanently will purge this account, login access, and all associated applications & documents.
+                </div>
+            </div>
+        </div>
+        <div class="modal-modern-footer">
+            <button type="button" class="btn-modern-ghost" onclick="closeDeleteModal()">Cancel</button>
+            <form method="POST" action="manage-users.php" id="deleteUserForm" style="display:inline-flex; gap:8px;">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="user_id" id="delModalUserId" value="">
+                <button type="submit" name="action" value="archive_user" class="btn-modern-deactivate" title="Deactivate user and keep historical records">
+                    <i class="fas fa-user-slash"></i> Deactivate Only
+                </button>
+                <button type="submit" name="action" value="delete_user" class="btn-modern-danger" id="delConfirmSubmitBtn">
+                    <i class="fas fa-trash-alt"></i> Delete Permanently
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -1782,36 +2084,177 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     const createModal = document.getElementById('createModal');
     const editModal = document.getElementById('editModal');
     const resetModal = document.getElementById('resetModal');
+    const modernDeleteModal = document.getElementById('modernDeleteModal');
 
     function openCreateModal() {
-        createModal.style.display = 'block';
+        if (!createModal) return;
+        createModal.style.display = 'flex';
+        void createModal.offsetWidth;
+        createModal.classList.add('active');
     }
     function closeCreateModal() {
-        createModal.style.display = 'none';
+        if (!createModal) return;
+        createModal.classList.remove('active');
+        setTimeout(() => { createModal.style.display = 'none'; }, 200);
     }
 
-    function openEditModal(user) {
-        document.getElementById('edit_user_id').value = user.user_id;
-        document.getElementById('edit_first_name').value = user.first_name;
-        document.getElementById('edit_last_name').value = user.last_name;
-        document.getElementById('edit_email').value = user.email;
-        document.getElementById('edit_contact_number').value = user.contact_number || '';
-        document.getElementById('edit_role').value = user.role;
-        document.getElementById('edit_status').value = user.status;
-        document.getElementById('edit_verification_status').value = user.verification_status;
-        editModal.style.display = 'block';
+    function openEditModal(target) {
+        if (!editModal) return;
+        let user = target;
+        if (target instanceof Element) {
+            const raw = target.getAttribute('data-user') || target.dataset.user;
+            try {
+                user = JSON.parse(raw);
+            } catch(e) {
+                console.error('Invalid user JSON:', e);
+                return;
+            }
+        } else if (typeof target === 'string') {
+            try {
+                user = JSON.parse(target);
+            } catch(e) {
+                console.error('Invalid user JSON:', e);
+                return;
+            }
+        }
+        if (!user || typeof user !== 'object') return;
+
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = (val !== null && val !== undefined) ? val : '';
+        };
+
+        setVal('edit_user_id', user.user_id);
+        setVal('edit_first_name', user.first_name);
+        setVal('edit_last_name', user.last_name);
+        setVal('edit_email', user.email);
+        setVal('edit_contact_number', user.contact_number);
+        setVal('edit_role', user.role);
+        setVal('edit_status', user.status);
+        setVal('edit_verification_status', user.verification_status);
+        setVal('edit_new_password', '');
+
+        editModal.style.display = 'flex';
+        void editModal.offsetWidth;
+        editModal.classList.add('active');
     }
+
     function closeEditModal() {
-        editModal.style.display = 'none';
+        if (!editModal) return;
+        editModal.classList.remove('active');
+        setTimeout(() => { editModal.style.display = 'none'; }, 200);
     }
 
-    function openResetModal(userId, username) {
-        document.getElementById('reset_user_id').value = userId;
-        document.getElementById('reset_username').value = username;
-        resetModal.style.display = 'block';
-    }
     function closeResetModal() {
-        resetModal.style.display = 'none';
+        if (!resetModal) return;
+        resetModal.classList.remove('active');
+        setTimeout(() => { resetModal.style.display = 'none'; }, 200);
+    }
+
+    // Modern Delete Modal Controls
+    function openDeleteModal(userId, username, name, role, email) {
+        if (!modernDeleteModal) return;
+        // Support both openDeleteModal(object) and openDeleteModal(id, username, name, role, email)
+        if (typeof userId === 'object' && userId !== null) {
+            const user = userId;
+            userId = user.user_id;
+            username = user.username;
+            name = user.name;
+            role = user.role;
+            email = user.email;
+        }
+
+        const idInput = document.getElementById('delModalUserId');
+        if (idInput) idInput.value = userId || '';
+
+        const nameEl = document.getElementById('delModalName');
+        if (nameEl) nameEl.textContent = name || username || 'User Account';
+
+        const userEl = document.getElementById('delModalUsername');
+        if (userEl) userEl.textContent = '@' + (username || '');
+
+        const emailEl = document.getElementById('delModalEmail');
+        if (emailEl) emailEl.textContent = email || 'No email registered';
+        
+        const roleEl = document.getElementById('delModalRole');
+        if (roleEl) {
+            roleEl.textContent = role || 'resident';
+            roleEl.className = 'target-user-role-badge role-' + (role || 'resident');
+        }
+
+        const avatarEl = document.getElementById('delModalAvatar');
+        if (avatarEl) {
+            const displayName = String(name || username || 'U').trim();
+            const initials = displayName.split(/\s+/).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+            avatarEl.innerHTML = '<span>' + escapeHtml(initials) + '</span>';
+        }
+
+        modernDeleteModal.style.display = 'flex';
+        void modernDeleteModal.offsetWidth; // Force layout reflow
+        modernDeleteModal.classList.add('active');
+    }
+
+    function closeDeleteModal() {
+        if (!modernDeleteModal) return;
+        modernDeleteModal.classList.remove('active');
+        setTimeout(() => {
+            modernDeleteModal.style.display = 'none';
+        }, 180);
+    }
+
+    // Modern Toast Notification System
+    function showModernToast(type, title, message, duration = 5000) {
+        const container = document.getElementById('modernToastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'modern-toast-card toast-' + (type === 'error' ? 'error' : (type === 'info' ? 'info' : 'success'));
+        
+        let iconHtml = '<i class="fas fa-check-circle"></i>';
+        if (type === 'error') iconHtml = '<i class="fas fa-exclamation-circle"></i>';
+        else if (type === 'info') iconHtml = '<i class="fas fa-info-circle"></i>';
+
+        toast.innerHTML = `
+            <div class="modern-toast-icon">${iconHtml}</div>
+            <div class="modern-toast-content">
+                <div class="modern-toast-title">${escapeHtml(title)}</div>
+                <div class="modern-toast-msg">${message}</div>
+            </div>
+            <button type="button" class="modern-toast-close" aria-label="Close notification">&times;</button>
+            <div class="modern-toast-bar"></div>
+        `;
+
+        const closeBtn = toast.querySelector('.modern-toast-close');
+        closeBtn.addEventListener('click', () => {
+            dismissToast(toast);
+        });
+
+        container.appendChild(toast);
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        const timer = setTimeout(() => {
+            dismissToast(toast);
+        }, duration);
+
+        function dismissToast(el) {
+            clearTimeout(timer);
+            el.classList.remove('show');
+            setTimeout(() => {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, 360);
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     // Close on overlay click
@@ -1819,21 +2262,27 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         if (event.target == createModal) closeCreateModal();
         if (event.target == editModal) closeEditModal();
         if (event.target == resetModal) closeResetModal();
+        if (event.target == modernDeleteModal) closeDeleteModal();
     }
 
-    // Dark Mode integration toggle
-    const themeToggleBtn = document.getElementById('themeToggle');
-    if (themeToggleBtn) {
-        themeToggleBtn.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const targetTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', targetTheme);
-            localStorage.setItem('theme', targetTheme);
-            const icon = themeToggleBtn.querySelector('i');
-            icon.className = targetTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-            document.cookie = `dark_mode=${targetTheme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-        });
-    }
+    // Escape key closes modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            if (modernDeleteModal && modernDeleteModal.classList.contains('active')) {
+                closeDeleteModal();
+            }
+        }
+    });
+
+    // Auto-trigger modern toast on load if session message is present
+    document.addEventListener('DOMContentLoaded', function() {
+        <?php if (!empty($success)): ?>
+            showModernToast('success', 'Action Successful', <?php echo json_encode($success); ?>);
+        <?php endif; ?>
+        <?php if (!empty($error)): ?>
+            showModernToast('error', 'Notice', <?php echo json_encode($error); ?>);
+        <?php endif; ?>
+    });
+
 </script>
-</body>
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>

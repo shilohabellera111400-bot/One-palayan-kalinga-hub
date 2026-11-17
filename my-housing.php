@@ -24,6 +24,44 @@ if (!$user_verify || $user_verify['verification_status'] != 'verified') {
     redirect('verify-resident.php');
 }
 
+// Handle application withdrawal
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['withdraw_application'])) {
+    $beneficiary_id = sanitize($_POST['beneficiary_id'] ?? '');
+    
+    // Check if application belongs to user and is withdrawable
+    $check_query = "SELECT * FROM housing_beneficiaries 
+                    WHERE beneficiary_id = :id AND user_id = :user_id 
+                    AND status IN ('pending', 'qualified')";
+    $check_stmt = $db->prepare($check_query);
+    $check_stmt->bindParam(':id', $beneficiary_id);
+    $check_stmt->bindParam(':user_id', $_SESSION['user_id']);
+    $check_stmt->execute();
+    
+    if ($check_stmt->rowCount() > 0) {
+        $update_query = "UPDATE housing_beneficiaries SET status = 'rejected', 
+                         housing_need_assessment = CONCAT(IFNULL(housing_need_assessment, ''), '\n\nApplication voluntarily withdrawn by applicant on ', NOW())
+                         WHERE beneficiary_id = :id";
+        $update_stmt = $db->prepare($update_query);
+        $update_stmt->bindParam(':id', $beneficiary_id);
+        
+        if ($update_stmt->execute()) {
+            $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
+                            VALUES (:user_id, 'Housing Application Withdrawn', 
+                            'Your housing application has been withdrawn successfully as requested.', 'housing')";
+            $notif_stmt = $db->prepare($notif_query);
+            $notif_stmt->bindParam(':user_id', $_SESSION['user_id']);
+            $notif_stmt->execute();
+            
+            $_SESSION['success'] = "Housing application withdrawn successfully.";
+            redirect("my-housing.php");
+        } else {
+            $_SESSION['error'] = "Failed to withdraw application. Please try again.";
+        }
+    } else {
+        $_SESSION['error'] = "Application not found or is no longer withdrawable.";
+    }
+}
+
 $query = "SELECT h.*, p.program_name, p.location, p.program_code,
           DATEDIFF(NOW(), h.application_date) as days_since_application
           FROM housing_beneficiaries h
@@ -84,6 +122,12 @@ if ($user_data) {
         : '';
 }
 
+// Standardized Housing Tracking Number Helper
+function getHousingTrackingNumber($beneficiary_id, $application_date = null) {
+    $year = $application_date ? date('Y', strtotime($application_date)) : date('Y');
+    return 'HSG-' . $year . '-' . str_pad($beneficiary_id, 5, '0', STR_PAD_LEFT);
+}
+
 // Check for dark mode preference
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
 ?>
@@ -95,7 +139,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>My Housing - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/portal-layout.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
         /* ========== STATS GRID ========== */
         .stats-grid {
@@ -265,6 +309,38 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--color-danger);
         }
 
+        .pathway-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 12px;
+            border-radius: 50px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pathway-pill.insite {
+            background: rgba(46, 125, 50, 0.12);
+            color: #2e7d32;
+            border: 1px solid rgba(46, 125, 50, 0.3);
+        }
+        [data-theme="dark"] .pathway-pill.insite {
+            background: rgba(76, 175, 80, 0.15);
+            color: #81c784;
+            border-color: rgba(76, 175, 80, 0.3);
+        }
+        .pathway-pill.relocation {
+            background: rgba(15, 65, 74, 0.12);
+            color: #0F414A;
+            border: 1px solid rgba(15, 65, 74, 0.25);
+        }
+        [data-theme="dark"] .pathway-pill.relocation {
+            background: rgba(232, 213, 168, 0.15);
+            color: #E8D5A8;
+            border-color: rgba(232, 213, 168, 0.3);
+        }
+
         .card-body {
             padding: 18px 20px;
         }
@@ -358,90 +434,66 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         /* ========== RESPONSIVE ========== */
         @media (max-width: 992px) {
-            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
         }
         @media (max-width: 768px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .housing-summary { flex-direction: column; text-align: center; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .housing-summary { flex-direction: column; text-align: left; }
             .housing-summary .summary-text { flex-direction: column; }
-            .housing-summary .summary-actions { justify-content: center; }
-            .card-header { flex-direction: column; align-items: flex-start; }
+            .housing-summary .summary-actions { width: 100%; justify-content: flex-start; }
+            .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
             .info-row { flex-wrap: wrap; }
             .info-row .label { min-width: 80px; }
-            .card-footer { flex-direction: column; }
+            .card-footer { flex-direction: column; gap: 8px; }
             .btn-view { width: 100%; justify-content: center; }
         }
         @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .stat-card { padding: 10px 12px; }
-            .stat-card .stat-number { font-size: 1.1rem; }
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .stat-card { padding: 10px 8px; }
+            .stat-card .stat-number { font-size: 1.15rem; }
+            .stat-card .stat-label { font-size: 0.65rem; }
             .application-card { margin: 0; }
-            .card-body { padding: 14px 16px; }
-            .card-header { padding: 12px 16px; }
+            .card-body { padding: 14px 14px; }
+            .card-header { padding: 12px 14px; }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar Overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-home"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Integrated Service Portal</span>
-                </div>
-                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="user-info-sidebar">
-                <div class="user-avatar-sidebar">
-                    <?php if(!empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
-                    <?php else: ?>
-                        <?php echo $initials; ?>
-                    <?php endif; ?>
-                </div>
-                <div>
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <span>Resident</span>
-                </div>
-            </div>
-            
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-            
-            <div class="sidebar-footer">
-                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
-            </div>
-        </div>
+        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="top-bar-left">
-                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
-                        <i class="fas fa-bars"></i>
-                        <span>Menu</span>
-                    </button>
-                    <div class="page-title">
-                        <h1><i class="fas fa-building" style="color: var(--maroon-light); margin-right: 10px;"></i> My Housing</h1>
-                        <p>Track your housing applications and approved units</p>
-                    </div>
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = "My Housing Applications";
+            $banner_subtitle = "Track your resettlement applications and verified community unit allocations";
+            $banner_icon = "fa-city";
+            $banner_actions = [
+                ["label" => "Housing Programs", "url" => "housing-programs.php", "icon" => "fa-building", "type" => "primary"],
+                ["label" => "Track Status", "url" => "view-housing.php", "icon" => "fa-search-location", "type" => "secondary"]
+            ];
+            include __DIR__ . "/includes/portal-banner.php";
+            ?>
+
+            <?php if (isset($_SESSION['success'])): ?>
+                <div style="background: rgba(76, 175, 80, 0.1); border-left: 4px solid #4CAF50; color: #2e7d32; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-check-circle" style="font-size: 1.1rem;"></i>
+                    <span><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></span>
                 </div>
-                <div class="top-bar-actions">
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="dashboard.php" class="top-icon"><i class="fas fa-tachometer-alt"></i></a>
+            <?php endif; ?>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div style="background: rgba(244, 67, 54, 0.1); border-left: 4px solid #f44336; color: #c62828; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 1.1rem;"></i>
+                    <span><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></span>
                 </div>
-            </div>
+            <?php endif; ?>
 
         <!-- Statistics Cards -->
         <div class="stats-grid">
@@ -473,7 +525,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-times-circle" style="color: var(--color-danger);"></i></div>
                 <div class="stat-number"><?php echo $stats['rejected'] ?? 0; ?></div>
-                <div class="stat-label">Rejected</div>
+                <div class="stat-label">Disapproved</div>
             </div>
         </div>
 
@@ -503,10 +555,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <!-- Applications List -->
         <?php if($stmt->rowCount() > 0): ?>
         <div class="applications-list">
-            <?php while($app = $stmt->fetch(PDO::FETCH_ASSOC)): ?>
+            <?php while($app = $stmt->fetch(PDO::FETCH_ASSOC)): 
+                $tracking_no = getHousingTrackingNumber($app['beneficiary_id'], $app['application_date']);
+            ?>
             <div class="application-card status-<?php echo $app['status']; ?>">
                 <div class="card-header">
-                    <h3><i class="fas fa-building"></i> <?php echo htmlspecialchars($app['program_name']); ?></h3>
+                    <div>
+                        <h3>
+                            <i class="fas fa-building"></i> 
+                            <?php echo htmlspecialchars($app['program_name']); ?>
+                            <span style="font-family: monospace; font-size: 0.76rem; font-weight: 800; background: rgba(127,3,3,0.08); color: #7F0303; padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(127,3,3,0.18); margin-left: 8px;">
+                                <i class="fas fa-barcode"></i> <?php echo htmlspecialchars($tracking_no); ?>
+                            </span>
+                        </h3>
+                        <div style="margin-top: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <?php if(($app['housing_type'] ?? 'relocation') === 'in_site'): ?>
+                                <span class="pathway-pill insite">
+                                    <i class="fas fa-house-chimney-user"></i> In-Site Housing
+                                </span>
+                                <span style="font-size: 0.72rem; color: #2e7d32; font-weight: 600;">(No Relocation Required)</span>
+                            <?php else: ?>
+                                <span class="pathway-pill relocation">
+                                    <i class="fas fa-truck-ramp-box"></i> Relocation Housing
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                     <span class="status-badge <?php echo $app['status']; ?>">
                         <i class="fas fa-<?php 
                             echo $app['status'] == 'pending' ? 'clock' : 
@@ -518,11 +592,41 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     </span>
                 </div>
                 <div class="card-body">
-                    <div class="info-row">
-                        <i class="fas fa-map-marker-alt"></i>
-                        <span class="label">Location:</span>
-                        <span class="value"><?php echo htmlspecialchars($app['location']); ?></span>
-                    </div>
+                    <?php if(($app['housing_type'] ?? 'relocation') === 'in_site'): ?>
+                        <div class="info-row">
+                            <i class="fas fa-map-location-dot" style="color: #2e7d32;"></i>
+                            <span class="label">Property Address:</span>
+                            <span class="value" style="font-weight: 600;"><?php echo htmlspecialchars($app['property_location'] ?: $app['location']); ?></span>
+                        </div>
+                        <?php if(!empty($app['land_ownership_status'])): ?>
+                        <div class="info-row">
+                            <i class="fas fa-file-contract" style="color: #2e7d32;"></i>
+                            <span class="label">Land Tenure:</span>
+                            <span class="value"><?php echo htmlspecialchars($app['land_ownership_status']); ?></span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if(!empty($app['lot_area'])): ?>
+                        <div class="info-row">
+                            <i class="fas fa-ruler-combined" style="color: #2e7d32;"></i>
+                            <span class="label">Lot Area:</span>
+                            <span class="value"><?php echo htmlspecialchars($app['lot_area']); ?> sq.m</span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if(!empty($app['construction_type'])): ?>
+                        <div class="info-row">
+                            <i class="fas fa-hammer" style="color: #2e7d32;"></i>
+                            <span class="label">Construction:</span>
+                            <span class="value"><?php echo htmlspecialchars($app['construction_type']); ?></span>
+                        </div>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <div class="info-row">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span class="label">Location:</span>
+                            <span class="value"><?php echo htmlspecialchars($app['location']); ?></span>
+                        </div>
+                    <?php endif; ?>
+
                     <div class="info-row">
                         <i class="fas fa-calendar"></i>
                         <span class="label">Applied on:</span>
@@ -543,22 +647,30 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <?php if(!empty($app['unit_assigned'])): ?>
                     <div class="info-row">
                         <i class="fas fa-home"></i>
-                        <span class="label">Unit Assigned:</span>
+                        <span class="label"><?php echo ($app['housing_type'] ?? 'relocation') === 'in_site' ? 'Lot/Grant Ref:' : 'Unit Assigned:'; ?></span>
                         <span class="value highlight"><?php echo htmlspecialchars($app['unit_assigned']); ?></span>
                     </div>
                     <?php endif; ?>
                     <?php if(!empty($app['interview_date'])): ?>
                     <div class="info-row">
                         <i class="fas fa-calendar-check"></i>
-                        <span class="label">Interview Date:</span>
+                        <span class="label"><?php echo ($app['housing_type'] ?? 'relocation') === 'in_site' ? 'Site Visit Date:' : 'Interview Date:'; ?></span>
                         <span class="value"><?php echo date('M d, Y', strtotime($app['interview_date'])); ?></span>
                     </div>
                     <?php endif; ?>
                 </div>
-                <div class="card-footer">
+                <div class="card-footer" style="display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
+                    <a href="print-claim-stub.php?type=housing&id=<?php echo $app['beneficiary_id']; ?>" target="_blank" class="btn-view" style="background: rgba(127,3,3,0.08); color: #7F0303; border: 1px solid rgba(127,3,3,0.2);">
+                        <i class="fas fa-receipt"></i> Claim Stub
+                    </a>
                     <a href="view-housing.php?id=<?php echo $app['beneficiary_id']; ?>" class="btn-view">
                         <i class="fas fa-eye"></i> View Details
                     </a>
+                    <?php if($app['status'] == 'pending' || $app['status'] == 'qualified'): ?>
+                    <button type="button" onclick="openWithdrawModal(<?php echo $app['beneficiary_id']; ?>)" class="btn-withdraw" style="background: rgba(244, 67, 54, 0.08); color: #c62828; border: 1px solid rgba(244, 67, 54, 0.25); padding: 8px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                        <i class="fas fa-times"></i> Withdraw
+                    </button>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endwhile; ?>
@@ -624,6 +736,58 @@ if (themeToggle) {
         setTheme(current === 'dark' ? 'light' : 'dark');
     });
 }
+
+// ========== WITHDRAW MODAL ==========
+function openWithdrawModal(id) {
+    document.getElementById('withdraw_beneficiary_id').value = id;
+    document.getElementById('withdrawModal').style.display = 'flex';
+}
+
+function closeWithdrawModal() {
+    document.getElementById('withdrawModal').style.display = 'none';
+    document.getElementById('withdraw_beneficiary_id').value = '';
+}
+
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('withdrawModal');
+    if (event.target === modal) {
+        closeWithdrawModal();
+    }
+});
 </script>
+
+<!-- Withdraw Confirmation Modal -->
+<div id="withdrawModal" style="position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center;">
+    <div style="background: var(--card-bg, #ffffff); border-radius: var(--radius-card, 16px); width: 90%; max-width: 440px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 1px solid var(--border-color, #E2E8F0); overflow: hidden;">
+        <div style="padding: 18px 24px; border-bottom: 1px solid var(--border-color, #E2E8F0); display: flex; justify-content: space-between; align-items: center; background: rgba(244, 67, 54, 0.06);">
+            <h3 style="margin: 0; font-size: 1.1rem; color: #c62828; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-exclamation-triangle"></i> Withdraw Application
+            </h3>
+            <button type="button" onclick="closeWithdrawModal()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+        </div>
+        <form method="POST">
+            <input type="hidden" name="beneficiary_id" id="withdraw_beneficiary_id">
+            <div style="padding: 24px;">
+                <p style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.95rem; line-height: 1.5;">
+                    Are you sure you want to withdraw this housing application?
+                </p>
+                <div style="background: rgba(255, 152, 0, 0.08); border-left: 3px solid #ff9800; padding: 10px 14px; border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+                    This will cancel your application from active CSWDO evaluation. You may apply again if program slots are still open.
+                </div>
+            </div>
+            <div style="padding: 16px 24px; border-top: 1px solid var(--border-color, #E2E8F0); display: flex; justify-content: flex-end; gap: 10px; background: var(--card-subtle, #f8fafc);">
+                <button type="button" onclick="closeWithdrawModal()" style="padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border-color, #CBD5E1); background: #ffffff; color: var(--text-primary); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                    Cancel
+                </button>
+                <button type="submit" name="withdraw_application" style="padding: 8px 18px; border-radius: 8px; border: none; background: #c62828; color: #ffffff; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-trash-alt"></i> Confirm Withdrawal
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Search Modal (Req 7) -->
+<?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

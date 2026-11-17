@@ -1,5 +1,6 @@
 <?php
-// staff-dashboard.php
+// staff-dashboard.php - Unified Staff Operations Dashboard
+// Faithfully mirrors Resident Portal UI/UX (dashboard.php)
 require_once __DIR__ . '/config/database.php';
 
 // Check if user is logged in
@@ -7,9 +8,14 @@ if (!isLoggedIn()) {
     redirect('login.php');
 }
 
-// Check if user is staff or admin
-if (!isStaff() && !isAdmin()) {
-    redirect('dashboard.php');
+// Administrator redirection: Admins manage operations via the Admin Control Center
+if (isAdmin()) {
+    redirect('admin/dashboard.php');
+}
+
+// Check if user is staff
+if (!isStaff()) {
+    redirect('login.php');
 }
 
 $database = new Database();
@@ -29,7 +35,7 @@ $cat_query = "SELECT DISTINCT sc.category_id, sc.category_name
                FROM staff_service_assignments ssa
                JOIN service_categories sc ON ssa.category_id = sc.category_id
                WHERE ssa.staff_id = :staff_id AND ssa.is_active = 1
-               AND sc.category_name IN ('AICS', 'Housing', 'Senior Citizen', 'PWD')";
+               AND sc.category_name IN ('AICS', 'Housing', 'Senior Citizen', 'PWD', 'Verification')";
 $cat_stmt = $db->prepare($cat_query);
 $cat_stmt->bindParam(':staff_id', $staff_id);
 $cat_stmt->execute();
@@ -40,20 +46,27 @@ $has_aics_access = false;
 $has_housing_access = false;
 $has_senior_access = false;
 $has_pwd_access = false;
+$has_verif_access = false;
 
 foreach ($assigned_categories as $category) {
     $cat_name = $category['category_name'];
-    if ($cat_name == 'AICS')
-        $has_aics_access = true;
-    if ($cat_name == 'Housing')
-        $has_housing_access = true;
-    if ($cat_name == 'Senior Citizen')
-        $has_senior_access = true;
-    if ($cat_name == 'PWD')
-        $has_pwd_access = true;
+    if ($cat_name == 'AICS') $has_aics_access = true;
+    if ($cat_name == 'Housing') $has_housing_access = true;
+    if ($cat_name == 'Senior Citizen') $has_senior_access = true;
+    if ($cat_name == 'PWD') $has_pwd_access = true;
+    if ($cat_name == 'Verification' || $cat_name == 'Residency Verification') $has_verif_access = true;
 }
 
-// Get staff details - FIXED: JOIN with users to get profile_picture
+// If no specific assignments, grant default view access
+if (empty($assigned_categories)) {
+    $has_aics_access = true;
+    $has_housing_access = true;
+    $has_senior_access = true;
+    $has_pwd_access = true;
+    $has_verif_access = true;
+}
+
+// Get staff details
 $staff_query = "SELECT s.*, u.email, u.contact_number, u.last_login, u.profile_picture 
                 FROM staff s
                 JOIN users u ON s.user_id = u.user_id
@@ -64,1236 +77,2044 @@ $staff_stmt->execute();
 $staff_info = $staff_stmt->fetch(PDO::FETCH_ASSOC);
 
 // Get statistics for dashboard
-$stats = [];
+$stats = [
+    'pending_aics' => 0,
+    'approved_aics' => 0,
+    'rejected_aics' => 0,
+    'pending_housing' => 0,
+    'approved_housing' => 0,
+    'pending_documents' => 0,
+    'today_appointments' => 0,
+    'pending_verifications' => 0
+];
 
-// Total AICS requests
-if ($has_aics_access) {
+try {
     $query = "SELECT COUNT(*) as count FROM aics_requests WHERE status IN ('submitted', 'reviewing')";
-    $stats['pending_aics'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+    $stats['pending_aics'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
 
     $query = "SELECT COUNT(*) as count FROM aics_requests WHERE status = 'approved'";
-    $stats['approved_aics'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+    $stats['approved_aics'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
 
     $query = "SELECT COUNT(*) as count FROM aics_requests WHERE status = 'rejected'";
-    $stats['rejected_aics'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-}
+    $stats['rejected_aics'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
+} catch (Exception $e) {}
 
-// Total Housing applications
-if ($has_housing_access) {
+try {
     $query = "SELECT COUNT(*) as count FROM housing_beneficiaries WHERE status IN ('pending', 'qualified')";
-    $stats['pending_housing'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+    $stats['pending_housing'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
 
     $query = "SELECT COUNT(*) as count FROM housing_beneficiaries WHERE status = 'approved'";
-    $stats['approved_housing'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
-}
+    $stats['approved_housing'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
+} catch (Exception $e) {}
 
-// Documents to verify
-$query = "SELECT COUNT(*) as count FROM documents WHERE verification_status = 'pending'";
-$stats['pending_documents'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+try {
+    $query = "SELECT COUNT(*) as count FROM documents WHERE verification_status = 'pending'";
+    $stats['pending_documents'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
+} catch (Exception $e) {}
 
-// Today's appointments
-$query = "SELECT COUNT(*) as count FROM appointments WHERE appointment_date = CURDATE() AND status IN ('pending', 'confirmed')";
-$stats['today_appointments'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+try {
+    $query = "SELECT COUNT(*) as count FROM appointments WHERE appointment_date = CURDATE() AND status IN ('pending', 'confirmed')";
+    $stats['today_appointments'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
+} catch (Exception $e) {}
 
-// Pending verifications
-$query = "SELECT COUNT(*) as count FROM verification_requests WHERE status = 'pending'";
-$stats['pending_verifications'] = $db->query($query)->fetch(PDO::FETCH_ASSOC)['count'];
+try {
+    $query = "SELECT COUNT(*) as count FROM verification_requests WHERE status = 'pending'";
+    $stats['pending_verifications'] = (int)($db->query($query)->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
+} catch (Exception $e) {}
 
-// Recent AICS requests (if staff has access)
+// Recent AICS requests
 $recent_aics = [];
-if ($has_aics_access) {
-    $query = "SELECT a.*, u.first_name, u.last_name 
+try {
+    $query = "SELECT a.*, u.first_name, u.last_name, u.profile_picture 
               FROM aics_requests a
               JOIN users u ON a.user_id = u.user_id
               WHERE a.status IN ('submitted', 'reviewing')
               ORDER BY a.submission_date DESC
-              LIMIT 5";
+              LIMIT 4";
     $recent_aics = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
-}
+} catch (Exception $e) {}
 
-// Recent Housing applications (if staff has access)
+// Recent Housing applications
 $recent_housing = [];
-if ($has_housing_access) {
+try {
     $tables_check = $db->query("SHOW TABLES LIKE 'housing_beneficiaries'");
     if ($tables_check->rowCount() > 0) {
-        $query = "SELECT h.*, u.first_name, u.last_name 
+        $query = "SELECT h.*, u.first_name, u.last_name, u.profile_picture 
                   FROM housing_beneficiaries h
                   JOIN users u ON h.user_id = u.user_id
                   WHERE h.status IN ('pending', 'qualified')
                   ORDER BY h.application_date DESC
-                  LIMIT 5";
+                  LIMIT 4";
         $recent_housing = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
     }
-}
+} catch (Exception $e) {}
 
-// Recent documents
-$recent_docs = [];
-$query = "SELECT d.*, u.first_name, u.last_name 
-          FROM documents d
-          JOIN users u ON d.user_id = u.user_id
-          WHERE d.verification_status = 'pending'
-          ORDER BY d.upload_date DESC
-          LIMIT 5";
-$recent_docs = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
 
-// Recent verification requests
-$recent_verifications = [];
-$query = "SELECT v.*, u.first_name, u.last_name, u.email 
-          FROM verification_requests v
-          JOIN users u ON v.user_id = u.user_id
-          WHERE v.status = 'pending'
-          ORDER BY v.submitted_date DESC
-          LIMIT 5";
-$recent_verifications = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+// ================= CASEWORK STATS (AICS, Housing, Appointments, PWD, Senior) =================
+$casework_stats = [
+    'total_aics' => 0,
+    'pending_aics' => 0,
+    'total_housing' => 0,
+    'pending_housing' => 0,
+    'total_appts' => 0,
+    'pending_appts' => 0,
+    'total_pwd' => 0,
+    'pending_pwd' => 0,
+    'total_senior' => 0,
+    'pending_senior' => 0
+];
 
-// Get initials for avatar
-$initials = '';
-$name_parts = explode(' ', $_SESSION['full_name']);
-foreach ($name_parts as $part) {
-    $initials .= strtoupper(substr($part, 0, 1));
-}
-$initials = substr($initials, 0, 2);
+try {
+    $row = $db->query("SELECT COUNT(*) as t, SUM(CASE WHEN status IN ('pending', 'under_review', 'submitted', 'reviewing') THEN 1 ELSE 0 END) as p FROM aics_requests")->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $casework_stats['total_aics'] = (int)($row['t'] ?? 0);
+        $casework_stats['pending_aics'] = (int)($row['p'] ?? 0);
+    }
+} catch (Exception $e) {}
 
-// Profile picture path - FIXED: Check both users table and staff_info
-$profile_picture = '';
-if (isset($staff_info['profile_picture']) && !empty($staff_info['profile_picture'])) {
-    $profile_picture = $staff_info['profile_picture'];
-}
+try {
+    $row = $db->query("SELECT COUNT(*) as t, SUM(CASE WHEN status IN ('pending', 'under_review', 'submitted', 'qualified') THEN 1 ELSE 0 END) as p FROM housing_beneficiaries")->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $casework_stats['total_housing'] = (int)($row['t'] ?? 0);
+        $casework_stats['pending_housing'] = (int)($row['p'] ?? 0);
+    }
+} catch (Exception $e) {}
 
-// Check if the profile picture exists in the filesystem
-$avatar_url = '';
-if (!empty($profile_picture)) {
-    $full_path = __DIR__ . '/../' . $profile_picture;
-    if (file_exists($full_path)) {
-        $avatar_url = '../' . $profile_picture;
-    } else {
-        // Try alternative paths
-        $alt_path = __DIR__ . '/' . $profile_picture;
-        if (file_exists($alt_path)) {
-            $avatar_url = $profile_picture;
+try {
+    $row = $db->query("SELECT COUNT(*) as t, SUM(CASE WHEN status IN ('pending', 'confirmed') THEN 1 ELSE 0 END) as p FROM appointments WHERE appointment_date >= CURDATE()")->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $casework_stats['total_appts'] = (int)($row['t'] ?? 0);
+        $casework_stats['pending_appts'] = (int)($row['p'] ?? 0);
+    }
+} catch (Exception $e) {}
+
+try {
+    $row = $db->query("SELECT COUNT(*) as t, SUM(CASE WHEN status IN ('pending', 'under_review', 'submitted', 'step_1_review') THEN 1 ELSE 0 END) as p FROM pwd_applications")->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $casework_stats['total_pwd'] = (int)($row['t'] ?? 0);
+        $casework_stats['pending_pwd'] = (int)($row['p'] ?? 0);
+    }
+} catch (Exception $e) {}
+
+try {
+    $row = $db->query("SELECT COUNT(*) as t, SUM(CASE WHEN status IN ('pending', 'under_review', 'submitted', 'step_1_review') THEN 1 ELSE 0 END) as p FROM senior_applications")->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $casework_stats['total_senior'] = (int)($row['t'] ?? 0);
+        $casework_stats['pending_senior'] = (int)($row['p'] ?? 0);
+    }
+} catch (Exception $e) {}
+
+// ================= MULTI-SERVICE TREND ENGINE =================
+$trend_sources = [
+    'aics' => [
+        'table' => 'aics_requests',
+        'col' => 'submission_date'
+    ],
+    'appts' => [
+        'table' => 'appointments',
+        'col' => 'appointment_date'
+    ],
+    'housing' => [
+        'table' => 'housing_beneficiaries',
+        'col' => 'application_date'
+    ],
+    'pwd' => [
+        'table' => 'pwd_applications',
+        'col' => 'created_at'
+    ],
+    'senior' => [
+        'table' => 'senior_applications',
+        'col' => 'created_at'
+    ]
+];
+
+$trend_data_store = [
+    'monthly' => [],
+    'daily' => []
+];
+
+foreach ($trend_sources as $k => $src) {
+    try {
+        // 1. Monthly aggregation
+        $m_stmt = $db->query("SELECT YEAR({$src['col']}) as y, MONTH({$src['col']}) as m, COUNT(*) as cnt 
+                              FROM {$src['table']} 
+                              WHERE {$src['col']} IS NOT NULL 
+                              GROUP BY y, m");
+        if ($m_stmt) {
+            while ($r = $m_stmt->fetch(PDO::FETCH_ASSOC)) {
+                $ym = sprintf('%04d-%02d', $r['y'], $r['m']);
+                if (!isset($trend_data_store['monthly'][$ym])) {
+                    $trend_data_store['monthly'][$ym] = ['aics' => 0, 'appts' => 0, 'housing' => 0, 'pwd' => 0, 'senior' => 0];
+                }
+                $trend_data_store['monthly'][$ym][$k] = (int)$r['cnt'];
+            }
         }
+
+        // 2. Daily aggregation
+        $d_stmt = $db->query("SELECT YEAR({$src['col']}) as y, MONTH({$src['col']}) as m, DAYOFMONTH({$src['col']}) as d, COUNT(*) as cnt 
+                              FROM {$src['table']} 
+                              WHERE {$src['col']} IS NOT NULL 
+                              GROUP BY y, m, d");
+        if ($d_stmt) {
+            while ($r = $d_stmt->fetch(PDO::FETCH_ASSOC)) {
+                $ym = sprintf('%04d-%02d', $r['y'], $r['m']);
+                $day = (int)$r['d'];
+                if (!isset($trend_data_store['daily'][$ym])) {
+                    $trend_data_store['daily'][$ym] = [];
+                }
+                if (!isset($trend_data_store['daily'][$ym][$day])) {
+                    $trend_data_store['daily'][$ym][$day] = ['aics' => 0, 'appts' => 0, 'housing' => 0, 'pwd' => 0, 'senior' => 0];
+                }
+                $trend_data_store['daily'][$ym][$day][$k] = (int)$r['cnt'];
+            }
+        }
+    } catch (Exception $e) {}
+}
+
+// Available filter months (past 12 rolling months)
+$available_filter_months = [];
+for ($i = 0; $i < 12; $i++) {
+    $m_time = strtotime("first day of -$i month");
+    $ym = date('Y-m', $m_time);
+    $available_filter_months[$ym] = date('F Y', $m_time);
+}
+
+$js_trend_store = json_encode($trend_data_store);
+$js_default_period = json_encode('6m');
+
+// Staff Event Scheduling Handler (Part 2, Item 12)
+$cal_success = '';
+$cal_error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_calendar_event'])) {
+    $ev_title = sanitize($_POST['event_title'] ?? '');
+    $ev_desc = sanitize($_POST['event_description'] ?? '');
+    $ev_date = sanitize($_POST['event_date'] ?? '');
+    $ev_start = sanitize($_POST['start_time'] ?? '08:00:00');
+    $ev_end = sanitize($_POST['end_time'] ?? '17:00:00');
+
+    if (!empty($ev_title) && !empty($ev_date)) {
+        try {
+            $ins = $db->prepare("INSERT INTO calendar_events (title, description, event_date, start_time, end_time) VALUES (:t, :d, :dt, :st, :et)");
+            if ($ins->execute([
+                ':t' => $ev_title,
+                ':d' => $ev_desc,
+                ':dt' => $ev_date,
+                ':st' => $ev_start,
+                ':et' => $ev_end
+            ])) {
+                $cal_success = "Service schedule event successfully added to the master calendar!";
+            } else {
+                $cal_error = "Failed to add event to the calendar.";
+            }
+        } catch (Exception $e) {
+            $cal_error = "Database error: " . $e->getMessage();
+        }
+    } else {
+        $cal_error = "Please provide both an event title and schedule date.";
     }
 }
 
-// If no profile picture found, use initials
-$use_initials = empty($avatar_url);
+// Interactive Staff Calendar Engine (Part 2, Item 12)
+$cal_month = isset($_GET['cal_month']) ? (int)$_GET['cal_month'] : (int)date('n');
+$cal_year = isset($_GET['cal_year']) ? (int)$_GET['cal_year'] : (int)date('Y');
+if ($cal_month < 1) { $cal_month = 12; $cal_year--; }
+if ($cal_month > 12) { $cal_month = 1; $cal_year++; }
 
-// Check for dark mode preference
+$prev_month = $cal_month - 1;
+$prev_year = $cal_year;
+if ($prev_month < 1) { $prev_month = 12; $prev_year--; }
+
+$next_month = $cal_month + 1;
+$next_year = $cal_year;
+if ($next_month > 12) { $next_month = 1; $next_year++; }
+
+$month_timestamp = mktime(0, 0, 0, $cal_month, 1, $cal_year);
+$month_name = date('F Y', $month_timestamp);
+$days_in_month = (int)date('t', $month_timestamp);
+$first_day_of_week = (int)date('N', $month_timestamp); // 1 = Monday, 7 = Sunday
+
+// Initialize day map for the entire month
+$day_data_map = [];
+for ($d = 1; $d <= $days_in_month; $d++) {
+    $day_data_map[$d] = [
+        'day' => $d,
+        'date' => sprintf('%04d-%02d-%02d', $cal_year, $cal_month, $d),
+        'events' => [],
+        'appointments' => [],
+        'aics' => [],
+        'housing' => []
+    ];
+}
+
+try {
+    // 1. Month Appointments
+    $app_q = "SELECT a.appointment_id, a.reference_number, a.appointment_date, a.appointment_time, a.status, a.window_assignment,
+                     s.service_name, u.first_name, u.last_name, u.contact_number 
+              FROM appointments a 
+              LEFT JOIN services s ON a.service_id = s.service_id 
+              JOIN users u ON a.user_id = u.user_id 
+              WHERE MONTH(a.appointment_date) = :m AND YEAR(a.appointment_date) = :y
+              ORDER BY a.appointment_date ASC, a.appointment_time ASC";
+    $stmt = $db->prepare($app_q);
+    $stmt->execute([':m' => $cal_month, ':y' => $cal_year]);
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $d = (int)date('j', strtotime($row['appointment_date']));
+        if (isset($day_data_map[$d])) {
+            $day_data_map[$d]['appointments'][] = $row;
+        }
+    }
+
+    // 2. Month Calendar Events / Service Announcements
+    $ev_q = "SELECT * FROM calendar_events 
+             WHERE MONTH(event_date) = :m AND YEAR(event_date) = :y 
+             ORDER BY event_date ASC, start_time ASC";
+    $stmt = $db->prepare($ev_q);
+    $stmt->execute([':m' => $cal_month, ':y' => $cal_year]);
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $d = (int)date('j', strtotime($row['event_date']));
+        if (isset($day_data_map[$d])) {
+            $day_data_map[$d]['events'][] = $row;
+        }
+    }
+
+    // 3. Month AICS Requests
+    $aics_q = "SELECT a.request_id, a.submission_date, a.status, a.amount_requested, c.category_name, u.first_name, u.last_name 
+               FROM aics_requests a 
+               JOIN users u ON a.user_id = u.user_id 
+               LEFT JOIN aics_categories c ON a.category_id = c.category_id 
+               WHERE MONTH(a.submission_date) = :m AND YEAR(a.submission_date) = :y";
+    $stmt = $db->prepare($aics_q);
+    $stmt->execute([':m' => $cal_month, ':y' => $cal_year]);
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $d = (int)date('j', strtotime($row['submission_date']));
+        if (isset($day_data_map[$d])) {
+            $day_data_map[$d]['aics'][] = $row;
+        }
+    }
+
+    // 4. Month Housing Applications
+    $hsg_q = "SELECT h.beneficiary_id, h.application_date, h.status, p.program_name, u.first_name, u.last_name 
+              FROM housing_beneficiaries h 
+              JOIN users u ON h.user_id = u.user_id 
+              JOIN housing_programs p ON h.program_id = p.program_id 
+              WHERE MONTH(h.application_date) = :m AND YEAR(h.application_date) = :y";
+    $stmt = $db->prepare($hsg_q);
+    $stmt->execute([':m' => $cal_month, ':y' => $cal_year]);
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $d = (int)date('j', strtotime($row['application_date']));
+        if (isset($day_data_map[$d])) {
+            $day_data_map[$d]['housing'][] = $row;
+        }
+    }
+} catch (Exception $e) {}
+
+// Today's Booked Appointments for Upcoming Feed
+$today_appts = [];
+try {
+    $app_query = "SELECT a.*, s.service_name, u.first_name, u.last_name 
+                  FROM appointments a 
+                  LEFT JOIN services s ON a.service_id = s.service_id 
+                  JOIN users u ON a.user_id = u.user_id 
+                  WHERE a.appointment_date = CURDATE()
+                  ORDER BY a.appointment_time ASC 
+                  LIMIT 4";
+    $today_appts = $db->query($app_query)->fetchAll(PDO::FETCH_ASSOC);
+
+    // Fallback: If no appointments today, show upcoming 4
+    if (empty($today_appts)) {
+        $up_query = "SELECT a.*, s.service_name, u.first_name, u.last_name 
+                     FROM appointments a 
+                     LEFT JOIN services s ON a.service_id = s.service_id 
+                     JOIN users u ON a.user_id = u.user_id 
+                     WHERE a.appointment_date >= CURDATE()
+                     ORDER BY a.appointment_date ASC, a.appointment_time ASC 
+                     LIMIT 4";
+        $today_appts = $db->query($up_query)->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Exception $e) {}
+
+// Staff Initials
+$initials = '';
+$name_parts = explode(' ', $_SESSION['full_name'] ?? 'Staff Member');
+foreach ($name_parts as $part) {
+    if (!empty($part)) $initials .= strtoupper(substr($part, 0, 1));
+}
+$initials = substr($initials, 0, 2) ?: 'ST';
+
+// Profile picture path
+$profile_picture = $staff_info['profile_picture'] ?? '';
+$avatar_url = '';
+if (!empty($profile_picture)) {
+    if (file_exists(__DIR__ . '/' . $profile_picture)) {
+        $avatar_url = $profile_picture;
+    } elseif (file_exists(__DIR__ . '/../' . $profile_picture)) {
+        $avatar_url = '../' . $profile_picture;
+    }
+}
+
+// Dark mode
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'Staff Dashboard - One Palayan-Kalinga Hub';
+$portal_context = 'root';
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Dashboard - One Palayan-Kalinga Hub</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title><?php echo $page_title; ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="css/staff-portal.css?v=<?php echo filemtime(__DIR__ . '/css/staff-portal.css'); ?>">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
-            --midnight: #0F414A;
-            --white: #FFFFFF;
-
-            --bg-primary: #E8ECF2;
-            --bg-secondary: #FFFFFF;
-            --bg-card: #FFFFFF;
-            --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255, 255, 255, 0.12);
-            --bg-sidebar-active: rgba(255, 255, 255, 0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255, 255, 255, 0.7);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #C8D0DC;
-
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.10);
-            --shadow-lg: 0 12px 40px rgba(15, 65, 74, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
-
-            --stat-bg: #FFFFFF;
-            --quick-bg: #EFE8DF;
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255, 255, 255, 0.08);
-
-            --radius-card: 20px;
-            --radius-element: 12px;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255, 255, 255, 0.06);
-            --bg-sidebar-active: rgba(255, 255, 255, 0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255, 255, 255, 0.6);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
-
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.25);
-
-            --stat-bg: #1a2332;
-            --quick-bg: #1a2332;
-            --card-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255, 255, 255, 0.05);
-
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            line-height: 1.5;
-            min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        /* ========== LAYOUT ========== */
-        .app-container {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .sidebar::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-        }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-        }
-
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-
-        .logo-text span {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .staff-profile {
-            padding: 20px 20px 16px;
-            border-bottom: 1px solid var(--divider);
-            text-align: center;
-        }
-
-        .staff-avatar {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            margin: 0 auto 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            font-weight: 700;
-            color: white;
-            background: var(--maroon-light);
-            border: 3px solid rgba(255, 255, 255, 0.2);
-            overflow: hidden;
-            position: relative;
-        }
-
-        .staff-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .staff-profile h4 {
-            color: var(--text-sidebar-active);
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
-        .staff-profile p {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.75rem;
-            margin-top: 2px;
-        }
-
-        .staff-badge {
-            display: inline-block;
-            background: rgba(255, 255, 255, 0.15);
-            padding: 3px 12px;
-            border-radius: 20px;
-            font-size: 0.6rem;
-            margin-top: 6px;
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
-
-        .sidebar-menu li {
-            margin-bottom: 2px;
-        }
-
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-
-        .sidebar-menu li a i {
-            width: 20px;
-            font-size: 1rem;
-            color: rgba(255, 255, 255, 0.4);
-        }
-
-        .sidebar-menu li a:hover {
-            background: var(--bg-sidebar-hover);
-            color: var(--text-sidebar-active);
-        }
-
-        .sidebar-menu li a:hover i {
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-
-        .sidebar-menu li a.active i {
-            color: var(--text-sidebar-active);
-        }
-
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 10px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255, 255, 255, 0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(255, 255, 255, 0.04);
-            transition: all 0.25s;
-        }
-
-        .sidebar-footer a:hover {
-            background: rgba(255, 255, 255, 0.10);
-            color: var(--text-sidebar-active);
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-
-        .page-title h1 {
-            font-size: 1.5rem;
-            color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
-        }
-
-        .page-title p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
-        }
-
-        .top-bar-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .search-box {
-            display: flex;
-            align-items: center;
-            background: var(--bg-card);
-            border-radius: 50px;
-            padding: 8px 16px;
-            border: 1px solid var(--border-color);
-            gap: 10px;
-            transition: background 0.3s ease, border-color 0.3s ease;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .search-box input {
-            border: none;
-            outline: none;
-            font-size: 0.85rem;
-            background: transparent;
-            min-width: 180px;
-            color: var(--text-primary);
-        }
-
-        .search-box input::placeholder {
-            color: var(--text-muted);
-        }
-
-        .search-box i {
-            color: var(--text-muted);
-        }
-
-        .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
-            text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .top-icon:hover {
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-
-        /* ========== STATS GRID ========== */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 18px;
-            margin-bottom: 28px;
-        }
-
-        .stat-card {
-            background: var(--stat-bg);
-            border-radius: 20px;
-            padding: 18px 20px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, var(--maroon), transparent);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            border-radius: 20px;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-hover);
-            border-color: var(--maroon-light);
-        }
-
-        .stat-card:hover::after {
-            opacity: 0.03;
-        }
-
-        .stat-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            flex-shrink: 0;
-            position: relative;
-            z-index: 1;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .stat-icon.aics {
-            background: rgba(127, 3, 3, 0.12);
-            color: var(--maroon-light);
-        }
-
-        .stat-icon.housing {
-            background: rgba(15, 65, 74, 0.12);
-            color: var(--midnight);
-        }
-
-        .stat-icon.verification {
-            background: rgba(0, 150, 136, 0.12);
-            color: #009688;
-        }
-
-        .stat-icon.appointment {
-            background: rgba(255, 152, 0, 0.12);
-            color: #FF9800;
-        }
-
-        .stat-icon.document {
-            background: rgba(33, 150, 243, 0.12);
-            color: #2196F3;
-        }
-
-        .stat-info {
-            position: relative;
-            z-index: 1;
-        }
-
-        .stat-info h3 {
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: var(--text-primary);
-            line-height: 1.2;
-            transition: color 0.3s ease;
-        }
-
-        .stat-info p {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            font-weight: 500;
-            margin-top: 2px;
-        }
-
-        /* ========== QUICK ACTIONS ========== */
-        .quick-section {
-            background: var(--quick-bg);
-            border-radius: var(--radius-card);
-            padding: 20px 24px;
-            margin-bottom: 28px;
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .quick-section h3 {
-            color: var(--text-primary);
-            font-size: 1rem;
-            font-weight: 700;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .quick-section h3 i {
-            color: var(--maroon-light);
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .action-btn {
-            background: var(--bg-card);
-            padding: 10px 20px;
-            border-radius: 50px;
-            text-decoration: none;
-            color: var(--text-secondary);
-            font-weight: 600;
-            font-size: 0.82rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border: 1px solid var(--border-color);
-            transition: all 0.3s;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .action-btn:hover {
-            background: var(--maroon);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-            border-color: var(--maroon);
-        }
-
-        .action-btn:hover i {
-            color: white;
-        }
-
-        /* ========== TWO COLUMNS ========== */
-        .two-columns {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-bottom: 28px;
-        }
-
-        .dashboard-card {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 20px 24px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-
-        .dashboard-card:hover {
-            box-shadow: var(--shadow-hover);
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid var(--border-color);
-        }
-
-        .card-header h3 {
-            font-size: 0.95rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .card-header h3 i {
-            color: var(--maroon-light);
-        }
+    /* ================= CASEWORK STAT CARDS (VERTICAL STACK IN LEFT COLUMN) ================= */
+    .casework-stats-row {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        margin-bottom: 0 !important;
+    }
+
+    .column-left .compact-stat-card {
+        padding: 12px 16px !important;
+        gap: 12px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .column-left .compact-stat-icon {
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 1.1rem !important;
+    }
+    .column-left .compact-stat-value {
+        font-size: 1.3rem !important;
+    }
+    .column-left .compact-stat-label {
+        font-size: 0.68rem !important;
+    }
+
+    /* ================= 3 COLORED SERVICE DESK CARDS (IN RIGHT COLUMN) ================= */
+    .colored-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+    @media (max-width: 1200px) {
+        .colored-cards-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+    @media (max-width: 900px) {
+        .colored-cards-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Compact Service Cards to pull dashboard content above fold */
+    .colored-cards-grid .ref-service-card.service-card-minimal {
+        min-height: 128px !important;
+        padding: 16px 18px !important;
+        border-radius: 20px !important;
+    }
+    .colored-cards-grid .service-card-top-tag {
+        margin-bottom: 6px !important;
+    }
+    .colored-cards-grid .service-category-pill {
+        padding: 3px 9px !important;
+        font-size: 0.65rem !important;
+    }
+    .colored-cards-grid .service-card-minimal .service-card-title {
+        font-size: 1.15rem !important;
+        line-height: 1.2 !important;
+    }
+    .colored-cards-grid .service-card-bottom-minimal {
+        margin-top: 12px !important;
+    }
+    .colored-cards-grid .service-card-action-text {
+        font-size: 0.70rem !important;
+    }
+    .colored-cards-grid .service-card-arrow-btn {
+        width: 34px !important;
+        height: 34px !important;
+    }
+    .colored-cards-grid .service-card-giant-watermark {
+        font-size: 130px !important;
+        right: -30px !important;
+        bottom: -30px !important;
+    }
+
+    .compact-stat-card {
+        background: var(--ref-card, #FFFFFF) !important;
+        border: 1px solid var(--ref-border, #E2E8F0) !important;
+        border-radius: 20px !important;
+        padding: 14px 16px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        box-shadow: var(--ref-shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
+        text-decoration: none !important;
+        color: inherit !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
+        cursor: pointer !important;
+        position: relative !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+    }
+
+    .compact-stat-card:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08) !important;
+        border-color: rgba(127, 3, 3, 0.25) !important;
+    }
+
+    .compact-stat-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        flex-shrink: 0;
+    }
+
+    .compact-stat-icon.orange {
+        background: rgba(245, 158, 11, 0.15);
+        color: #D97706;
+    }
+    .compact-stat-icon.green {
+        background: rgba(16, 185, 129, 0.15);
+        color: #059669;
+    }
+    .compact-stat-icon.blue {
+        background: rgba(59, 130, 246, 0.15);
+        color: #2563EB;
+    }
+    .compact-stat-icon.purple {
+        background: rgba(139, 92, 246, 0.15);
+        color: #7C3AED;
+    }
+    .compact-stat-icon.maroon {
+        background: rgba(127, 3, 3, 0.12);
+        color: var(--ref-maroon, #7F0303);
+    }
+    .compact-stat-icon.teal {
+        background: rgba(20, 184, 166, 0.15);
+        color: #0D9488;
+    }
+
+    .compact-stat-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .compact-stat-value {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: var(--ref-text, #1E293B);
+        line-height: 1.1;
+    }
+
+    .compact-stat-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--ref-muted, #64748B);
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        white-space: normal;
+        line-height: 1.2;
+        margin-top: 3px;
+    }
+
+    .compact-stat-badge {
+        font-size: 0.62rem;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 10px;
+        background: var(--ref-canvas, #F1F5F9);
+        color: var(--ref-muted, #64748B);
+        white-space: nowrap;
+        position: absolute;
+        top: 9px;
+        right: 10px;
+        line-height: 1;
+    }
+
+    /* ================= TREND CHART CARD ================= */
+    .trend-chart-card {
+        background: var(--ref-card, #FFFFFF);
+        border: 1px solid var(--ref-border, #E2E8F0);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: var(--ref-shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
+        margin-bottom: 22px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .trend-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--ref-border, #E2E8F0);
+    }
+
+    .chart-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .trend-period-badge {
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background: rgba(127, 3, 3, 0.08);
+        color: var(--ref-maroon, #7F0303);
+        border: 1px solid rgba(127, 3, 3, 0.15);
+    }
+
+    [data-theme="dark"] .trend-period-badge {
+        background: rgba(229, 115, 115, 0.15);
+        color: #ff8a80;
+        border-color: rgba(229, 115, 115, 0.25);
+    }
+
+    .trend-controls-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .trend-filter-select-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--ref-canvas, #F1F5F9);
+        border: 1px solid var(--ref-border, #E2E8F0);
+        border-radius: 20px;
+        padding: 4px 10px;
+        font-size: 0.72rem;
+        color: var(--ref-muted, #64748B);
+        transition: all 0.2s ease;
+    }
+
+    .trend-filter-select-wrap:focus-within {
+        border-color: var(--ref-maroon, #7F0303);
+        box-shadow: 0 0 0 2px rgba(127, 3, 3, 0.12);
+    }
+
+    .chart-filter-select {
+        background: transparent;
+        border: none;
+        outline: none;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--ref-text, #1E293B);
+        cursor: pointer;
+        font-family: inherit;
+        padding: 2px 4px;
+    }
+
+    .chart-filter-select option,
+    .chart-filter-select optgroup {
+        background: var(--ref-card, #FFFFFF);
+        color: var(--ref-text, #1E293B);
+    }
+
+    .chart-tabs {
+        display: flex;
+        gap: 4px;
+        background: var(--ref-canvas, #F1F5F9);
+        padding: 3px;
+        border-radius: 24px;
+        border: 1px solid var(--ref-border, #E2E8F0);
+        flex-wrap: wrap;
+    }
+
+    .chart-tab {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        background: none;
+        color: var(--ref-muted, #64748B);
+        transition: all 0.2s;
+    }
+
+    .chart-tab.active {
+        background: var(--ref-maroon, #7F0303);
+        color: #FFFFFF;
+        box-shadow: 0 2px 8px rgba(127, 3, 3, 0.3);
+    }
+    
+    /* ================= 3 SERVICES VERTICAL STACK (IN LEFT COLUMN) ================= */
+    .services-vertical-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        width: 100%;
+        margin-top: 4px;
+    }
+
+    .ref-service-card.service-card-vertical {
+        min-height: 120px !important;
+        padding: 18px 20px !important;
+        border-radius: 22px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        position: relative !important;
+        overflow: hidden !important;
+        cursor: pointer !important;
+        transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease !important;
+    }
+
+    .ref-service-card.service-card-vertical:hover {
+        transform: translateY(-3px) !important;
+    }
+
+    .service-card-vertical .service-card-top-tag {
+        margin-bottom: 6px !important;
+        position: relative;
+        z-index: 2;
+    }
+
+    .service-card-vertical .service-category-pill {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        padding: 3px 10px !important;
+        font-size: 0.68rem !important;
+        border-radius: 14px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.02em !important;
+        text-transform: uppercase !important;
+    }
+
+    .service-card-vertical .service-card-title {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        font-size: 1.18rem !important;
+        font-weight: 800 !important;
+        line-height: 1.2 !important;
+        letter-spacing: -0.015em !important;
+        margin: 0 !important;
+        position: relative;
+        z-index: 2;
+    }
+
+    .service-card-vertical .service-card-bottom-minimal {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        margin-top: 12px !important;
+        position: relative;
+        z-index: 2;
+    }
+
+    .service-card-vertical .service-card-action-text {
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        color: var(--ref-muted, #64748B) !important;
+        letter-spacing: 0.03em !important;
+        text-transform: uppercase !important;
+        transition: color 0.2s !important;
+    }
+
+    .service-card-vertical:hover .service-card-action-text {
+        color: #7F0303 !important;
+    }
+
+    [data-theme="dark"] .service-card-vertical:hover .service-card-action-text {
+        color: #E8D5A8 !important;
+    }
+
+    .service-card-vertical .service-card-arrow-btn {
+        width: 36px !important;
+        height: 36px !important;
+        border-radius: 50% !important;
+        background: #FFFFFF !important;
+        color: #1E293B !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 0.85rem !important;
+        border: 1px solid rgba(0, 0, 0, 0.06) !important;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+        transition: all 0.22s ease !important;
+        text-decoration: none !important;
+    }
+
+    .service-card-vertical:hover .service-card-arrow-btn {
+        background: var(--ref-maroon, #7F0303) !important;
+        color: #FFFFFF !important;
+        transform: translateX(3px) !important;
+        box-shadow: 0 4px 14px rgba(127, 3, 3, 0.25) !important;
+    }
+
+    [data-theme="dark"] .service-card-vertical .service-card-arrow-btn {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #FFFFFF !important;
+        border-color: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    [data-theme="dark"] .service-card-vertical:hover .service-card-arrow-btn {
+        background: #F59E0B !important;
+        color: #1E293B !important;
+    }
+
+    .service-card-vertical .service-card-giant-watermark {
+        position: absolute !important;
+        right: -25px !important;
+        bottom: -28px !important;
+        font-size: 130px !important;
+        line-height: 1 !important;
+        pointer-events: none !important;
+        user-select: none !important;
+        transition: all 0.35s ease !important;
+        z-index: 1 !important;
+        color: #64748B !important;
+        opacity: 0.08 !important;
+    }
+
+    .service-card-vertical:hover .service-card-giant-watermark {
+        transform: scale(1.08) rotate(-4deg) !important;
+        opacity: 0.13 !important;
+    }
 
-        .card-header a {
-            color: var(--maroon-light);
-            font-size: 0.75rem;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .card-header a:hover {
-            text-decoration: underline;
-        }
-
-        .request-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .request-item:last-child {
-            border-bottom: none;
-        }
-
-        .request-info h4 {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .request-info p {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-
-        .status-badge {
-            padding: 3px 12px;
-            border-radius: 50px;
-            font-size: 0.65rem;
-            font-weight: 600;
-        }
-
-        .status-badge.submitted,
-        .status-badge.pending {
-            background: rgba(255, 152, 0, 0.15);
-            color: #FF9800;
-        }
-
-        .status-badge.reviewing {
-            background: rgba(33, 150, 243, 0.15);
-            color: #2196F3;
-        }
-
-        .status-badge.approved,
-        .status-badge.qualified {
-            background: rgba(76, 175, 80, 0.15);
-            color: #4CAF50;
-        }
-
-        .status-badge.rejected {
-            background: rgba(244, 67, 54, 0.15);
-            color: #EF5350;
-        }
-
-        .status-badge.released {
-            background: rgba(0, 150, 136, 0.15);
-            color: #009688;
-        }
-
-        /* ========== SERVICES CARD ========== */
-        .services-card {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 20px 24px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-
-        .services-card h3 {
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-weight: 700;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .services-card h3 i {
-            color: var(--maroon-light);
-        }
-
-        .service-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .service-tag {
-            background: var(--badge-bg);
-            padding: 8px 16px;
-            border-radius: 50px;
-            font-size: 0.8rem;
-            color: var(--text-primary);
-            font-weight: 500;
-            border: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .service-tag.no-service {
-            background: rgba(244, 67, 54, 0.1);
-            color: #EF5350;
-            border-color: rgba(244, 67, 54, 0.2);
-        }
-
-        .no-data {
-            text-align: center;
-            padding: 20px;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        .no-data i {
-            display: block;
-            font-size: 32px;
-            margin-bottom: 8px;
-            opacity: 0.3;
-        }
-
-        /* ========== RESPONSIVE ========== */
-        @media (max-width: 1200px) {
-            .stats-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-
-        @media (max-width: 992px) {
-            .sidebar {
-                transform: translateX(-100%);
-                position: fixed;
-            }
-
-            .main-content {
-                margin-left: 0;
-                padding: 20px;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .two-columns {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .top-bar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .top-bar-actions {
-                justify-content: stretch;
-                flex-wrap: wrap;
-            }
-
-            .search-box {
-                flex: 1;
-            }
-
-            .search-box input {
-                min-width: 120px;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .action-buttons {
-                flex-direction: column;
-            }
-
-            .action-btn {
-                width: 100%;
-                justify-content: center;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .main-content {
-                padding: 16px;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .staff-avatar {
-                width: 60px;
-                height: 60px;
-                font-size: 1.5rem;
-            }
-
-            .dashboard-card {
-                padding: 16px;
-            }
-
-            .services-card {
-                padding: 16px;
-            }
-
-            .quick-section {
-                padding: 16px;
-            }
-        }
     </style>
+    <style>
+    /* Interactive Staff Calendar Enhancements (Part 2, Item 12) */
+    .btn-add-event-pill {
+        background: var(--ref-maroon);
+        color: #FFFFFF !important;
+        border: none;
+        border-radius: 50px;
+        padding: 5px 12px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        transition: all 0.16s ease;
+    }
+    .btn-add-event-pill:hover {
+        background: #991B1B;
+        transform: translateY(-1px);
+    }
+    .btn-cal-nav {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: var(--ref-canvas);
+        border: 1px solid var(--ref-border);
+        color: var(--ref-text);
+        text-decoration: none;
+        transition: all 0.15s;
+    }
+    .btn-cal-nav:hover {
+        background: var(--ref-maroon);
+        color: #FFFFFF;
+        border-color: var(--ref-maroon);
+    }
+    .cal-day-cell {
+        height: 38px !important;
+        position: relative !important;
+        cursor: pointer !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        padding-top: 4px !important;
+        border: 1px solid transparent !important;
+        transition: all 0.15s ease !important;
+    }
+    .cal-day-cell:hover {
+        border-color: var(--ref-maroon) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+    }
+    .cal-day-cell.empty-day {
+        opacity: 0.15;
+        cursor: default !important;
+        pointer-events: none;
+        background: transparent !important;
+    }
+    .cal-day-cell.today {
+        border: 2px solid #D97706 !important;
+        background: #FEF3C7 !important;
+        color: #92400E !important;
+        font-weight: 800 !important;
+    }
+    .cal-day-cell.has-events {
+        background: #FFF1F2 !important;
+        color: #991B1B !important;
+    }
+    .cal-day-cell.has-appts {
+        background: #ECFDF5 !important;
+        color: #065F46 !important;
+    }
+    .cal-day-cell.has-both {
+        background: linear-gradient(135deg, #ECFDF5 50%, #FFF1F2 50%) !important;
+        font-weight: 800 !important;
+    }
+    .cal-dots-wrap {
+        display: flex;
+        gap: 3px;
+        align-items: center;
+        justify-content: center;
+        margin-top: 2px;
+    }
+    .cal-dot-pip {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .dot-red { background: #DC2626; }
+    .dot-green { background: #059669; }
+    .dot-amber { background: #D97706; }
+    .dot-blue { background: #2563EB; }
+
+    .calendar-legend-bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 8px 12px;
+        margin-top: 10px;
+        background: var(--ref-canvas);
+        border-radius: 10px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--ref-muted);
+    }
+    .cal-leg-item { display: inline-flex; align-items: center; gap: 5px; }
+
+    /* Activity Details & Event Modal */
+    .staff-cal-modal {
+        position: fixed;
+        z-index: 2500;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(4px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+    }
+    .staff-cal-modal.active { display: flex; }
+    .cal-modal-card {
+        background: var(--ref-card);
+        border-radius: 20px;
+        width: 90%;
+        max-width: 580px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+        border: 1px solid var(--ref-border);
+        animation: calPopIn 0.18s ease-out;
+    }
+    @keyframes calPopIn { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .cal-modal-head {
+        padding: 16px 22px;
+        border-bottom: 1px solid var(--ref-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: var(--ref-card-subtle);
+    }
+    .cal-modal-head h3 { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--ref-text); display: flex; align-items: center; gap: 8px; }
+    .cal-modal-tabs {
+        display: flex;
+        border-bottom: 1px solid var(--ref-border);
+        background: var(--ref-canvas);
+    }
+    .cal-modal-tab-btn {
+        flex: 1;
+        padding: 10px 16px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        border: none;
+        background: none;
+        color: var(--ref-muted);
+        cursor: pointer;
+        transition: all 0.15s;
+        border-bottom: 2px solid transparent;
+    }
+    .cal-modal-tab-btn.active {
+        color: var(--ref-maroon);
+        border-bottom-color: var(--ref-maroon);
+        background: var(--ref-card);
+    }
+    .cal-modal-body { padding: 20px 22px; }
+    .cal-activity-group { margin-bottom: 18px; }
+    .cal-activity-group:last-child { margin-bottom: 0; }
+    .cal-group-title {
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .cal-act-card {
+        background: var(--ref-canvas);
+        border-radius: 12px;
+        padding: 10px 14px;
+        border: 1px solid var(--ref-border);
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+    }
+    .cal-act-card:last-child { margin-bottom: 0; }
+    .cal-form-group { margin-bottom: 14px; }
+    .cal-form-group label { display: block; margin-bottom: 5px; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--ref-muted); }
+    .cal-form-group input, .cal-form-group textarea, .cal-form-group select {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--ref-border);
+        border-radius: 10px;
+        font-size: 0.82rem;
+        background: var(--ref-canvas);
+        color: var(--ref-text);
+        box-sizing: border-box;
+    }
+    .cal-form-group input:focus, .cal-form-group textarea:focus { border-color: var(--ref-maroon); }
+
+    /* 3 Colored Service Cards Minimalist UI (Matches Resident Dashboard) */
+    .ref-service-card.service-card-minimal {
+        min-height: 205px;
+        padding: 26px 24px;
+        border-radius: 26px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        position: relative;
+        overflow: hidden;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+    .ref-service-card.service-card-minimal:hover {
+        transform: translateY(-4px);
+    }
+    .ref-service-card.card-yellow {
+        background: #FEF7DF;
+        border: 1px solid rgba(217, 119, 6, 0.22);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+    }
+    .ref-service-card.card-yellow:hover {
+        box-shadow: 0 8px 24px rgba(217, 119, 6, 0.12);
+        border-color: rgba(217, 119, 6, 0.35);
+    }
+    .ref-service-card.card-blue {
+        background: #E7F1FE;
+        border: 1px solid rgba(59, 130, 246, 0.22);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+    }
+    .ref-service-card.card-blue:hover {
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.12);
+        border-color: rgba(59, 130, 246, 0.35);
+    }
+    .ref-service-card.card-pink {
+        background: #FDE8E8;
+        border: 1px solid rgba(239, 68, 68, 0.22);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+    }
+    .ref-service-card.card-pink:hover {
+        box-shadow: 0 8px 24px rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.35);
+    }
+    [data-theme="dark"] .ref-service-card.card-yellow {
+        background: #252014;
+        border-color: rgba(217, 119, 6, 0.4);
+        border-top-color: #F59E0B;
+    }
+    [data-theme="dark"] .ref-service-card.card-blue {
+        background: #142230;
+        border-color: rgba(2, 132, 199, 0.4);
+        border-top-color: #38BDF8;
+    }
+    [data-theme="dark"] .ref-service-card.card-pink {
+        background: #27161b;
+        border-color: rgba(225, 29, 72, 0.4);
+        border-top-color: #FB7185;
+    }
+    .service-card-giant-watermark {
+        position: absolute;
+        right: -45px;
+        bottom: -45px;
+        font-size: 195px;
+        line-height: 1;
+        pointer-events: none;
+        user-select: none;
+        transition: all 0.35s ease;
+        z-index: 1;
+        color: #64748B !important;
+        opacity: 0.08 !important;
+    }
+    .ref-service-card:hover .service-card-giant-watermark {
+        transform: scale(1.08) rotate(-4deg);
+        opacity: 0.12 !important;
+    }
+    .service-card-top-tag {
+        position: relative;
+        z-index: 2;
+        margin-bottom: 12px;
+    }
+    .service-category-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+    .pill-yellow { background: rgba(217, 119, 6, 0.12); color: #B45309; }
+    .pill-blue { background: rgba(2, 132, 199, 0.12); color: #0369A1; }
+    .pill-pink { background: rgba(225, 29, 72, 0.12); color: #BE123C; }
+    .service-card-minimal .service-card-title {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: #1E293B;
+        margin: 0;
+        line-height: 1.22;
+        letter-spacing: -0.02em;
+        position: relative;
+        z-index: 2;
+    }
+    [data-theme="dark"] .service-card-minimal .service-card-title {
+        color: #F8FAFC;
+    }
+    .service-card-bottom-minimal {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 24px;
+        position: relative;
+        z-index: 2;
+    }
+    .service-card-action-text {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--ref-muted, #64748B);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        transition: color 0.2s;
+    }
+    .ref-service-card:hover .service-card-action-text {
+        color: #7F0303;
+    }
+    [data-theme="dark"] .ref-service-card:hover .service-card-action-text {
+        color: #E8D5A8;
+    }
+    .service-card-arrow-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #FFFFFF;
+        color: #1E293B;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.95rem;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        transition: all 0.22s ease;
+        text-decoration: none;
+    }
+    .ref-service-card:hover .service-card-arrow-btn {
+        background: var(--ref-maroon);
+        color: #FFFFFF;
+        transform: translateX(4px);
+        box-shadow: 0 6px 16px rgba(127, 3, 3, 0.25);
+    }
+    [data-theme="dark"] .service-card-arrow-btn {
+        background: rgba(255, 255, 255, 0.08);
+        color: #FFFFFF;
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+    [data-theme="dark"] .ref-service-card:hover .service-card-arrow-btn {
+        background: #F59E0B;
+        color: #1E293B;
+    }
+
+    /* Compact Action Pills (Resident Style) */
+    .compact-action-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        background: var(--ref-canvas, #F1F5F9);
+        border: 1px solid var(--ref-border, #E2E8F0);
+        border-radius: 12px;
+        text-decoration: none;
+        color: var(--ref-text, #1E293B);
+        font-size: 0.78rem;
+        font-weight: 700;
+        transition: all 0.2s ease;
+    }
+    .compact-action-pill:hover {
+        background: #FFFFFF;
+        border-color: var(--ref-maroon, #7F0303);
+        color: var(--ref-maroon, #7F0303);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+    .compact-action-pill i {
+        color: var(--ref-maroon, #7F0303);
+        font-size: 0.92rem;
+    }
+    [data-theme="dark"] .compact-action-pill {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+        color: #F8FAFC;
+    }
+    [data-theme="dark"] .compact-action-pill:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: #F59E0B;
+        color: #F59E0B;
+    }
+    [data-theme="dark"] .compact-action-pill i {
+        color: #F59E0B;
+    }
+    </style>
+    <script>
+        (function() {
+            var theme = '<?php echo $dark_mode ? 'dark' : 'light'; ?>';
+            try {
+                var stored = localStorage.getItem('theme');
+                if (stored) theme = stored;
+            } catch(e) {}
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
 </head>
-
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Staff Panel</span>
+
+    <!-- Outer Dashboard Frame (Matches Resident Portal Frame) -->
+    <div class="dashboard-container">
+
+        <!-- 1. MINIMALIST 76PX DARK DOCK SIDEBAR -->
+        <?php 
+        $active_nav = 'dashboard';
+        require_once __DIR__ . '/staff/includes/staff-sidebar.php'; 
+        ?>
+
+        <!-- 2. MAIN DASHBOARD CONTENT AREA -->
+        <main class="dashboard-main">
+
+            <!-- Unified Staff Portal Header Bar -->
+            <?php require_once __DIR__ . '/staff/includes/staff-header.php'; ?>
+
+            <!-- Subheader Bar (Back arrow, Title, Status Pills) -->
+            <div class="dash-subheader">
+                <div class="subheader-title-wrap">
+                    <a href="index.php" class="btn-back-arrow" title="Return to City Portal Home">
+                        <i class="fas fa-arrow-left"></i>
+                    </a>
+                    <h1>Staff Operations &amp; Desk</h1>
+                </div>
+
+                <div class="subheader-status-wrap">
+                    <span class="status-badge-pill verified">
+                        <i class="fas fa-shield-alt"></i> Staff Officer Active
+                    </span>
+                    <span class="status-badge-pill">
+                        <i class="fas fa-calendar-alt"></i> <?php echo date('F, Y'); ?>
+                    </span>
                 </div>
             </div>
 
-            <div class="staff-profile">
-                <div class="staff-avatar">
-                    <?php if (!$use_initials && !empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile Picture">
-                    <?php else: ?>
-                        <?php echo $initials; ?>
-                    <?php endif; ?>
-                </div>
-                <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                <p><?php echo htmlspecialchars($staff_info['position'] ?? 'Staff Member'); ?></p>
-                <span class="staff-badge"><i class="fas fa-user-check"></i> Staff</span>
-            </div>
+            <!-- Main Content 2-Column Grid (390px 1fr) -->
+            <div class="dash-content-grid">
 
-            <ul class="sidebar-menu">
-                <li><a href="staff-dashboard.php" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                </li>
-                <li class="menu-divider">Appointments</li>
-                <li><a href="staff/manage-appointments.php"><i class="fas fa-calendar-check"></i> Manage
-                        Appointments</a></li>
+                <!-- ================= LEFT COLUMN (390px) ================= -->
+                <div class="column-left">
 
-                <?php if ($has_aics_access || $has_housing_access || $has_senior_access || $has_pwd_access): ?>
-                    <li class="menu-divider">Services</li>
-                <?php endif; ?>
-
-                <?php if ($has_aics_access): ?>
-                    <li><a href="staff/manage-aics.php"><i class="fas fa-hand-holding-heart"></i> Manage AICS</a></li>
-                <?php endif; ?>
-                <?php if ($has_housing_access): ?>
-                    <li><a href="staff/manage-housing.php"><i class="fas fa-home"></i> Manage Housing</a></li>
-                <?php endif; ?>
-                <?php if ($has_senior_access): ?>
-                    <li><a href="staff/manage-senior.php"><i class="fas fa-user-graduate"></i> Senior Pension</a></li>
-                <?php endif; ?>
-                <?php if ($has_pwd_access): ?>
-                    <li><a href="staff/manage-pwd.php"><i class="fas fa-wheelchair"></i> PWD Registration</a></li>
-                <?php endif; ?>
-                <li><a href="staff/reports.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-
-                <?php if (isAdmin()): ?>
-                    <li class="menu-divider">Administration</li>
-                    <li><a href="admin/dashboard.php"><i class="fas fa-crown"></i> Admin Dashboard</a></li>
-                    <li><a href="admin/manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-                    <li><a href="admin/manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-                <?php endif; ?>
-
-                <li class="menu-divider"></li>
-            </ul>
-
-            <div class="sidebar-footer">
-                <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="page-title">
-                    <h1>Welcome back, <?php echo explode(' ', $_SESSION['full_name'])[0]; ?>! 👋</h1>
-                    <p><?php echo date('l, F d, Y'); ?> • Staff Dashboard</p>
-                </div>
-                <div class="top-bar-actions">
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
-                        <input type="text" placeholder="Search..." id="globalSearch">
-                    </div>
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="staff/reports.php" class="top-icon"><i class="fas fa-chart-bar"></i></a>
-                    <a href="logout.php" class="top-icon"><i class="fas fa-sign-out-alt"></i></a>
-                </div>
-            </div>
-
-            <!-- Stats Grid -->
-            <div class="stats-grid">
-                <?php if ($has_aics_access): ?>
-                    <div class="stat-card" onclick="window.location.href='staff/manage-aics.php?status=pending'">
-                        <div class="stat-icon aics"><i class="fas fa-hand-holding-heart"></i></div>
-                        <div class="stat-info">
-                            <h3><?php echo number_format($stats['pending_aics'] ?? 0); ?></h3>
-                            <p>Pending AICS</p>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($has_housing_access): ?>
-                    <div class="stat-card" onclick="window.location.href='staff/manage-housing.php?status=pending'">
-                        <div class="stat-icon housing"><i class="fas fa-home"></i></div>
-                        <div class="stat-info">
-                            <h3><?php echo number_format($stats['pending_housing'] ?? 0); ?></h3>
-                            <p>Pending Housing</p>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <div class="stat-card" onclick="window.location.href='admin/manage-verifications.php?status=pending'">
-                    <div class="stat-icon verification"><i class="fas fa-shield-alt"></i></div>
-                    <div class="stat-info">
-                        <h3><?php echo number_format($stats['pending_verifications'] ?? 0); ?></h3>
-                        <p>Pending Verifications</p>
-                    </div>
-                </div>
-
-                <div class="stat-card" onclick="window.location.href='staff/manage-appointments.php'">
-                    <div class="stat-icon appointment"><i class="fas fa-calendar-check"></i></div>
-                    <div class="stat-info">
-                        <h3><?php echo number_format($stats['today_appointments'] ?? 0); ?></h3>
-                        <p>Today's Appointments</p>
-                    </div>
-                </div>
-
-                <div class="stat-card" onclick="window.location.href='staff/manage-documents.php'">
-                    <div class="stat-icon document"><i class="fas fa-file-alt"></i></div>
-                    <div class="stat-info">
-                        <h3><?php echo number_format($stats['pending_documents'] ?? 0); ?></h3>
-                        <p>Pending Documents</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="quick-section">
-                <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
-                <div class="action-buttons">
-                    <?php if ($has_aics_access): ?>
-                        <a href="staff/manage-aics.php" class="action-btn"><i class="fas fa-hand-holding-heart"></i> Process
-                            AICS</a>
-                    <?php endif; ?>
-                    <?php if ($has_housing_access): ?>
-                        <a href="staff/manage-housing.php" class="action-btn"><i class="fas fa-home"></i> Review Housing</a>
-                    <?php endif; ?>
-                    <a href="staff/manage-appointments.php" class="action-btn"><i class="fas fa-calendar-check"></i>
-                        View Appointments</a>
-                    <a href="admin/manage-verifications.php" class="action-btn"><i class="fas fa-shield-alt"></i> Verify
-                        Residents</a>
-                    <a href="staff/reports.php" class="action-btn"><i class="fas fa-chart-bar"></i> Generate Reports</a>
-                </div>
-            </div>
-
-            <!-- Recent Activity -->
-            <div class="two-columns">
-                <?php if ($has_aics_access && !empty($recent_aics)): ?>
-                    <div class="dashboard-card">
-                        <div class="card-header">
-                            <h3><i class="fas fa-hand-holding-heart"></i> Recent AICS Requests</h3>
-                            <a href="staff/manage-aics.php">View all →</a>
-                        </div>
-                        <?php foreach ($recent_aics as $aics): ?>
-                            <div class="request-item">
-                                <div class="request-info">
-                                    <h4><?php echo htmlspecialchars($aics['first_name'] . ' ' . $aics['last_name']); ?></h4>
-                                    <p><?php echo date('M d, Y', strtotime($aics['submission_date'])); ?></p>
+                    <!-- Card 1A: Staff Officer Profile Card -->
+                    <section class="ref-card-profile">
+                        <div class="profile-card-top">
+                            <div class="profile-user-summary">
+                                <div class="profile-avatar-circle">
+                                    <?php if (!empty($avatar_url)): ?>
+                                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Staff Portrait">
+                                    <?php else: ?>
+                                        <span><?php echo htmlspecialchars($initials); ?></span>
+                                    <?php endif; ?>
                                 </div>
-                                <span
-                                    class="status-badge <?php echo $aics['status']; ?>"><?php echo ucfirst($aics['status']); ?></span>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($has_housing_access && !empty($recent_housing)): ?>
-                    <div class="dashboard-card">
-                        <div class="card-header">
-                            <h3><i class="fas fa-home"></i> Recent Housing Applications</h3>
-                            <a href="staff/manage-housing.php">View all →</a>
-                        </div>
-                        <?php foreach ($recent_housing as $housing): ?>
-                            <div class="request-item">
-                                <div class="request-info">
-                                    <h4><?php echo htmlspecialchars($housing['first_name'] . ' ' . $housing['last_name']); ?>
-                                    </h4>
-                                    <p><?php echo date('M d, Y', strtotime($housing['application_date'])); ?></p>
+                                <div class="profile-user-headings">
+                                    <h3><?php echo htmlspecialchars($_SESSION['full_name']); ?></h3>
+                                    <p>City Social Welfare Officer &bull; Desk Duty</p>
                                 </div>
-                                <span
-                                    class="status-badge <?php echo $housing['status']; ?>"><?php echo ucfirst($housing['status']); ?></span>
                             </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-
-                <?php if (empty($recent_aics) && empty($recent_housing)): ?>
-                    <div class="dashboard-card">
-                        <div class="no-data">
-                            <i class="fas fa-inbox"></i>
-                            <p>No recent activity to display</p>
                         </div>
-                    </div>
-                <?php endif; ?>
-            </div>
 
-            <!-- Assigned Services -->
-            <div class="services-card">
-                <h3><i class="fas fa-clipboard-list"></i> Your Assigned Services</h3>
-                <div class="service-tags">
-                    <?php if (empty($assigned_categories)): ?>
-                        <span class="service-tag no-service">
-                            <i class="fas fa-exclamation-circle"></i> No services assigned yet. Contact administrator.
-                        </span>
-                    <?php else: ?>
-                        <?php foreach ($assigned_categories as $category): ?>
-                            <span class="service-tag">
-                                <?php
-                                switch ($category['category_name']) {
-                                    case 'AICS':
-                                        echo '🏥 AICS';
-                                        break;
-                                    case 'Housing':
-                                        echo '🏠 Housing';
-                                        break;
-                                    case 'Senior Citizen':
-                                        echo '👴 Senior Citizen';
-                                        break;
-                                    case 'PWD':
-                                        echo '♿ PWD';
-                                        break;
-                                    default:
-                                        echo htmlspecialchars($category['category_name']);
-                                }
-                                ?>
+                        <!-- Officer Quick Action Circles (Copied from Resident Dashboard) -->
+                        <div class="profile-action-circles">
+                            <a href="profile.php" class="action-circle-btn" title="Profile Overview">
+                                <i class="fas fa-user"></i>
+                            </a>
+                            <a href="update-profile-info.php" class="action-circle-btn" title="Profile Completion &amp; Demographics">
+                                <i class="fas fa-user-edit"></i>
+                            </a>
+                            <a href="verify-resident.php" class="action-circle-btn" title="Residency Verification">
+                                <i class="fas fa-id-card"></i>
+                            </a>
+                        </div>
+
+                        <!-- Bottom Slots Row (Shift Status & Today's Appointments Counter) -->
+                        <div class="profile-slots-row">
+                            <div class="slot-pill">
+                                <i class="fas fa-clock"></i>
+                                <span><?php echo date('h:i A'); ?> &bull; Active Duty</span>
+                            </div>
+                            <div class="meetings-counter-badge">
+                                <span>Today's Visits</span>
+                                <span class="counter-pill-black"><?php echo $stats['today_appointments']; ?></span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Casework Stat Cards (In Left Desk Column) -->
+                    <div class="casework-stats-row">
+                        <!-- Card 1: AICS Requests -->
+                        <a href="staff/manage-aics.php" class="compact-stat-card" title="Manage AICS Assistance Requests">
+                            <div class="compact-stat-icon maroon"><i class="fas fa-hand-holding-heart"></i></div>
+                            <div class="compact-stat-body">
+                                <div class="compact-stat-value"><?php echo number_format($casework_stats['total_aics']); ?></div>
+                                <div class="compact-stat-label">AICS Requests</div>
+                            </div>
+                            <span class="compact-stat-badge"><?php echo $casework_stats['pending_aics'] > 0 ? $casework_stats['pending_aics'] . ' Pend' : 'All'; ?></span>
+                        </a>
+
+                        <!-- Card 2: Housing Applications -->
+                        <a href="staff/manage-housing.php" class="compact-stat-card" title="Manage Housing Beneficiaries & Applications">
+                            <div class="compact-stat-icon teal"><i class="fas fa-home"></i></div>
+                            <div class="compact-stat-body">
+                                <div class="compact-stat-value"><?php echo number_format($casework_stats['total_housing']); ?></div>
+                                <div class="compact-stat-label">Housing Applications</div>
+                            </div>
+                            <span class="compact-stat-badge"><?php echo $casework_stats['pending_housing'] > 0 ? $casework_stats['pending_housing'] . ' Pend' : 'All'; ?></span>
+                        </a>
+
+                        <!-- Card 3: Appointments -->
+                        <a href="staff/manage-appointments.php" class="compact-stat-card" title="Manage Intake Appointments & Queues">
+                            <div class="compact-stat-icon green"><i class="fas fa-calendar-check"></i></div>
+                            <div class="compact-stat-body">
+                                <div class="compact-stat-value"><?php echo number_format($casework_stats['total_appts']); ?></div>
+                                <div class="compact-stat-label">Appointments</div>
+                            </div>
+                            <span class="compact-stat-badge"><?php echo $casework_stats['pending_appts'] > 0 ? $casework_stats['pending_appts'] . ' Pend' : 'All'; ?></span>
+                        </a>
+
+                        <?php if (defined('FEATURE_ENABLE_PWD_SENIOR') && FEATURE_ENABLE_PWD_SENIOR): ?>
+                        <!-- Card 3: PWD Applications -->
+                        <a href="staff/manage-pwd.php" class="compact-stat-card" title="Manage PWD Registry & ID Applications">
+                            <div class="compact-stat-icon purple"><i class="fas fa-wheelchair"></i></div>
+                            <div class="compact-stat-body">
+                                <div class="compact-stat-value"><?php echo number_format($casework_stats['total_pwd']); ?></div>
+                                <div class="compact-stat-label">PWD Applications</div>
+                            </div>
+                            <span class="compact-stat-badge"><?php echo $casework_stats['pending_pwd'] > 0 ? $casework_stats['pending_pwd'] . ' Pend' : 'All'; ?></span>
+                        </a>
+
+                        <!-- Card 4: Senior Citizens -->
+                        <a href="staff/manage-senior.php" class="compact-stat-card" title="Manage OSCA Senior Citizen Applications">
+                            <div class="compact-stat-icon blue"><i class="fas fa-person-walking-with-cane"></i></div>
+                            <div class="compact-stat-body">
+                                <div class="compact-stat-value"><?php echo number_format($casework_stats['total_senior']); ?></div>
+                                <div class="compact-stat-label">Senior Citizens</div>
+                            </div>
+                            <span class="compact-stat-badge"><?php echo $casework_stats['pending_senior'] > 0 ? $casework_stats['pending_senior'] . ' Pend' : 'All'; ?></span>
+                        </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- ================= RIGHT COLUMN (1fr) ================= -->
+                <div class="column-right">
+
+                    <!-- Section Header: Active Desk Queues + Signature Cursive Title -->
+                    <div class="ongoing-section-header">
+                        <div class="ongoing-title-wrap">
+                            <span class="ongoing-badge-pill">
+                                <i class="fas fa-layer-group"></i> Active Desk Queues
                             </span>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                        </div>
+                        <div class="dash-cursive-branding-inline">
+                            <span class="dash-cursive-title">One Palayan - Kalinga Hub</span>
+                        </div>
+                        <div class="ongoing-right-wrap">
+                            <span class="ongoing-subtitle">&bull; <?php echo date('Y'); ?> City Case Management</span>
+                        </div>
+                    </div>
+
+                    <!-- 3 Colored Service Desk Cards Grid (In Right Column) -->
+                    <div class="colored-cards-grid">
+
+                        <!-- Card 1: Pastel Yellow (Housing Programs Desk) -->
+                        <article class="ref-service-card card-yellow service-card-minimal" onclick="window.location.href='staff/manage-housing.php'">
+                            <i class="fas fa-home service-card-giant-watermark"></i>
+                            <div class="service-card-top-tag">
+                                <span class="service-category-pill pill-yellow"><i class="fas fa-building"></i> Shelter &amp; Lots</span>
+                            </div>
+                            <div class="service-card-center">
+                                <h4 class="service-card-title">Housing Programs</h4>
+                            </div>
+                            <div class="service-card-bottom-minimal">
+                                <span class="service-card-action-text">Manage Housing</span>
+                                <a href="staff/manage-housing.php" class="service-card-arrow-btn" aria-label="Go to Housing Programs">
+                                    <i class="fas fa-arrow-right"></i>
+                                </a>
+                            </div>
+                        </article>
+
+                        <!-- Card 2: Pastel Soft Blue (AICS Assistance Desk) -->
+                        <article class="ref-service-card card-blue service-card-minimal" onclick="window.location.href='staff/manage-aics.php'">
+                            <i class="fas fa-hand-holding-heart service-card-giant-watermark"></i>
+                            <div class="service-card-top-tag">
+                                <span class="service-category-pill pill-blue"><i class="fas fa-hand-holding-usd"></i> Financial &amp; Crisis</span>
+                            </div>
+                            <div class="service-card-center">
+                                <h4 class="service-card-title">AICS Assistance</h4>
+                            </div>
+                            <div class="service-card-bottom-minimal">
+                                <span class="service-card-action-text">Process AICS</span>
+                                <a href="staff/manage-aics.php" class="service-card-arrow-btn" aria-label="Go to AICS Assistance">
+                                    <i class="fas fa-arrow-right"></i>
+                                </a>
+                            </div>
+                        </article>
+
+                        <!-- Card 3: Pastel Soft Pink (Appointment Desk & Queue) -->
+                        <article class="ref-service-card card-pink service-card-minimal" onclick="window.location.href='staff/manage-appointments.php'">
+                            <i class="fas fa-calendar-check service-card-giant-watermark"></i>
+                            <div class="service-card-top-tag">
+                                <span class="service-category-pill pill-pink"><i class="fas fa-clock"></i> Consultations &amp; Queue</span>
+                            </div>
+                            <div class="service-card-center">
+                                <h4 class="service-card-title">Appointment Desk</h4>
+                            </div>
+                            <div class="service-card-bottom-minimal">
+                                <span class="service-card-action-text">Manage Appointments</span>
+                                <a href="staff/manage-appointments.php" class="service-card-arrow-btn" aria-label="Go to Appointment Desk">
+                                    <i class="fas fa-arrow-right"></i>
+                                </a>
+                            </div>
+                        </article>
+
+                    </div>
+
+                    <!-- Services & Applications Trend Chart Card -->
+                    <div class="trend-chart-card">
+                        <div class="trend-card-header">
+                            <div class="chart-title-wrap">
+                                <h3 style="margin: 0; font-size: 0.98rem; font-weight: 700; color: var(--ref-text); display: flex; align-items: center;">
+                                    <i class="fas fa-chart-line" style="color: var(--ref-maroon); margin-right: 8px;"></i>
+                                    Services &amp; Applications Trend
+                                </h3>
+                                <span class="trend-period-badge" id="trendPeriodBadge">Last 6 Months</span>
+                            </div>
+                            <div class="trend-controls-wrap">
+                                <!-- Time Range Filter -->
+                                <div class="trend-filter-select-wrap">
+                                    <i class="fas fa-calendar-alt"></i>
+                                    <select id="trendTimeFilter" class="chart-filter-select" onchange="changeTrendPeriod(this.value)">
+                                        <optgroup label="Trend Range">
+                                            <option value="6m" selected>Last 6 Months</option>
+                                            <option value="3m">Last 3 Months</option>
+                                            <option value="12m">Last 12 Months</option>
+                                            <option value="ytd">Year <?php echo date('Y'); ?> (All)</option>
+                                        </optgroup>
+                                        <optgroup label="Filter by Month (Daily)">
+                                            <?php foreach ($available_filter_months as $ym => $label): ?>
+                                                <option value="<?php echo $ym; ?>"><?php echo $label; ?></option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                <!-- Service Tabs -->
+                                <div class="chart-tabs">
+                                    <button type="button" class="chart-tab active" data-mode="all" onclick="toggleTrendChart('all')">All</button>
+                                    <button type="button" class="chart-tab" data-mode="aics" onclick="toggleTrendChart('aics')">AICS</button>
+                                    <button type="button" class="chart-tab" data-mode="appts" onclick="toggleTrendChart('appts')">Appts</button>
+                                    <button type="button" class="chart-tab" data-mode="housing" onclick="toggleTrendChart('housing')">Housing</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="canvas-wrap" style="position: relative; height: 260px; width: 100%;">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </main>
+
+    </div>
+
+    <!-- Staff Interactive Activity & Event Scheduling Modal (Part 2, Item 12) -->
+    <div id="staffCalendarModal" class="staff-cal-modal">
+        <div class="cal-modal-card">
+            <div class="cal-modal-head">
+                <h3 id="calModalTitle"><i class="fas fa-calendar-day" style="color:var(--ref-maroon);"></i> Activity Details</h3>
+                <button type="button" onclick="closeStaffCalModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:var(--ref-muted);">&times;</button>
+            </div>
+            
+            <div class="cal-modal-tabs">
+                <button type="button" class="cal-modal-tab-btn active" id="tabBtnActivities" onclick="switchCalTab('activities')">
+                    <i class="fas fa-list-check"></i> Activities &amp; Case Queue (<span id="calActivityCount">0</span>)
+                </button>
+                <button type="button" class="cal-modal-tab-btn" id="tabBtnAddEvent" onclick="switchCalTab('add_event')">
+                    <i class="fas fa-calendar-plus"></i> + Schedule Service Event
+                </button>
+            </div>
+
+            <div class="cal-modal-body">
+                <!-- Tab Pane 1: Activity Queue Details -->
+                <div id="calPaneActivities">
+                    <div id="calActivitiesContent">
+                        <!-- Dynamically filled by JS -->
+                    </div>
+                </div>
+
+                <!-- Tab Pane 2: Add Service Event Form -->
+                <div id="calPaneAddEvent" style="display:none;">
+                    <form method="POST" id="calEventForm">
+                        <input type="hidden" name="save_calendar_event" value="1">
+                        
+                        <div class="cal-form-group">
+                            <label><i class="fas fa-heading"></i> Event / Announcement Title *</label>
+                            <input type="text" name="event_title" id="form_event_title" placeholder="e.g. Senior Citizen Social Pension Payout" required>
+                        </div>
+
+                        <div class="cal-form-group">
+                            <label><i class="fas fa-calendar-day"></i> Event Schedule Date *</label>
+                            <input type="date" name="event_date" id="form_event_date" required>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <div class="cal-form-group">
+                                <label><i class="fas fa-clock"></i> Start Time</label>
+                                <input type="time" name="start_time" value="08:00">
+                            </div>
+                            <div class="cal-form-group">
+                                <label><i class="fas fa-clock"></i> End Time</label>
+                                <input type="time" name="end_time" value="17:00">
+                            </div>
+                        </div>
+
+                        <div class="cal-form-group">
+                            <label><i class="fas fa-align-left"></i> Description &amp; Venue Instructions</label>
+                            <textarea name="event_description" rows="3" placeholder="Provide instructions, requirements, or claiming details for residents..."></textarea>
+                        </div>
+
+                        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+                            <button type="button" onclick="closeStaffCalModal()" class="btn-cal-nav" style="width:auto; padding:0 14px; border-radius:50px;">
+                                Cancel
+                            </button>
+                            <button type="submit" class="btn-add-event-pill" style="padding:8px 18px; font-size:0.8rem;">
+                                <i class="fas fa-save"></i> Publish Service Event
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // ========== THEME TOGGLE ==========
-        const themeToggle = document.getElementById('themeToggle');
-        const html = document.documentElement;
+    let currentCalCell = null;
 
-        const currentTheme = localStorage.getItem('theme') ||
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    function openStaffCalModal(dateStr, cellData) {
+        currentCalCell = cellData || {};
+        const modal = document.getElementById('staffCalendarModal');
+        const titleEl = document.getElementById('calModalTitle');
+        const contentEl = document.getElementById('calActivitiesContent');
+        const countEl = document.getElementById('calActivityCount');
+        
+        // Format date string for title
+        const dObj = new Date(dateStr + 'T00:00:00');
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        titleEl.innerHTML = '<i class="fas fa-calendar-day" style="color:var(--ref-maroon);"></i> ' + dObj.toLocaleDateString('en-US', options);
+        document.getElementById('form_event_date').value = dateStr;
 
-        function setTheme(theme) {
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = themeToggle.querySelector('i');
-            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
+        // Build activities list
+        let html = '';
+        let totalCount = 0;
+
+        // 1. Service Events
+        if (cellData && cellData.events && cellData.events.length > 0) {
+            totalCount += cellData.events.length;
+            html += '<div class="cal-activity-group">';
+            html += '<div class="cal-group-title" style="color:#DC2626;"><i class="fas fa-bullhorn"></i> Service Notices &amp; Events (' + cellData.events.length + ')</div>';
+            cellData.events.forEach(ev => {
+                html += '<div class="cal-act-card" style="border-left:4px solid #DC2626;">';
+                html += '  <div>';
+                html += '    <strong style="color:var(--ref-text); font-size:0.84rem;">' + escapeHtml(ev.title) + '</strong>';
+                if (ev.description) {
+                    html += '    <div style="font-size:0.74rem; color:var(--ref-muted); margin-top:2px;">' + escapeHtml(ev.description) + '</div>';
+                }
+                html += '  </div>';
+                html += '  <div style="font-size:0.72rem; color:var(--ref-muted); font-weight:700; white-space:nowrap;">';
+                html += '    <i class="fas fa-clock"></i> ' + (ev.start_time || 'All Day');
+                html += '  </div>';
+                html += '</div>';
+            });
+            html += '</div>';
         }
 
-        setTheme(currentTheme);
+        // 2. Appointments
+        if (cellData && cellData.appointments && cellData.appointments.length > 0) {
+            totalCount += cellData.appointments.length;
+            html += '<div class="cal-activity-group">';
+            html += '<div class="cal-group-title" style="color:#059669;"><i class="fas fa-calendar-check"></i> Citizen Appointments (' + cellData.appointments.length + ')</div>';
+            cellData.appointments.forEach(ap => {
+                const name = (ap.first_name || '') + ' ' + (ap.last_name || '');
+                const srv = ap.service_name || 'CSWDO Welfare Desk';
+                const ref = ap.reference_number || ('#' + ap.appointment_id);
+                html += '<div class="cal-act-card" style="border-left:4px solid #059669;">';
+                html += '  <div>';
+                html += '    <strong style="color:var(--ref-text); font-size:0.84rem;">' + escapeHtml(name) + '</strong>';
+                html += '    <div style="font-size:0.74rem; color:var(--ref-muted); margin-top:2px;">' + escapeHtml(srv) + ' &bull; <code>' + escapeHtml(ref) + '</code></div>';
+                html += '  </div>';
+                html += '  <div style="text-align:right;">';
+                html += '    <span style="font-size:0.74rem; font-weight:700; color:var(--ref-text);"><i class="fas fa-clock"></i> ' + escapeHtml(ap.appointment_time || '') + '</span>';
+                html += '    <div style="font-size:0.68rem; text-transform:uppercase; font-weight:700; color:#059669; margin-top:2px;">' + escapeHtml(ap.status || '') + '</div>';
+                html += '  </div>';
+                html += '</div>';
+            });
+            html += '<div style="margin-top:8px; text-align:right;">';
+            html += '  <a href="staff/manage-appointments.php?date=' + encodeURIComponent(dateStr) + '" style="font-size:0.74rem; font-weight:700; color:var(--ref-maroon); text-decoration:none;"><i class="fas fa-external-link-alt"></i> Open in Appointment Desk &rarr;</a>';
+            html += '</div>';
+            html += '</div>';
+        }
 
-        themeToggle.addEventListener('click', () => {
-            const current = html.getAttribute('data-theme');
-            setTheme(current === 'dark' ? 'light' : 'dark');
-        });
+        // 3. AICS Requests
+        if (cellData && cellData.aics && cellData.aics.length > 0) {
+            totalCount += cellData.aics.length;
+            html += '<div class="cal-activity-group">';
+            html += '<div class="cal-group-title" style="color:#D97706;"><i class="fas fa-hand-holding-heart"></i> AICS Requests Filed (' + cellData.aics.length + ')</div>';
+            cellData.aics.forEach(ac => {
+                const name = (ac.first_name || '') + ' ' + (ac.last_name || '');
+                html += '<div class="cal-act-card" style="border-left:4px solid #D97706;">';
+                html += '  <div>';
+                html += '    <strong style="font-size:0.82rem;">' + escapeHtml(name) + '</strong>';
+                html += '    <div style="font-size:0.72rem; color:var(--ref-muted);">' + escapeHtml(ac.category_name || 'Financial Relief') + '</div>';
+                html += '  </div>';
+                html += '  <span style="font-size:0.72rem; font-weight:700; color:#D97706;">' + escapeHtml(ac.status || '') + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
 
-        // ========== SEARCH ==========
-        document.getElementById('globalSearch')?.addEventListener('keyup', function (e) {
-            if (e.key === 'Enter') {
-                const query = this.value.trim();
-                if (query) {
-                    window.location.href = 'staff/manage-residents.php?search=' + encodeURIComponent(query);
+        // 4. Housing Applications
+        if (cellData && cellData.housing && cellData.housing.length > 0) {
+            totalCount += cellData.housing.length;
+            html += '<div class="cal-activity-group">';
+            html += '<div class="cal-group-title" style="color:#2563EB;"><i class="fas fa-home"></i> Housing Applications (' + cellData.housing.length + ')</div>';
+            cellData.housing.forEach(hs => {
+                const name = (hs.first_name || '') + ' ' + (hs.last_name || '');
+                html += '<div class="cal-act-card" style="border-left:4px solid #2563EB;">';
+                html += '  <div>';
+                html += '    <strong style="font-size:0.82rem;">' + escapeHtml(name) + '</strong>';
+                html += '    <div style="font-size:0.72rem; color:var(--ref-muted);">' + escapeHtml(hs.program_name || 'Housing Program') + '</div>';
+                html += '  </div>';
+                html += '  <span style="font-size:0.72rem; font-weight:700; color:#2563EB;">' + escapeHtml(hs.status || '') + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        if (totalCount === 0) {
+            html = '<div style="text-align:center; padding:32px 16px; color:var(--ref-muted);">';
+            html += '  <i class="fas fa-calendar-check" style="font-size:36px; opacity:0.35; margin-bottom:10px; display:block;"></i>';
+            html += '  <p style="margin:0 0 6px 0; font-weight:700; color:var(--ref-text);">No Scheduled Activities on this Date</p>';
+            html += '  <small>You can schedule a service notice, payout event, or outreach session using the tab above.</small>';
+            html += '</div>';
+        }
+
+        contentEl.innerHTML = html;
+        countEl.textContent = totalCount;
+        switchCalTab('activities');
+        modal.classList.add('active');
+    }
+
+    function openAddEventModal(dateStr) {
+        openStaffCalModal(dateStr, currentCalCell || {});
+        switchCalTab('add_event');
+    }
+
+    function switchCalTab(tabName) {
+        const btnAct = document.getElementById('tabBtnActivities');
+        const btnAdd = document.getElementById('tabBtnAddEvent');
+        const paneAct = document.getElementById('calPaneActivities');
+        const paneAdd = document.getElementById('calPaneAddEvent');
+
+        if (tabName === 'add_event') {
+            btnAct.classList.remove('active');
+            btnAdd.classList.add('active');
+            paneAct.style.display = 'none';
+            paneAdd.style.display = 'block';
+            document.getElementById('form_event_title').focus();
+        } else {
+            btnAdd.classList.remove('active');
+            btnAct.classList.add('active');
+            paneAdd.style.display = 'none';
+            paneAct.style.display = 'block';
+        }
+    }
+
+    function closeStaffCalModal() {
+        const modal = document.getElementById('staffCalendarModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    window.addEventListener('click', function(e) {
+        const modal = document.getElementById('staffCalendarModal');
+        if (e.target === modal) {
+            closeStaffCalModal();
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeStaffCalModal();
+    });
+
+    // ================= SERVICES & APPLICATIONS TREND CHART =================
+    let trendChartInstance = null;
+
+    function getTrendThemeColors() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        return {
+            text: isDark ? '#8AA0A9' : '#71818B',
+            grid: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+            tooltipBg: isDark ? '#152227' : '#ffffff',
+            tooltipColor: isDark ? '#E5EFF2' : '#192126',
+            border: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
+        };
+    }
+
+    const trendStore = <?php echo $js_trend_store; ?>;
+    const defaultTrendPeriod = <?php echo $js_default_period; ?>;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const fullMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    let currentTrendMode = 'all';
+
+    function getTrendPeriodData(period) {
+        let labels = [];
+        let badgeText = '';
+        let aics = [], appts = [], housing = [], pwd = [], senior = [];
+
+        if (period === '3m' || period === '6m' || period === '12m') {
+            const count = period === '3m' ? 3 : (period === '6m' ? 6 : 12);
+            badgeText = `Last ${count} Months`;
+            const now = new Date();
+            const ymList = [];
+            for (let i = count - 1; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const y = d.getFullYear();
+                const m = d.getMonth() + 1;
+                const ym = `${y}-${String(m).padStart(2, '0')}`;
+                ymList.push({ ym, label: monthNames[m - 1] + (count > 6 ? ` '${String(y).slice(-2)}` : '') });
+            }
+            labels = ymList.map(item => item.label);
+            ymList.forEach(item => {
+                const mData = (trendStore.monthly && trendStore.monthly[item.ym]) || { aics: 0, appts: 0, housing: 0, pwd: 0, senior: 0 };
+                aics.push(mData.aics || 0);
+                appts.push(mData.appts || 0);
+                housing.push(mData.housing || 0);
+                pwd.push(mData.pwd || 0);
+                senior.push(mData.senior || 0);
+            });
+        } else if (period === 'ytd') {
+            const currentYear = new Date().getFullYear();
+            badgeText = `Year ${currentYear} (All Months)`;
+            for (let m = 1; m <= 12; m++) {
+                labels.push(monthNames[m - 1]);
+                const ym = `${currentYear}-${String(m).padStart(2, '0')}`;
+                const mData = (trendStore.monthly && trendStore.monthly[ym]) || { aics: 0, appts: 0, housing: 0, pwd: 0, senior: 0 };
+                aics.push(mData.aics || 0);
+                appts.push(mData.appts || 0);
+                housing.push(mData.housing || 0);
+                pwd.push(mData.pwd || 0);
+                senior.push(mData.senior || 0);
+            }
+        } else if (/^\d{4}-\d{2}$/.test(period)) {
+            const [yearStr, monthStr] = period.split('-');
+            const year = parseInt(yearStr, 10);
+            const month = parseInt(monthStr, 10);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            badgeText = `${fullMonthNames[month - 1]} ${year} (Daily)`;
+
+            const monthDaily = (trendStore.daily && trendStore.daily[period]) || {};
+            for (let day = 1; day <= daysInMonth; day++) {
+                labels.push(monthNames[month - 1] + ' ' + day);
+                const dayData = monthDaily[day] || { aics: 0, appts: 0, housing: 0, pwd: 0, senior: 0 };
+                aics.push(dayData.aics || 0);
+                appts.push(dayData.appts || 0);
+                housing.push(dayData.housing || 0);
+                pwd.push(dayData.pwd || 0);
+                senior.push(dayData.senior || 0);
+            }
+        }
+
+        return {
+            labels,
+            badgeText,
+            datasets: { aics, appts, housing, pwd, senior }
+        };
+    }
+
+    function initTrendChart() {
+        const canvas = document.getElementById('trendChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const colors = getTrendThemeColors();
+        const initialPeriod = document.getElementById('trendTimeFilter')?.value || defaultTrendPeriod || '6m';
+        const pData = getTrendPeriodData(initialPeriod);
+
+        const badge = document.getElementById('trendPeriodBadge');
+        if (badge) badge.textContent = pData.badgeText;
+
+        if (trendChartInstance) {
+            trendChartInstance.destroy();
+        }
+
+        trendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: pData.labels,
+                datasets: [
+                    {
+                        label: 'AICS Applications',
+                        data: pData.datasets.aics,
+                        borderColor: '#7F0303',
+                        backgroundColor: 'rgba(127, 3, 3, 0.08)',
+                        borderWidth: 2.5,
+                        tension: 0.35,
+                        fill: true,
+                        pointBackgroundColor: '#7F0303',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5,
+                        pointRadius: 3.5,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: 'Appointments',
+                        data: pData.datasets.appts,
+                        borderColor: '#F59E0B',
+                        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                        borderWidth: 2.5,
+                        tension: 0.35,
+                        fill: true,
+                        pointBackgroundColor: '#F59E0B',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5,
+                        pointRadius: 3.5,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: 'Housing Applications',
+                        data: pData.datasets.housing,
+                        borderColor: '#00897B',
+                        backgroundColor: 'rgba(0, 137, 123, 0.08)',
+                        borderWidth: 2.5,
+                        tension: 0.35,
+                        fill: true,
+                        pointBackgroundColor: '#00897B',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5,
+                        pointRadius: 3.5,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: colors.text,
+                            font: { family: "'Plus Jakarta Sans', sans-serif", weight: 600, size: 11 },
+                            usePointStyle: true,
+                            boxWidth: 8,
+                            padding: 14
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: colors.tooltipBg,
+                        titleColor: colors.tooltipColor,
+                        bodyColor: colors.tooltipColor,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                        padding: 10,
+                        boxPadding: 4,
+                        usePointStyle: true
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: colors.text,
+                            font: { size: 11 },
+                            maxRotation: 45
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: colors.grid },
+                        ticks: {
+                            color: colors.text,
+                            precision: 0,
+                            font: { size: 11 }
+                        }
+                    }
                 }
             }
         });
-    </script>
-</body>
 
+        applyTrendVisibility();
+    }
+
+    function changeTrendPeriod(period) {
+        if (!trendChartInstance) return;
+        const pData = getTrendPeriodData(period);
+
+        const badge = document.getElementById('trendPeriodBadge');
+        if (badge) badge.textContent = pData.badgeText;
+
+        trendChartInstance.data.labels = pData.labels;
+        trendChartInstance.data.datasets[0].data = pData.datasets.aics;
+        trendChartInstance.data.datasets[1].data = pData.datasets.appts;
+        trendChartInstance.data.datasets[2].data = pData.datasets.housing;
+
+        applyTrendVisibility();
+        trendChartInstance.update();
+    }
+
+    function toggleTrendChart(mode) {
+        currentTrendMode = mode;
+        const tabs = document.querySelectorAll('.trend-controls-wrap .chart-tab');
+        tabs.forEach(tab => {
+            if (tab.getAttribute('data-mode') === mode) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+
+        applyTrendVisibility();
+        if (trendChartInstance) {
+            trendChartInstance.update();
+        }
+    }
+
+    function applyTrendVisibility() {
+        if (!trendChartInstance) return;
+        const serviceMap = {
+            'all':     [true, true, true],
+            'aics':    [true, false, false],
+            'appts':   [false, true, false],
+            'housing': [false, false, true]
+        };
+        const visibility = serviceMap[currentTrendMode] || serviceMap['all'];
+        visibility.forEach((visible, idx) => {
+            if (trendChartInstance.data.datasets[idx]) {
+                trendChartInstance.setDatasetVisibility(idx, visible);
+            }
+        });
+    }
+
+    function updateTrendTheme() {
+        if (!trendChartInstance) return;
+        const colors = getTrendThemeColors();
+        if (trendChartInstance.options.scales) {
+            if (trendChartInstance.options.scales.x) {
+                trendChartInstance.options.scales.x.ticks.color = colors.text;
+            }
+            if (trendChartInstance.options.scales.y) {
+                trendChartInstance.options.scales.y.ticks.color = colors.text;
+                trendChartInstance.options.scales.y.grid.color = colors.grid;
+            }
+        }
+        if (trendChartInstance.options.plugins) {
+            if (trendChartInstance.options.plugins.legend) {
+                trendChartInstance.options.plugins.legend.labels.color = colors.text;
+            }
+            if (trendChartInstance.options.plugins.tooltip) {
+                trendChartInstance.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+                trendChartInstance.options.plugins.tooltip.titleColor = colors.tooltipColor;
+                trendChartInstance.options.plugins.tooltip.bodyColor = colors.tooltipColor;
+                trendChartInstance.options.plugins.tooltip.borderColor = colors.border;
+            }
+        }
+        trendChartInstance.update();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initTrendChart();
+        
+        // Theme switch observer
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                if (m.attributeName === 'data-theme') {
+                    updateTrendTheme();
+                }
+            });
+        });
+        observer.observe(document.documentElement, { attributes: true });
+    });
+
+    </script>
+
+    <?php require_once __DIR__ . '/staff/includes/staff-footer.php'; ?>
+
+</body>
 </html>
+

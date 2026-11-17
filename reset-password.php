@@ -203,7 +203,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             <div class="auth-brand">
                 <div class="brand-logo">
                     <div class="logo-circle">
-                        <img src="images/logo.png" alt="Logo">
+                        <img src="images/logo.png?v=<?php echo @filemtime(__DIR__ . '/images/logo.png') ?: time(); ?>" alt="Logo">
                     </div>
                     <h2>One Palayan-Kalinga Hub</h2>
                     <p>CSWDO Palayan City</p>

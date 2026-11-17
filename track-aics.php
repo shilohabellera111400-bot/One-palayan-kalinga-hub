@@ -1,6 +1,13 @@
 <?php
 require_once __DIR__ . '/config/database.php';
 
+// If resident is already authenticated, keep them in native resident track page (Part 1, Item 6)
+if (isLoggedIn() && !isStaff() && !isAdmin()) {
+    $t_param = !empty($_GET['tracking']) ? ('?search=' . urlencode(trim($_GET['tracking']))) : '';
+    header('Location: track-request.php' . $t_param);
+    exit();
+}
+
 // Check for dark mode preference from cookie
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
 
@@ -163,7 +170,7 @@ if ($request) {
             --alabaster: #E3E7EB;
             
             /* Stronger contrast: darker page bg vs pure-white cards */
-            --bg-primary: #E8ECF2;
+            --bg-primary: #E4EFE7;
             --bg-card: #FFFFFF;
             --text-primary: #263238;
             --text-secondary: #3A4A5A;
@@ -188,7 +195,7 @@ if ($request) {
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: #0C1417;
             --bg-card: #1a2332;
             --text-primary: #E8EDF5;
             --text-secondary: #B0C4DE;

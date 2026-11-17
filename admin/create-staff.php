@@ -43,10 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $db->beginTransaction();
             
             try {
-                // Create user account
+                // Create user account with Staff role (Role ID 2)
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                $query = "INSERT INTO users (username, password, email, first_name, last_name, contact_number, role, status) 
-                          VALUES (:username, :password, :email, :first_name, :last_name, :contact_number, 'staff', 'active')";
+                $query = "INSERT INTO users (username, password, email, first_name, last_name, contact_number, role, role_id, status) 
+                          VALUES (:username, :password, :email, :first_name, :last_name, :contact_number, 'staff', 2, 'active')";
                 $stmt = $db->prepare($query);
                 $stmt->bindParam(':username', $username);
                 $stmt->bindParam(':password', $hashed_password);
@@ -85,37 +85,28 @@ $staff_query = "SELECT u.*, s.position, s.employee_id, s.hire_date
                 WHERE u.role IN ('staff', 'admin')
                 ORDER BY u.created_at DESC";
 $staff_stmt = $db->query($staff_query);
+
+$page_title = 'Create Staff Account';
+$active_sidebar = 'staff';
+require_once __DIR__ . '/includes/admin-head.php';
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Create Staff Account - Admin</title>
-    <link rel="stylesheet" href="../css/style.css">
-    <link rel="stylesheet" href="../css/dashboard.css">
-</head>
-<body>
-    <?php include '../includes/navbar.php'; ?>
-    
-    <div class="dashboard-container">
-        <div class="sidebar">
-            <div class="user-profile">
-                <h3><?php echo htmlspecialchars($_SESSION['full_name']); ?></h3>
-                <p>Administrator</p>
-            </div>
-            <ul class="sidebar-menu">
-                <li><a href="../staff-dashboard.php">Dashboard</a></li>
-                <li><a href="create-staff.php" class="active">Manage Staff</a></li>
-                <li><a href="system-settings.php">System Settings</a></li>
-                <li><a href="audit-logs.php">Audit Logs</a></li>
-                <li><a href="../logout.php">Logout</a></li>            
-                <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-            </ul>
-        </div>
-        
-        <div class="main-content">
-            <h1>Create Staff Account</h1>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-user-plus" style="color: var(--ref-maroon);"></i> Create Staff Account</h1>
+        <p>Provision new employee credentials and municipal department assignments</p>
+    </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <a href="manage-staff.php" class="portal-hdr-pill" style="background: var(--ref-card); border: 1px solid var(--ref-border); font-size: 0.78rem;">
+            <i class="fas fa-users"></i>
+            <span>Staff Directory</span>
+        </a>
+    </div>
+</div>
             
             <?php if($error): ?>
                 <div class="alert alert-error"><?php echo $error; ?></div>
@@ -229,9 +220,7 @@ $staff_stmt = $db->query($staff_query);
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-            </div>
         </div>
-    </div>
     
     <style>
     .form-container {
@@ -339,9 +328,6 @@ $staff_stmt = $db->query($staff_query);
         return confirm('Create this staff account?');
     }
     </script>
-    
-    <script src="../js/main.js"></script>
-</body>
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>
 
 

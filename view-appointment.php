@@ -1,5 +1,6 @@
 <?php
 require_once 'config/database.php';
+require_once __DIR__ . '/includes/appointment-helper.php';
 
 if (!isLoggedIn()) {
     redirect('login.php');
@@ -35,11 +36,30 @@ if ($stmt->rowCount() == 0) {
 $appointment = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // Get document attachments for this appointment
-$doc_query = "SELECT * FROM documents WHERE appointment_id = :id ORDER BY upload_date DESC";
+$doc_query = "
+    SELECT document_id, document_name, file_path, file_size, uploaded_at as upload_date 
+    FROM appointment_documents 
+    WHERE appointment_id = :id 
+    UNION ALL 
+    SELECT document_id, document_type as document_name, document_path as file_path, NULL as file_size, upload_date 
+    FROM documents 
+    WHERE appointment_id = :id2 
+    ORDER BY upload_date DESC
+";
 $doc_stmt = $db->prepare($doc_query);
-$doc_stmt->bindParam(':id', $appointment_id);
-$doc_stmt->execute();
+$doc_stmt->execute([':id' => $appointment_id, ':id2' => $appointment_id]);
 $documents = $doc_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get status audit trail
+$hist_stmt = $db->prepare("
+    SELECT h.*, h.new_status as status, h.remarks as notes, CONCAT(u.first_name, ' ', u.last_name) as action_by_name 
+    FROM appointment_status_history h 
+    LEFT JOIN users u ON h.performed_by = u.user_id 
+    WHERE h.appointment_id = :id 
+    ORDER BY h.created_at ASC
+");
+$hist_stmt->execute([':id' => $appointment_id]);
+$status_history = $hist_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get status color and icon
 function getAppointmentStatusInfo($status) {
@@ -84,7 +104,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>View Appointment - One Palayan-Kalinga Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="css/portal-layout.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
         /* ========== BREADCRUMB ========== */
         .breadcrumb {
@@ -399,65 +419,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar Overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-calendar-check"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Integrated Service Portal</span>
-                </div>
-                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="user-info-sidebar">
-                <div class="user-avatar-sidebar">
-                    <?php if (!empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
-                    <?php else: ?>
-                        <?php echo $initials; ?>
-                    <?php endif; ?>
-                </div>
-                <div>
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <span>Resident</span>
-                </div>
-            </div>
-            
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-            
-            <div class="sidebar-footer">
-                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
-            </div>
-        </div>
+        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="top-bar-left">
-                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
-                        <i class="fas fa-bars"></i>
-                        <span>Menu</span>
-                    </button>
-                    <div class="page-title">
-                        <h1><i class="fas fa-calendar-check" style="color: var(--maroon-light); margin-right: 10px;"></i> Appointment Details</h1>
-                        <p>View your appointment information</p>
-                    </div>
-                </div>
-                <div class="top-bar-actions">
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
-                        <input type="text" placeholder="Search..." id="globalSearch">
-                    </div>
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Page Title Subheader -->
+            <div class="portal-page-subheader" style="margin-bottom: 24px;">
+                <div class="page-title">
+                    <h1 style="font-size: 1.4rem; font-weight: 800; color: var(--ref-text, #191D1E); margin: 0; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-calendar-check" style="color: #7F0303;"></i> Appointment Details
+                    </h1>
+                    <p style="font-size: 0.85rem; color: var(--ref-muted, #71818B); margin: 4px 0 0;">View your appointment information</p>
                 </div>
             </div>
         
@@ -472,19 +450,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         
         <?php $statusInfo = getAppointmentStatusInfo($appointment['status']); ?>
         
+        <?php 
+            $refNum = !empty($appointment['reference_number']) ? $appointment['reference_number'] : ('PAL-SOC-' . date('Y', strtotime($appointment['created_at'])) . '-' . str_pad($appointment_id, 6, '0', STR_PAD_LEFT));
+        ?>
+        
         <!-- Appointment Header -->
         <div class="appointment-header">
             <div class="appointment-title">
                 <h1><?php echo htmlspecialchars($appointment['service_name']); ?></h1>
                 <div class="ref-number">
-                    <strong>Reference Number:</strong> #<?php echo str_pad($appointment_id, 6, '0', STR_PAD_LEFT); ?>
+                    <strong>Reference Number:</strong> <span style="font-family: 'Courier Prime', monospace; font-size: 1.15rem; font-weight: 700; color: var(--maroon);"><?php echo htmlspecialchars($refNum); ?></span>
                 </div>
             </div>
-            <div>
-                <span class="status-badge-large" style="background: <?php echo $statusInfo['bg']; ?>; color: <?php echo $statusInfo['color']; ?>; border: 1px solid <?php echo $statusInfo['color']; ?>">
-                    <i class="fas <?php echo $statusInfo['icon']; ?>"></i>
-                    <?php echo $statusInfo['text']; ?>
-                </span>
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <?php echo getAppointmentBadge($appointment['status']); ?>
+                <a href="appointment-slip.php?ref=<?php echo urlencode($refNum); ?>" target="_blank" class="btn btn-primary" style="background: var(--maroon); color: #fff; text-decoration: none; padding: 9px 20px; border-radius: 50px; font-weight: 700; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-print"></i> Digital Appointment Slip
+                </a>
             </div>
         </div>
         
@@ -593,17 +575,31 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <div class="documents-list">
                     <?php foreach($documents as $doc): ?>
                     <div class="document-item">
+                        <?php 
+                            $filePath = $doc['file_path'] ?? ($doc['document_path'] ?? '');
+                            $docName = $doc['document_name'] ?? ($doc['document_type'] ?? 'Document');
+                            $ext = strtolower(pathinfo($filePath ?: $docName, PATHINFO_EXTENSION));
+                            $iconClass = $ext === 'pdf' ? 'pdf' : (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']) ? 'image' : 'alt');
+                            if (!empty($filePath)) {
+                                if (strpos($filePath, 'http') === 0 || strpos($filePath, '/') === 0) {
+                                    $docUrl = $filePath;
+                                } elseif (strpos($filePath, 'uploads/') === 0) {
+                                    $docUrl = $filePath;
+                                } else {
+                                    $docUrl = 'uploads/' . $filePath;
+                                }
+                            } else {
+                                $docUrl = '#';
+                            }
+                        ?>
                         <div class="document-name">
-                            <i class="fas fa-file-<?php 
-                                $ext = pathinfo($doc['document_path'] ?? $doc['file_name'] ?? '', PATHINFO_EXTENSION);
-                                echo $ext == 'pdf' ? 'pdf' : ($ext == 'jpg' || $ext == 'jpeg' || $ext == 'png' ? 'image' : 'alt');
-                            ?>"></i>
-                            <?php echo htmlspecialchars($doc['document_type'] ?? $doc['document_name'] ?? 'Document'); ?>
+                            <i class="fas fa-file-<?php echo $iconClass; ?>"></i>
+                            <?php echo htmlspecialchars($docName); ?>
                             <span style="font-size: 0.65rem; color: var(--text-muted);">
                                 <?php echo date('M d, Y', strtotime($doc['upload_date'] ?? 'now')); ?>
                             </span>
                         </div>
-                        <a href="uploads/<?php echo $doc['document_path'] ?? $doc['file_path']; ?>" class="btn-download" target="_blank">
+                        <a href="<?php echo htmlspecialchars($docUrl); ?>" class="btn-download" target="_blank">
                             <i class="fas fa-eye"></i> View
                         </a>
                     </div>
@@ -631,6 +627,50 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </div>
         <?php endif; ?>
+        
+        <!-- Status History & Audit Trail Timeline -->
+        <div class="info-card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <i class="fas fa-history" style="color: var(--maroon);"></i>
+                <h3>Appointment Status History & Activity Trail</h3>
+                <span style="margin-left: auto; font-size: 0.72rem; color: var(--text-muted); background: var(--badge-bg); padding: 2px 12px; border-radius: 50px;">
+                    <?php echo count($status_history); ?> update(s)
+                </span>
+            </div>
+            <?php if(!empty($status_history)): ?>
+                <div style="display: flex; flex-direction: column; gap: 12px; padding: 10px 0;">
+                    <?php foreach($status_history as $idx => $hist): ?>
+                    <div style="display: flex; gap: 14px; align-items: flex-start;">
+                        <div style="width: 28px; height: 28px; border-radius: 50%; background: #F3F4F6; color: var(--maroon); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; border: 1.5px solid var(--border-color);">
+                            <?php echo $idx + 1; ?>
+                        </div>
+                        <div style="flex: 1; background: var(--bg-subtle); padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 6px;">
+                                <div><?php echo getAppointmentBadge($hist['status']); ?></div>
+                                <span style="font-size: 0.72rem; color: var(--text-muted);">
+                                    <i class="fas fa-clock"></i> <?php echo date('M d, Y h:i A', strtotime($hist['created_at'])); ?>
+                                </span>
+                            </div>
+                            <?php if(!empty($hist['notes'])): ?>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+                                <?php echo htmlspecialchars($hist['notes']); ?>
+                            </div>
+                            <?php endif; ?>
+                            <?php if(!empty($hist['action_by_name'])): ?>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
+                                Action by: <strong><?php echo htmlspecialchars($hist['action_by_name']); ?></strong>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="empty-state" style="padding: 20px;">
+                    <p style="margin: 0; font-size: 0.82rem; color: var(--text-muted);">No status updates recorded yet.</p>
+                </div>
+            <?php endif; ?>
+        </div>
         
         <!-- Action Buttons -->
         <div class="action-buttons">
@@ -700,6 +740,12 @@ if (themeToggle) {
 
 // ========== TOAST NOTIFICATION ==========
 function showToast(message, type = 'success') {
+    if (window.showProcessToast) {
+        window.showProcessToast(message, type === 'error', type === 'error' ? 'Notice / Error' : 'Process Completed');
+        return;
+    }
+
+    document.querySelectorAll('.toast-message').forEach(t => t.remove());
     const toast = document.createElement('div');
     toast.className = `toast-message toast-${type}`;
     toast.innerHTML = `
@@ -771,5 +817,8 @@ document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
     }
 });
 </script>
+
+<!-- Search Modal (Req 7) -->
+<?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

@@ -49,7 +49,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_event'])) {
     }
 }
 
-// Handle deleting calendar event
+// Handle editing calendar event
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_event'])) {
+    csrf_verify();
+
+    $event_id = intval($_POST['event_id'] ?? 0);
+    $title = sanitize($_POST['title'] ?? '');
+    $description = sanitize($_POST['description'] ?? '');
+    $event_date = sanitize($_POST['event_date'] ?? '');
+    $start_time = sanitize($_POST['start_time'] ?? null);
+    $end_time = sanitize($_POST['end_time'] ?? null);
+
+    if ($event_id > 0 && !empty($title) && !empty($event_date)) {
+        $query = "UPDATE calendar_events SET title = :title, description = :description, event_date = :event_date, start_time = :start_time, end_time = :end_time WHERE event_id = :id";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(':title', $title);
+        $stmt->bindParam(':description', $description);
+        $stmt->bindParam(':event_date', $event_date);
+        $stmt->bindParam(':start_time', $start_time);
+        $stmt->bindParam(':end_time', $end_time);
+        $stmt->bindParam(':id', $event_id);
+
+        if ($stmt->execute()) {
+            $success = "Matagumpay na na-update ang kaganapan sa kalendaryo!";
+
+            // Add audit log
+            $log_query = "INSERT INTO audit_logs (user_id, action, table_affected, new_values) VALUES (:user_id, 'edit_event', 'calendar_events', :details)";
+            $log_stmt = $db->prepare($log_query);
+            $log_details = "Updated event ID $event_id: $title on $event_date";
+            $log_stmt->bindParam(':user_id', $_SESSION['user_id']);
+            $log_stmt->bindParam(':details', $log_details);
+            $log_stmt->execute();
+        } else {
+            $error = "May naganap na error sa pag-update ng kaganapan.";
+        }
+    } else {
+        $error = "Punan ang lahat ng kinakailangang field.";
+    }
+}
 if (isset($_GET['delete'])) {
     $event_id = intval($_GET['delete']);
 
@@ -100,6 +137,19 @@ foreach ($events as $event) {
     $event_map[$event['event_date']][] = $event;
 }
 
+// Fetch blackout dates for this month
+$blackout_dates = [];
+try {
+    $bo_stmt = $db->prepare("SELECT * FROM blackout_dates WHERE blackout_date BETWEEN :start_date AND :end_date ORDER BY blackout_date ASC");
+    $bo_stmt->execute([':start_date' => $start_date, ':end_date' => $end_date]);
+    $blackout_dates = $bo_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
+$blackout_map = [];
+foreach ($blackout_dates as $bo) {
+    $blackout_map[$bo['blackout_date']] = $bo;
+}
+
 // Calendar Calculation
 $first_day_of_month = mktime(0, 0, 0, $month, 1, $year);
 $number_days = date('t', $first_day_of_month);
@@ -134,19 +184,11 @@ $initials = substr($initials, 0, 2);
 
 // Check if dark mode is enabled
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'Calendar Manager';
+$active_sidebar = 'calendar';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Calendar - Admin Panel</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
+<style>
         /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
             --tan: #D8BA98;
@@ -160,7 +202,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --gold: #C9A86C;
             --gold-light: #E8D5A8;
 
-            --bg-primary: #F8F9FC;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -193,7 +235,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: var(--ref-canvas, #0C1417);
             --bg-secondary: #111827;
             --bg-card: #1a2332;
             --bg-sidebar: #0f1629;
@@ -319,192 +361,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         .delay-3 {
             animation-delay: 0.3s;
-        }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.4s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .sidebar::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-        }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--gold);
-            font-size: 1.3rem;
-        }
-
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-
-        .logo-text span {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
-
-        .sidebar-menu li {
-            margin-bottom: 2px;
-        }
-
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.82rem;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-        }
-
-        .sidebar-menu li a i {
-            width: 20px;
-            font-size: 0.95rem;
-            color: rgba(255, 255, 255, 0.4);
-            transition: color 0.3s ease;
-        }
-
-        .sidebar-menu li a:hover {
-            background: var(--bg-sidebar-hover);
-            color: var(--text-sidebar-active);
-            transform: translateX(4px);
-        }
-
-        .sidebar-menu li a:hover i {
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-
-        .sidebar-menu li a.active i {
-            color: var(--text-sidebar-active);
-        }
-
-        .sidebar-menu li a.active::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 3px;
-            height: 24px;
-            background: var(--gold);
-            border-radius: 0 4px 4px 0;
-        }
-
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 10px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255, 255, 255, 0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.04);
-        }
-
-        .sidebar-footer .avatar {
-            width: 40px;
-            height: 40px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-        }
-
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .sidebar-footer .user-details p {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.65rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.4s ease;
         }
 
         /* ========== TOP BAR ========== */
@@ -633,8 +489,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         /* ========== CALENDAR GRID ========== */
         .calendar-grid {
             display: grid;
-            grid-template-columns: 2fr 1.2fr;
-            gap: 28px;
+            grid-template-columns: minmax(0, 1.32fr) minmax(330px, 0.88fr);
+            gap: 20px;
+            align-items: start;
+        }
+
+        .calendar-grid > .card,
+        .calendar-grid > .right-panel {
+            min-width: 0;
         }
 
         /* ========== CARD STYLES ========== */
@@ -695,13 +557,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 24px;
+            padding: 12px 18px;
             background: var(--badge-bg);
             border-bottom: 1px solid var(--border-color);
         }
 
         .calendar-nav h3 {
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: 700;
             color: var(--text-primary);
         }
@@ -710,8 +572,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 50%;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -733,10 +595,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         .calendar-grid-header .day-header {
-            padding: 10px;
+            padding: 8px 4px;
             text-align: center;
             font-weight: 700;
-            font-size: 0.7rem;
+            font-size: 0.66rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-muted);
@@ -747,15 +609,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .calendar-grid-body {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            grid-auto-rows: minmax(80px, auto);
+            grid-auto-rows: minmax(64px, auto);
         }
 
         .calendar-grid-body .cell {
             border-right: 1px solid var(--border-color);
             border-bottom: 1px solid var(--border-color);
-            padding: 6px 8px;
+            padding: 4px 5px;
             background: var(--bg-card);
-            min-height: 80px;
+            min-height: 64px;
+            overflow: hidden;
+            box-sizing: border-box;
             transition: background 0.2s ease;
         }
 
@@ -774,9 +638,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         .calendar-grid-body .cell .date-num {
             font-weight: 700;
-            font-size: 0.8rem;
+            font-size: 0.72rem;
             color: var(--text-secondary);
-            margin-bottom: 4px;
+            margin-bottom: 3px;
+            line-height: 1;
         }
 
         .calendar-grid-body .cell.today .date-num {
@@ -787,11 +652,13 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             display: flex;
             flex-direction: column;
             gap: 2px;
+            overflow: hidden;
         }
 
         .calendar-grid-body .cell .event-dot {
-            font-size: 0.6rem;
-            padding: 2px 6px;
+            font-size: 0.58rem;
+            line-height: 1.25;
+            padding: 2px 5px;
             border-radius: 4px;
             color: white;
             font-weight: 600;
@@ -801,11 +668,24 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             text-overflow: ellipsis;
             display: block;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            max-width: 100%;
+            box-sizing: border-box;
+            transition: transform 0.15s ease, filter 0.15s ease;
         }
 
         .calendar-grid-body .cell .event-dot:hover {
-            transform: scale(1.02);
+            transform: translateY(-1px);
+            filter: brightness(1.1);
+        }
+
+        .calendar-grid-body .cell .event-more-tag {
+            font-size: 0.54rem;
+            color: var(--text-muted);
+            font-weight: 700;
+            padding: 1px 3px;
+            line-height: 1;
+            display: inline-block;
+            cursor: pointer;
         }
 
         /* ========== FORM ========== */
@@ -1077,70 +957,25 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             }
         }
     </style>
-</head>
-
-<body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-calendar-alt"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="announcements.php"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-                <li><a href="calendar.php" class="active"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
-                <li class="menu-divider">User Management</li>
-                <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-                <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-                <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-                <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-                <li class="menu-divider">System</li>
-                <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-                <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-                <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-                <li class="menu-divider"></li>
-                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
-
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <div class="avatar">
-                        <?php echo $initials; ?>
-                    </div>
-                    <div class="user-details">
-                        <h4>
-                            <?php echo htmlspecialchars($_SESSION['full_name']); ?>
-                        </h4>
-                        <p>Administrator</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="page-title">
-                    <h1><i class="fas fa-calendar-alt"></i> Manage Calendar</h1>
-                    <p>Add holidays, distributions, and events for residents</p>
-                </div>
-                <div class="top-bar-actions">
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="../calendar.php" class="top-icon" target="_blank" title="View Resident Calendar">
-                        <i class="fas fa-external-link-alt"></i>
-                    </a>
-                </div>
-            </div>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-calendar-alt" style="color: var(--ref-maroon);"></i> Calendar Manager</h1>
+        <p>Manage events, holiday schedules, and resident distributions</p>
+    </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <a href="manage-blackout.php" class="portal-hdr-pill" style="background: var(--ref-card); border: 1px solid var(--ref-border); font-size: 0.78rem;">
+            <i class="fas fa-ban"></i>
+            <span>Manage Blackout Dates</span>
+        </a>
+    </div>
+</div>
 
             <!-- Alerts -->
             <?php if ($error): ?>
@@ -1215,10 +1050,38 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                                 echo '<div class="date-num">' . $day . '</div>';
 
                                 echo '<div class="events">';
+                                $day_items = [];
+                                if (isset($blackout_map[$current_date])) {
+                                    $bo = $blackout_map[$current_date];
+                                    $day_items[] = [
+                                        'type' => 'blackout',
+                                        'title' => $bo['reason'] ?: 'Walang Pasok',
+                                        'icon' => '⛔',
+                                        'full' => 'Blackout Date / Walang Pasok: ' . ($bo['reason'] ?: 'Office Closed')
+                                    ];
+                                }
                                 if (isset($event_map[$current_date])) {
                                     foreach ($event_map[$current_date] as $e) {
-                                        echo '<span class="event-dot" title="' . htmlspecialchars($e['title']) . '">' . htmlspecialchars($e['title']) . '</span>';
+                                        $day_items[] = [
+                                            'type' => 'event',
+                                            'title' => $e['title'],
+                                            'icon' => '📅',
+                                            'full' => 'Event: ' . $e['title']
+                                        ];
                                     }
+                                }
+                                $visible_items = array_slice($day_items, 0, 2);
+                                $overflow_events = count($day_items) - count($visible_items);
+                                foreach ($visible_items as $it) {
+                                    $short_t = $it['title'];
+                                    if (mb_strlen($short_t) > 13) {
+                                        $short_t = mb_substr($short_t, 0, 12) . '…';
+                                    }
+                                    $style = ($it['type'] === 'blackout') ? ' style="background:#334155; color:#F8FAFC; border:1px solid #64748B;"' : '';
+                                    echo '<span class="event-dot"' . $style . ' title="' . htmlspecialchars($it['full']) . '">' . $it['icon'] . ' ' . htmlspecialchars($short_t) . '</span>';
+                                }
+                                if ($overflow_events > 0) {
+                                    echo '<span class="event-more-tag" title="' . $overflow_events . ' more item(s)">+' . $overflow_events . ' more</span>';
                                 }
                                 echo '</div>';
 
@@ -1288,20 +1151,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     <div class="card animate-fade-up delay-3">
                         <div class="card-header">
                             <i class="fas fa-list"></i>
-                            <h3>This Month's Events</h3>
+                            <h3>This Month's Events & Schedules</h3>
                             <span
                                 style="margin-left: auto; font-size: 0.7rem; color: var(--text-muted); background: var(--badge-bg); padding: 2px 12px; border-radius: 20px;">
-                                <?php echo count($events); ?> total
+                                <?php echo count($events) + count($blackout_dates); ?> total
                             </span>
                         </div>
 
-                        <?php if (empty($events)): ?>
+                        <?php if (empty($events) && empty($blackout_dates)): ?>
                             <div class="empty-state">
                                 <i class="fas fa-calendar-times"></i>
-                                <p>No events scheduled this month.</p>
+                                <p>No events or blackout dates scheduled this month.</p>
                             </div>
                         <?php else: ?>
                             <div class="event-list">
+                                <?php foreach ($blackout_dates as $bo): ?>
+                                    <div class="event-item" style="border-left: 3px solid #64748B;">
+                                        <div class="event-info">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                <span style="background: #334155; color: #F8FAFC; padding: 2px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 700;">⛔ Walang Pasok / Blackout</span>
+                                                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;"><i class="far fa-calendar-alt"></i> <?php echo date('M d, Y', strtotime($bo['blackout_date'])); ?></span>
+                                            </div>
+                                            <h4><?php echo htmlspecialchars($bo['reason'] ?: 'CSWDO Holiday / Non-Working Day'); ?></h4>
+                                            <span style="font-size: 0.75rem; color: var(--text-muted);"><i class="fas fa-ban"></i> Sarado ang tanggapan para sa bookings</span>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
                                 <?php foreach ($events as $e): ?>
                                     <div class="event-item">
                                         <div class="event-info">
@@ -1327,57 +1202,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                             </div>
                         <?php endif; ?>
                     </div>
-                </div>
-            </div>
         </div>
     </div>
 
     <script>
-        // ========== THEME TOGGLE ==========
-        const themeToggle = document.getElementById('themeToggle');
-        const html = document.documentElement;
-
-        const currentTheme = localStorage.getItem('theme') ||
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-        function setTheme(theme) {
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = themeToggle.querySelector('i');
-            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-        }
-
-        setTheme(currentTheme);
-
-        themeToggle.addEventListener('click', function () {
-            const current = html.getAttribute('data-theme');
-            const newTheme = current === 'dark' ? 'light' : 'dark';
-            setTheme(newTheme);
-
-            // Haptic feedback
-            this.style.transform = 'scale(0.85)';
-            setTimeout(() => {
-                this.style.transform = '';
-            }, 200);
-        });
-
-        // ========== MOBILE SIDEBAR TOGGLE ==========
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('active');
-        }
-
-        // Close sidebar on outside click (mobile)
-        document.addEventListener('click', function (e) {
-            const sidebar = document.getElementById('sidebar');
-            if (window.innerWidth <= 992) {
-                if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !e.target.closest('.main-content')) {
-                    sidebar.classList.remove('active');
-                }
-            }
-        });
-
         // ========== AUTO DISMISS ALERTS ==========
         document.addEventListener('DOMContentLoaded', function () {
             const alerts = document.querySelectorAll('.alert');
@@ -1406,22 +1234,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     titleInput.scrollIntoView({ behavior: 'smooth' });
                 }
             }
-            // Escape to close sidebar on mobile
-            if (e.key === 'Escape') {
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar.classList.contains('active')) {
-                    sidebar.classList.remove('active');
-                }
-            }
         });
-
-        // ========== CONSOLE WELCOME ==========
-        console.log('📅 One Palayan-Kalinga Hub - Calendar Manager');
-        console.log('💡 Keyboard shortcuts: Ctrl+E (New Event), ESC (Close Menu)');
-        console.log('🌓 Toggle dark/light mode using the sun/moon button!');
     </script>
-</body>
-
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>
 
 

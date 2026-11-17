@@ -17,19 +17,20 @@ $db->exec("DELETE FROM users WHERE username IN ('teststaff', 'testadmin')");
 
 // Create test staff account
 $staff_password = password_hash('staff123', PASSWORD_DEFAULT);
-$query = "INSERT INTO users (username, password, email, first_name, last_name, role, status) 
-          VALUES (:username, :pass, :email, :first, :last, :role, 'active')";
+$query = "INSERT INTO users (username, password, email, first_name, last_name, role, role_id, status) 
+          VALUES (:username, :pass, :email, :first, :last, :role, :role_id, 'active')";
 
 $stmt = $db->prepare($query);
 
-// Create staff account
+// Create staff account (Role ID 2)
 $stmt->execute([
     ':username' => 'teststaff',
     ':pass' => $staff_password,
     ':email' => 'teststaff@palayan.gov.ph',
     ':first' => 'Test',
     ':last' => 'Staff',
-    ':role' => 'staff'
+    ':role' => 'staff',
+    ':role_id' => 2
 ]);
 $staff_id = $db->lastInsertId();
 
@@ -39,7 +40,7 @@ $staff_query = "INSERT INTO staff (user_id, position, employee_id, hire_date)
 $staff_stmt = $db->prepare($staff_query);
 $staff_stmt->execute([':user_id' => $staff_id]);
 
-// Create admin account
+// Create admin account (Role ID 1)
 $admin_password = password_hash('admin123', PASSWORD_DEFAULT);
 $stmt->execute([
     ':username' => 'testadmin',
@@ -47,7 +48,8 @@ $stmt->execute([
     ':email' => 'testadmin@palayan.gov.ph',
     ':first' => 'Test',
     ':last' => 'Admin',
-    ':role' => 'admin'
+    ':role' => 'admin',
+    ':role_id' => 1
 ]);
 $admin_id = $db->lastInsertId();
 
@@ -88,5 +90,5 @@ foreach ($test_users as $test_user) {
     echo "</div>";
 }
 
-echo "<p><a href='staff-login.php' style='display: inline-block; padding: 10px 20px; background: #003366; color: white; text-decoration: none; border-radius: 5px;'>Go to Staff Login</a></p>";
+echo "<p><a href='login.php' style='display: inline-block; padding: 10px 20px; background: #003366; color: white; text-decoration: none; border-radius: 5px;'>Go to Unified Login</a></p>";
 ?>

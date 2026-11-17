@@ -99,21 +99,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>Book Appointment - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
-    
     <div class="dashboard-container">
-        <div class="sidebar">
-            <div class="user-profile">
-                <h3><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></h3>
-                <p>Resident</p>
-            </div>
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-        </div>
+        <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
         
         <div class="main-content">
-            <h1>Book an Appointment</h1>
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <div class="portal-page-subheader">
+                <div class="portal-page-subheader-title">
+                    <h2>Book an Appointment</h2>
+                    <p>Schedule your in-person visit with Palayan City government offices</p>
+                </div>
+                <div class="portal-page-subheader-actions">
+                    <a href="appointments.php" class="portal-btn-sm portal-btn-outline"><i class="fas fa-calendar-alt"></i> Appointment Desk</a>
+                    <a href="my-appointments.php" class="portal-btn-sm portal-btn-primary"><i class="fas fa-calendar-check"></i> My Appointments</a>
+                </div>
+            </div>
             
             <?php if($error): ?>
                 <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
@@ -189,11 +193,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </div>
     
     <script>
-    // Check available slots when date changes
-    document.getElementById('appointment_date').addEventListener('change', function() {
+    // Load blackout dates and disable them in the date picker
+    const dateInput = document.getElementById('appointment_date');
+    let blackoutDates = [];
+
+    fetch('get-blackout-dates.php')
+        .then(r => r.json())
+        .then(data => {
+            blackoutDates = (data.blackout_dates || []).map(d => d.date);
+            const blackoutMap = {};
+            (data.blackout_dates || []).forEach(d => { blackoutMap[d.date] = d.reason; });
+            window._blackoutMap = blackoutMap;
+        });
+
+    dateInput.addEventListener('change', function () {
         const date = this.value;
+
+        // Client-side blackout check
+        if (blackoutDates.includes(date)) {
+            document.getElementById('slots-container').innerHTML =
+                `<div class="blackout-notice"><i class="fas fa-ban"></i> <strong>Hindi available ang petsang ito:</strong> ${window._blackoutMap[date] || 'Holiday / Non-working day'}. Mangyaring pumili ng ibang petsa.</div>`;
+            return;
+        }
+
         const slotsContainer = document.getElementById('slots-container');
-        
         if (!date) {
             slotsContainer.innerHTML = '<p class="hint">Please select a date first</p>';
             return;
@@ -206,6 +229,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             .then(response => response.json())
             .then(data => {
                 slotsContainer.innerHTML = '';
+
+                // Handle blackout from server too
+                if (data.is_blackout) {
+                    slotsContainer.innerHTML = `<div class="blackout-notice"><i class="fas fa-ban"></i> <strong>Hindi available:</strong> ${data.reason}. Mangyaring pumili ng ibang petsa.</div>`;
+                    return;
+                }
                 
                 if (data.slots && data.slots.length > 0) {
                     data.slots.forEach(slot => {
@@ -215,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <div class="slot-time">${slot.time}</div>
                             <div class="slot-status">
                                 ${slot.available ? 
-                                    '<span class="available-badge">✓ Available (' + slot.remaining + ' slots)</span>' : 
+                                    `<span class="available-badge">✓ Available (${slot.remaining}/${slot.max} slots)</span>` : 
                                     '<span class="booked-badge">✗ Fully Booked</span>'}
                             </div>
                         `;
@@ -248,12 +277,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     // Trigger change on page load if date is already selected
     document.addEventListener('DOMContentLoaded', function() {
-        const dateInput = document.getElementById('appointment_date');
         if (dateInput.value) {
             dateInput.dispatchEvent(new Event('change'));
         }
     });
     </script>
+
     
     <style>
     .booking-form {
@@ -359,6 +388,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         margin: 10px 0;
     }
     
+    .blackout-notice {
+        background: #fff3e0;
+        color: #e65100;
+        border: 1px solid #ffcc80;
+        border-radius: 8px;
+        padding: 16px 20px;
+        font-size: 0.92rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        grid-column: 1 / -1;
+    }
+    .blackout-notice i { font-size: 1.2rem; }
+
+    
     .alert {
         padding: 15px;
         border-radius: 5px;
@@ -390,5 +434,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </style>
     
     <script src="js/main.js"></script>
+    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

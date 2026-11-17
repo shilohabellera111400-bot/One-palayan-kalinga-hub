@@ -13,16 +13,15 @@ if (isStaff() || isAdmin()) {
 $database = new Database();
 $db = $database->getConnection();
 
-// Check if user is verified
+// Check user verification status (informational, do not block notifications)
 $check_verified = "SELECT verification_status FROM users WHERE user_id = :user_id";
 $verify_stmt = $db->prepare($check_verified);
 $verify_stmt->bindParam(':user_id', $_SESSION['user_id']);
 $verify_stmt->execute();
 $user_verify = $verify_stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$user_verify || $user_verify['verification_status'] != 'verified') {
-    redirect('verify-resident.php');
-}
+$raw_status = strtolower(trim((string)($user_verify['verification_status'] ?? '')));
+$is_verified = ($raw_status === 'verified');
+$verification_status = $raw_status ?: 'unverified';
 
 // Mark all as read
 if (isset($_GET['mark_read'])) {
@@ -95,347 +94,645 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>Notifications - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/portal-layout.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
-        /* ========== STATS GRID ========== */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
+        /* ========== NOTIFICATIONS TOOLBAR (ALIGNED STATS & ACTIONS) ========== */
+        .notifications-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             gap: 16px;
             margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .stats-grid {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 0;
+            flex-wrap: wrap;
         }
         .stat-card {
-            background: var(--card-bg);
-            padding: 16px 20px;
-            border-radius: var(--radius-element);
-            text-align: center;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border-color);
-            transition: all 0.3s;
+            background: var(--card-bg, #FFFFFF);
+            padding: 9px 18px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            border: 1.5px solid var(--border-color, rgba(0,0,0,0.08));
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            min-width: 120px;
+            flex: 0 1 auto;
+            cursor: pointer;
+            user-select: none;
+            color: inherit;
+            font-family: inherit;
         }
         .stat-card:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            border-color: rgba(127, 3, 3, 0.3);
+        }
+        .stat-card.active {
+            border-color: #7F0303;
+            background: var(--card-bg, #FFFFFF);
+            box-shadow: 0 4px 14px rgba(127, 3, 3, 0.12);
+            outline: 2px solid rgba(127, 3, 3, 0.15);
+        }
+        .stat-card .stat-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            margin-bottom: 0;
+            flex-shrink: 0;
+            background: rgba(127, 3, 3, 0.08);
+            color: #7F0303;
+            transition: transform 0.2s ease;
+        }
+        .stat-card:hover .stat-icon {
+            transform: scale(1.06);
+        }
+        .stat-card.stat-unread .stat-icon {
+            background: rgba(2, 132, 199, 0.1);
+            color: #0284C7;
+        }
+        .stat-card.stat-read .stat-icon {
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+        }
+        .stat-card-text {
+            display: flex;
+            flex-direction: column;
         }
         .stat-card .stat-number {
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: 800;
             color: var(--text-primary);
+            line-height: 1.1;
         }
         .stat-card .stat-label {
             color: var(--text-muted);
-            font-size: 0.7rem;
-            font-weight: 500;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             margin-top: 2px;
         }
-        .stat-card .stat-icon {
-            font-size: 1.2rem;
-            color: var(--maroon-light);
-            margin-bottom: 4px;
+
+        /* ========== TOOLBAR ACTIONS (ALIGNED TO STATS) ========== */
+        .toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-left: auto;
+        }
+        .btn-mark-all-read {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 18px;
+            background: var(--card-bg, #FFFFFF);
+            border: 1.5px solid rgba(127, 3, 3, 0.25);
+            color: #7F0303;
+            border-radius: 50px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 2px 6px rgba(127, 3, 3, 0.06);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            white-space: nowrap;
+        }
+        .btn-mark-all-read:hover {
+            background: #7F0303;
+            color: #ffffff;
+            border-color: #7F0303;
+            box-shadow: 0 6px 18px rgba(127, 3, 3, 0.22);
+            transform: translateY(-2px);
+        }
+        .btn-mark-all-read .unread-count-chip {
+            background: #7F0303;
+            color: #ffffff;
+            padding: 2px 7px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            line-height: 1.2;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .btn-mark-all-read:hover .unread-count-chip {
+            background: #ffffff;
+            color: #7F0303;
+        }
+        .all-caught-up-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #059669;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 700;
         }
 
-        /* ========== NOTIFICATIONS LIST ========== */
+        /* ========== NOTIFICATIONS LIST & CARDS ========== */
         .notifications-list {
             display: flex;
             flex-direction: column;
             gap: 14px;
         }
         .notification-card {
-            background: var(--card-bg);
-            border-radius: var(--radius-element);
+            background: var(--card-bg, #FFFFFF);
+            border-radius: 16px;
             padding: 18px 22px;
             display: flex;
-            gap: 16px;
+            gap: 18px;
             align-items: flex-start;
-            box-shadow: var(--shadow-sm);
-            border-left: 4px solid var(--maroon);
-            border: 1px solid var(--border-color);
-            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.08));
+            border-left: 4px solid transparent;
+            transition: all 0.25s ease;
+            position: relative;
         }
         .notification-card:hover {
             transform: translateX(4px);
-            box-shadow: var(--shadow-hover);
+            box-shadow: 0 8px 22px rgba(0,0,0,0.06);
+            border-color: var(--border-color, rgba(0,0,0,0.15));
         }
         .notification-card.unread {
-            background: rgba(33, 150, 243, 0.04);
-            border-left-color: var(--color-info);
+            background: linear-gradient(to right, rgba(127, 3, 3, 0.015), var(--card-bg, #FFFFFF) 20%);
+            border-left: 4px solid #7F0303;
+            box-shadow: 0 3px 12px rgba(127, 3, 3, 0.05);
         }
-        .notification-icon {
-            font-size: 1.8rem;
-            min-width: 50px;
-            text-align: center;
+        .notif-badge-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
             flex-shrink: 0;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
         }
-        .notification-content {
+        .notif-body {
             flex: 1;
             min-width: 0;
         }
-        .notification-content .title-row {
+        .notif-header-line {
             display: flex;
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
-            margin-bottom: 4px;
-        }
-        .notification-content .title-row h3 {
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-weight: 700;
-            margin: 0;
-        }
-        .notification-content .title-row .new-badge {
-            background: var(--maroon);
-            color: white;
-            padding: 1px 10px;
-            border-radius: 50px;
-            font-size: 0.6rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .notification-content p {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            line-height: 1.5;
             margin-bottom: 6px;
         }
-        .notification-content .meta {
+        .notif-title {
+            color: var(--text-primary);
+            font-size: 0.98rem;
+            font-weight: 700;
+            margin: 0;
+            line-height: 1.35;
+        }
+        .badge-unread {
+            background: #7F0303;
+            color: #ffffff;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            text-transform: uppercase;
+        }
+        .dot-unread {
+            width: 5px;
+            height: 5px;
+            background: #ffffff;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .notif-text {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.55;
+            margin: 0 0 10px 0;
+            word-break: break-word;
+        }
+        .notif-footer-meta {
             display: flex;
             align-items: center;
             gap: 12px;
             flex-wrap: wrap;
+            font-size: 0.75rem;
         }
-        .notification-content .meta small {
+        .notif-time {
             color: var(--text-muted);
-            font-size: 0.7rem;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
         }
-        .notification-content .meta .type-badge {
-            background: var(--badge-bg);
+        .notif-category-pill {
             padding: 2px 10px;
-            border-radius: 50px;
-            font-size: 0.6rem;
-            font-weight: 600;
-            color: var(--text-muted);
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border: 1px solid currentColor;
+        }
+        .notif-action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #7F0303;
+            text-decoration: none;
+            padding: 3px 10px;
+            background: rgba(127, 3, 3, 0.06);
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .notif-action-link:hover {
+            background: #7F0303;
+            color: #ffffff;
+        }
+        .notif-actions {
+            margin-left: 6px;
+            align-self: flex-start;
         }
         .delete-btn {
             color: var(--text-muted);
             text-decoration: none;
-            padding: 8px;
+            width: 32px;
+            height: 32px;
             border-radius: 8px;
-            transition: all 0.3s;
-            flex-shrink: 0;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: transparent;
             border: none;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
         }
         .delete-btn:hover {
-            color: var(--color-danger);
-            background: rgba(244, 67, 54, 0.08);
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
         }
 
         /* ========== EMPTY STATE ========== */
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            border: 1px solid var(--border-color);
+            padding: 56px 20px;
+            background: var(--card-bg, #FFFFFF);
+            border-radius: 18px;
+            border: 1px dashed var(--border-color);
         }
         .empty-state i {
-            font-size: 3.5rem;
+            font-size: 3rem;
             color: var(--text-muted);
-            opacity: 0.3;
+            opacity: 0.35;
             display: block;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
         .empty-state h3 {
             color: var(--text-primary);
             font-size: 1.1rem;
-            margin-bottom: 8px;
+            font-weight: 700;
+            margin-bottom: 6px;
         }
         .empty-state p {
             color: var(--text-muted);
+            font-size: 0.88rem;
+            margin: 0;
         }
 
-        /* ========== ACTION BUTTONS ========== */
-        .action-buttons {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .btn-secondary {
-            background: var(--badge-bg);
-            color: var(--text-secondary);
-            padding: 8px 20px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.8rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.3s;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-secondary:hover {
-            background: var(--border-color);
-            transform: translateY(-2px);
-        }
-
-        /* ========== RESPONSIVE ========== */
-        @media (max-width: 992px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-        }
+        /* ========== RESPONSIVE MOBILE SMALL UI/UX ========== */
         @media (max-width: 768px) {
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .notification-card { flex-direction: column; padding: 14px 16px; }
-            .notification-icon { text-align: left; font-size: 1.5rem; }
-            .notification-content .title-row { flex-direction: column; align-items: flex-start; gap: 4px; }
-            .action-buttons { flex-direction: column; width: 100%; }
-            .btn-secondary { width: 100%; justify-content: center; }
+            .notifications-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+                margin-bottom: 14px;
+            }
+            .stats-grid {
+                width: 100%;
+                display: flex;
+                gap: 6px;
+                flex-wrap: nowrap;
+            }
+            .stat-card {
+                flex: 1 1 0;
+                min-width: 0;
+                padding: 6px 8px !important;
+                gap: 6px !important;
+                border-radius: 10px !important;
+            }
+            .stat-card .stat-icon {
+                width: 26px !important;
+                height: 26px !important;
+                font-size: 0.72rem !important;
+                border-radius: 6px !important;
+            }
+            .stat-card .stat-number {
+                font-size: 0.95rem !important;
+                line-height: 1 !important;
+            }
+            .stat-card .stat-label {
+                font-size: 0.56rem !important;
+                letter-spacing: 0.02em !important;
+            }
+            .toolbar-actions {
+                width: 100%;
+                margin-left: 0;
+            }
+            .btn-mark-all-read {
+                width: 100%;
+                justify-content: center;
+                padding: 6px 14px !important;
+                font-size: 0.74rem !important;
+                border-radius: 20px !important;
+            }
+            .all-caught-up-pill {
+                width: 100%;
+                justify-content: center;
+                padding: 6px 14px !important;
+                font-size: 0.74rem !important;
+            }
+            .notifications-list {
+                gap: 8px !important;
+            }
+            .notification-card {
+                padding: 10px 12px !important;
+                gap: 10px !important;
+                border-radius: 12px !important;
+                border-left-width: 3px !important;
+            }
+            .notif-badge-icon {
+                width: 28px !important;
+                height: 28px !important;
+                font-size: 0.8rem !important;
+                border-radius: 8px !important;
+            }
+            .notif-header-line {
+                margin-bottom: 3px !important;
+                gap: 6px !important;
+            }
+            .notif-title {
+                font-size: 0.82rem !important;
+                line-height: 1.3 !important;
+            }
+            .badge-unread {
+                padding: 1px 6px !important;
+                font-size: 0.58rem !important;
+            }
+            .notif-text {
+                font-size: 0.74rem !important;
+                line-height: 1.4 !important;
+                margin: 0 0 6px 0 !important;
+            }
+            .notif-footer-meta {
+                gap: 8px !important;
+                font-size: 0.68rem !important;
+            }
+            .notif-category-pill {
+                padding: 1px 7px !important;
+                font-size: 0.62rem !important;
+            }
+            .notif-action-link {
+                padding: 2px 8px !important;
+                font-size: 0.68rem !important;
+            }
+            .delete-btn {
+                width: 24px !important;
+                height: 24px !important;
+                font-size: 0.74rem !important;
+            }
         }
         @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .stat-card { padding: 12px 14px; }
-            .stat-card .stat-number { font-size: 1.2rem; }
-            .notification-card { padding: 12px 14px; }
+            .stats-grid {
+                gap: 4px;
+            }
+            .stat-card {
+                padding: 5px 6px !important;
+            }
+        }
+
+        /* ========== DARK MODE OVERRIDES ========== */
+        [data-theme="dark"] .btn-mark-all-read {
+            color: #F87171;
+            border-color: rgba(248, 113, 113, 0.35);
+        }
+        [data-theme="dark"] .btn-mark-all-read .unread-count-chip {
+            background: #F87171;
+            color: #152227;
+        }
+        [data-theme="dark"] .btn-mark-all-read:hover {
+            background: #F87171;
+            color: #152227;
+            border-color: #F87171;
+        }
+        [data-theme="dark"] .stat-card.active {
+            border-color: #F87171;
+            outline-color: rgba(248, 113, 113, 0.25);
+        }
+        [data-theme="dark"] .notification-card.unread {
+            background: linear-gradient(to right, rgba(248, 113, 113, 0.06), var(--card-bg) 25%);
+            border-left-color: #F87171;
+        }
+        [data-theme="dark"] .notif-action-link {
+            color: #F87171;
+            background: rgba(248, 113, 113, 0.12);
+        }
+        [data-theme="dark"] .notif-action-link:hover {
+            background: #F87171;
+            color: #152227;
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar Overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-bell"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Integrated Service Portal</span>
-                </div>
-                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="user-info-sidebar">
-                <div class="user-avatar-sidebar">
-                    <?php if(!empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
-                    <?php else: ?>
-                        <?php echo $initials; ?>
-                    <?php endif; ?>
-                </div>
-                <div>
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <span>Resident</span>
-                </div>
-            </div>
-            
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-            
-            <div class="sidebar-footer">
-                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
-            </div>
-        </div>
+        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="top-bar-left">
-                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
-                        <i class="fas fa-bars"></i>
-                        <span>Menu</span>
-                    </button>
-                    <div class="page-title">
-                        <h1><i class="fas fa-bell" style="color: var(--maroon-light); margin-right: 10px;"></i> Notifications</h1>
-                        <p>Stay updated with your latest notifications</p>
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = 'Notifications & Alerts';
+            $banner_subtitle = 'Stay updated with your latest status updates, casework approvals, and advisories';
+            $banner_icon = 'fa-bell';
+            $banner_actions = [
+                ['label' => 'Citizen Dashboard', 'url' => 'dashboard.php', 'icon' => 'fa-th-large', 'type' => 'primary'],
+                ['label' => 'Announcements', 'url' => 'announcements.php', 'icon' => 'fa-bullhorn', 'type' => 'secondary']
+            ];
+            include __DIR__ . '/includes/portal-banner.php';
+            ?>
+
+        <!-- Notifications Toolbar (Aligned Stats Cards & Mark All as Read) -->
+        <div class="notifications-toolbar">
+            <div class="stats-grid">
+                <button type="button" class="stat-card active" data-filter="all" title="Show all notifications">
+                    <div class="stat-icon"><i class="fas fa-bell"></i></div>
+                    <div class="stat-card-text">
+                        <span class="stat-number"><?php echo (int)$total_count; ?></span>
+                        <span class="stat-label">Total</span>
                     </div>
-                </div>
-                <div class="top-bar-actions">
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="dashboard.php" class="top-icon"><i class="fas fa-tachometer-alt"></i></a>
-                </div>
+                </button>
+                <button type="button" class="stat-card stat-unread" data-filter="unread" title="Show unread only">
+                    <div class="stat-icon"><i class="fas fa-envelope"></i></div>
+                    <div class="stat-card-text">
+                        <span class="stat-number" id="unreadStatNum"><?php echo (int)$unread_count; ?></span>
+                        <span class="stat-label">Unread</span>
+                    </div>
+                </button>
+                <button type="button" class="stat-card stat-read" data-filter="read" title="Show read only">
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-card-text">
+                        <span class="stat-number"><?php echo (int)($total_count - $unread_count); ?></span>
+                        <span class="stat-label">Read</span>
+                    </div>
+                </button>
             </div>
 
-        <!-- Statistics Cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-bell"></i></div>
-                <div class="stat-number"><?php echo $total_count; ?></div>
-                <div class="stat-label">Total</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-envelope" style="color: var(--color-info);"></i></div>
-                <div class="stat-number"><?php echo $unread_count; ?></div>
-                <div class="stat-label">Unread</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-check-circle" style="color: var(--color-success);"></i></div>
-                <div class="stat-number"><?php echo $total_count - $unread_count; ?></div>
-                <div class="stat-label">Read</div>
-            </div>
-        </div>
-
-        <!-- Action Bar -->
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
-            <div></div>
-            <div class="action-buttons">
+            <div class="toolbar-actions">
                 <?php if($unread_count > 0): ?>
-                <a href="?mark_read=1" class="btn-secondary">
-                    <i class="fas fa-check-double"></i> Mark All as Read (<?php echo $unread_count; ?>)
+                <a href="?mark_read=1" class="btn-mark-all-read" title="Mark all notifications as read">
+                    <i class="fas fa-check-double"></i>
+                    <span>Mark All as Read</span>
+                    <span class="unread-count-chip"><?php echo (int)$unread_count; ?></span>
                 </a>
+                <?php else: ?>
+                <span class="all-caught-up-pill">
+                    <i class="fas fa-check-circle"></i> All caught up
+                </span>
                 <?php endif; ?>
             </div>
         </div>
 
         <!-- Notifications List -->
         <?php if($stmt->rowCount() > 0): ?>
-        <div class="notifications-list">
+        <div class="notifications-list" id="notificationsList">
             <?php while($notif = $stmt->fetch(PDO::FETCH_ASSOC)): 
-                $type_icons = [
-                    'appointment' => '📅',
-                    'aics' => '💰',
-                    'housing' => '🏠',
-                    'general' => '📢',
-                    'verification' => '✅'
+                $type = strtolower(trim((string)($notif['type'] ?? 'general')));
+                
+                // Rich metadata per notification type
+                $type_map = [
+                    'appointment' => [
+                        'icon'  => 'fas fa-calendar-check',
+                        'bg'    => 'rgba(2, 132, 199, 0.12)',
+                        'color' => '#0284c7',
+                        'label' => 'Appointment',
+                        'link'  => 'appointments.php',
+                        'btn'   => 'View Appointments'
+                    ],
+                    'aics' => [
+                        'icon'  => 'fas fa-hand-holding-heart',
+                        'bg'    => 'rgba(16, 185, 129, 0.12)',
+                        'color' => '#059669',
+                        'label' => 'AICS Assistance',
+                        'link'  => 'aics-requests.php',
+                        'btn'   => 'View Requests'
+                    ],
+                    'housing' => [
+                        'icon'  => 'fas fa-house-user',
+                        'bg'    => 'rgba(217, 119, 6, 0.12)',
+                        'color' => '#d97706',
+                        'label' => 'Housing Desk',
+                        'link'  => 'view-housing.php',
+                        'btn'   => 'View Housing'
+                    ],
+                    'verification' => [
+                        'icon'  => 'fas fa-shield-alt',
+                        'bg'    => 'rgba(124, 58, 237, 0.12)',
+                        'color' => '#7c3aed',
+                        'label' => 'Verification',
+                        'link'  => 'verify-resident.php',
+                        'btn'   => 'Verify Account'
+                    ],
+                    'general' => [
+                        'icon'  => 'fas fa-bullhorn',
+                        'bg'    => 'rgba(127, 3, 3, 0.10)',
+                        'color' => '#7F0303',
+                        'label' => 'Notice / Advisory',
+                        'link'  => 'announcements.php',
+                        'btn'   => 'View Bulletins'
+                    ]
                 ];
-                $icon = $type_icons[$notif['type']] ?? '📌';
+                $meta = $type_map[$type] ?? [
+                    'icon'  => 'fas fa-bell',
+                    'bg'    => 'rgba(127, 3, 3, 0.08)',
+                    'color' => '#7F0303',
+                    'label' => ucfirst($type),
+                    'link'  => '',
+                    'btn'   => ''
+                ];
+                $is_unread = empty($notif['is_read']);
+                $target_link = $meta['link'];
+                if ($type === 'housing' && !empty($target_link)) {
+                    if (preg_match('/PAL-HOU-\d{4}-(\d+)/i', $notif['message'], $matches)) {
+                        $extracted_id = intval($matches[1]);
+                        if ($extracted_id > 0) {
+                            $target_link = 'view-housing.php?id=' . $extracted_id;
+                        }
+                    }
+                }
             ?>
-            <div class="notification-card <?php echo !$notif['is_read'] ? 'unread' : ''; ?>">
-                <div class="notification-icon">
-                    <?php echo $icon; ?>
+            <div class="notification-card <?php echo $is_unread ? 'unread' : 'is-read'; ?>" data-status="<?php echo $is_unread ? 'unread' : 'read'; ?>">
+                <div class="notif-badge-icon" style="background: <?php echo $meta['bg']; ?>; color: <?php echo $meta['color']; ?>;">
+                    <i class="<?php echo $meta['icon']; ?>"></i>
                 </div>
-                <div class="notification-content">
-                    <div class="title-row">
-                        <h3><?php echo htmlspecialchars($notif['title']); ?></h3>
-                        <?php if(!$notif['is_read']): ?>
-                        <span class="new-badge">New</span>
+                <div class="notif-body">
+                    <div class="notif-header-line">
+                        <h4 class="notif-title"><?php echo htmlspecialchars($notif['title']); ?></h4>
+                        <?php if($is_unread): ?>
+                        <span class="badge-unread"><span class="dot-unread"></span> NEW</span>
                         <?php endif; ?>
                     </div>
-                    <p><?php echo htmlspecialchars($notif['message']); ?></p>
-                    <div class="meta">
-                        <small><i class="fas fa-clock"></i> <?php echo date('F d, Y h:i A', strtotime($notif['created_at'])); ?></small>
-                        <span class="type-badge"><?php echo ucfirst($notif['type'] ?? 'General'); ?></span>
+                    <p class="notif-text"><?php echo nl2br(htmlspecialchars($notif['message'])); ?></p>
+                    <div class="notif-footer-meta">
+                        <span class="notif-time">
+                            <i class="far fa-clock"></i> <?php echo date('M d, Y • h:i A', strtotime($notif['created_at'])); ?>
+                        </span>
+                        <span class="notif-category-pill" style="color: <?php echo $meta['color']; ?>; border-color: <?php echo $meta['color']; ?>33; background: <?php echo $meta['bg']; ?>;">
+                            <?php echo htmlspecialchars($meta['label']); ?>
+                        </span>
+                        <?php if(!empty($target_link) && !empty($meta['btn'])): ?>
+                        <a href="<?php echo htmlspecialchars($target_link); ?>" class="notif-action-link">
+                            <?php echo htmlspecialchars($meta['btn']); ?> <i class="fas fa-arrow-right"></i>
+                        </a>
+                        <?php endif; ?>
                     </div>
                 </div>
-                <a href="?delete=<?php echo $notif['notification_id']; ?>" class="delete-btn" onclick="return confirm('Delete this notification?')" title="Delete">
-                    <i class="fas fa-trash-alt"></i>
-                </a>
+                <div class="notif-actions">
+                    <a href="?delete=<?php echo (int)$notif['notification_id']; ?>" class="delete-btn" onclick="return confirm('Delete this notification?')" title="Delete notification">
+                        <i class="far fa-trash-alt"></i>
+                    </a>
+                </div>
             </div>
             <?php endwhile; ?>
+
+            <!-- Client Filter Empty State -->
+            <div id="filterEmptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-filter"></i>
+                <h3>No Matching Notifications</h3>
+                <p>There are no notifications matching the selected filter.</p>
+            </div>
         </div>
         <?php else: ?>
         <div class="empty-state">
@@ -495,6 +792,38 @@ if (themeToggle) {
         setTheme(current === 'dark' ? 'light' : 'dark');
     });
 }
+
+// ========== STATS CARD INTERACTIVE FILTERING ==========
+const statFilterBtns = document.querySelectorAll('.stat-card[data-filter]');
+if (statFilterBtns.length > 0) {
+    statFilterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const filter = btn.getAttribute('data-filter');
+            statFilterBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const cards = document.querySelectorAll('.notification-card');
+            let visible = 0;
+            cards.forEach(card => {
+                const status = card.getAttribute('data-status');
+                if (filter === 'all' || status === filter) {
+                    card.style.display = 'flex';
+                    visible++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            const filterEmpty = document.getElementById('filterEmptyState');
+            if (filterEmpty) {
+                filterEmpty.style.display = (visible === 0 && cards.length > 0) ? 'block' : 'none';
+            }
+        });
+    });
+}
 </script>
+
+<!-- Search Modal (Req 7) -->
+<?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

@@ -1,8 +1,8 @@
 <?php
-// admin/manage-verifications.php
+// admin/manage-verifications.php - Resident Residency Verifications Management
 require_once __DIR__ . '/../config/database.php';
 
-if (!isAdmin()) {
+if (!isAdmin() && !isStaff()) {
     redirect('../login.php');
 }
 
@@ -13,7 +13,7 @@ $error = '';
 $success = '';
 
 // Handle verification status update
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_verification'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['update_verification'])) {
     $verification_id = sanitize($_POST['verification_id']);
     $status = sanitize($_POST['status']);
     $rejection_reason = sanitize($_POST['rejection_reason'] ?? '');
@@ -21,8 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_verification'])
     $db->beginTransaction();
     
     try {
-        // Get user_id from verification request
-        $get_user = "SELECT user_id FROM verification_requests WHERE verification_id = :id";
+        // Get user details from verification request
+        $get_user = "SELECT v.user_id, u.first_name, u.last_name, u.email, u.contact_number 
+                     FROM verification_requests v 
+                     JOIN users u ON v.user_id = u.user_id 
+                     WHERE v.verification_id = :id";
         $get_stmt = $db->prepare($get_user);
         $get_stmt->bindParam(':id', $verification_id);
         $get_stmt->execute();
@@ -54,12 +57,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_verification'])
             $user_stmt->bindParam(':verified_by', $_SESSION['user_id']);
             $user_stmt->bindParam(':user_id', $verification['user_id']);
             $user_stmt->execute();
+
+            // If approved, check if resident is 60+ and auto-tag as senior_citizen = 1 under RA 9994, and ensure resident_number exists
+            if ($status === 'verified') {
+                $check_age_stmt = $db->prepare("SELECT id, resident_number, birth_date, senior_citizen FROM residents WHERE user_id = :uid LIMIT 1");
+                $check_age_stmt->execute([':uid' => $verification['user_id']]);
+                $res_row = $check_age_stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($res_row) {
+                    // Ensure resident number is assigned
+                    if (empty($res_row['resident_number'])) {
+                        $new_res_num = generateResidentNumber($db);
+                        $db->prepare("UPDATE residents SET resident_number = :rn WHERE id = :rid")
+                           ->execute([':rn' => $new_res_num, ':rid' => $res_row['id']]);
+                    }
+
+                    // Senior citizen check
+                    if (!empty($res_row['birth_date']) && $res_row['birth_date'] !== '0000-00-00') {
+                        $birth = new DateTime($res_row['birth_date']);
+                        $now = new DateTime();
+                        $age = $now->diff($birth)->y;
+                        if ($age >= 60 && ($res_row['senior_citizen'] ?? 0) != 1) {
+                            $db->prepare("UPDATE residents SET senior_citizen = 1 WHERE user_id = :uid")
+                               ->execute([':uid' => $verification['user_id']]);
+                        }
+                    }
+                }
+            }
             
             // Create notification for user
-            $notif_title = $status == 'verified' ? 'Verification Approved' : 'Verification Rejected';
+            $notif_title = $status == 'verified' ? 'Verification Approved' : 'Verification Disapproved';
             $notif_message = $status == 'verified' 
                 ? 'Your residency verification has been approved! You can now access all services.'
-                : 'Your residency verification was rejected. Reason: ' . $rejection_reason;
+                : 'Your residency verification was disapproved. Reason: ' . $rejection_reason;
             
             $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
                             VALUES (:user_id, :title, :message, 'verification')";
@@ -70,11 +100,65 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_verification'])
             $notif_stmt->execute();
             
             $db->commit();
-            $success = "Verification status updated successfully!";
+
+            // Send automated verification email notification
+            $mail_sent = false;
+            try {
+                require_once __DIR__ . '/../includes/Mailer.php';
+                $mailer = new Mailer();
+                $recipient_email = $verification['email'] ?? '';
+                $recipient_name = trim(($verification['first_name'] ?? '') . ' ' . ($verification['last_name'] ?? ''));
+                if (empty($recipient_name)) {
+                    $recipient_name = 'Resident';
+                }
+
+                if (!empty($recipient_email)) {
+                    if ($status === 'verified') {
+                        $send_res = $mailer->sendVerificationApprovedEmail($recipient_email, $recipient_name, $verification['user_id']);
+                        $mail_sent = !empty($send_res['success']);
+                    } elseif ($status === 'rejected') {
+                        $send_res = $mailer->sendVerificationRejectedEmail($recipient_email, $recipient_name, $rejection_reason, $verification['user_id']);
+                        $mail_sent = !empty($send_res['success']);
+                    }
+                }
+            } catch (Exception $mailEx) {
+                error_log("Failed to send verification notification email: " . $mailEx->getMessage());
+            }
+
+            // Send automated verification SMS notification via TextBee
+            $sms_sent = false;
+            $phone = $verification['contact_number'] ?? '';
+            if (!empty($phone)) {
+                try {
+                    require_once __DIR__ . '/../includes/SMSGateway.php';
+                    $smsGateway = new SMSGateway();
+                    $recipient_name = trim(($verification['first_name'] ?? '') . ' ' . ($verification['last_name'] ?? ''));
+                    if (empty($recipient_name)) {
+                        $recipient_name = 'Resident';
+                    }
+
+                    if ($status === 'verified') {
+                        $sms_res = $smsGateway->sendAccountVerifiedSMS($phone, $recipient_name, (int)$verification['user_id']);
+                        $sms_sent = !empty($sms_res['success']);
+                    } elseif ($status === 'rejected') {
+                        $sms_res = $smsGateway->sendVerificationRejectedSMS($phone, $recipient_name, $rejection_reason, (int)$verification['user_id']);
+                        $sms_sent = !empty($sms_res['success']);
+                    }
+                } catch (\Throwable $smsEx) {
+                    error_log("Failed to send verification SMS notification: " . $smsEx->getMessage());
+                }
+            }
+
+            $notif_feedback = [];
+            if ($mail_sent) $notif_feedback[] = "Email sent";
+            if ($sms_sent) $notif_feedback[] = "SMS sent via TextBee";
+            $feedback_str = !empty($notif_feedback) ? " (" . implode(" & ", $notif_feedback) . ")." : "";
+
+            $success = "Verification status successfully updated for Request #" . str_pad($verification_id, 4, '0', STR_PAD_LEFT) . "!" . $feedback_str;
         }
     } catch (Exception $e) {
         $db->rollBack();
-        $error = "Update failed: " . $e->getMessage();
+        $error = "Unable to update verification status. Please try again: " . $e->getMessage();
     }
 }
 
@@ -83,7 +167,7 @@ $status_filter = isset($_GET['status']) ? sanitize($_GET['status']) : 'pending';
 $search = isset($_GET['search']) ? sanitize($_GET['search']) : '';
 
 // Build query
-$query = "SELECT v.*, u.first_name, u.last_name, u.email, u.contact_number,
+$query = "SELECT v.*, u.first_name, u.last_name, u.email, u.contact_number, u.profile_picture,
           s.first_name as staff_first_name, s.last_name as staff_last_name
           FROM verification_requests v
           JOIN users u ON v.user_id = u.user_id
@@ -98,8 +182,9 @@ if ($status_filter != 'all') {
 }
 
 if (!empty($search)) {
-    $query .= " AND (u.first_name LIKE :search OR u.last_name LIKE :search OR u.email LIKE :search)";
+    $query .= " AND (u.first_name LIKE :search OR u.last_name LIKE :search OR u.email LIKE :search OR v.verification_id LIKE :search_id)";
     $params[':search'] = "%$search%";
+    $params[':search_id'] = "%$search%";
 }
 
 $query .= " ORDER BY v.submitted_date DESC";
@@ -119,102 +204,107 @@ $stats_query = "SELECT
     FROM verification_requests";
 $stats = $db->query($stats_query)->fetch(PDO::FETCH_ASSOC);
 
-// Get initials for sidebar avatar
-$initials = '';
-$name_parts = explode(' ', $_SESSION['full_name']);
-foreach($name_parts as $part) {
-    $initials .= strtoupper(substr($part, 0, 1));
+// Helper for initials
+if (!function_exists('getInitials')) {
+    function getInitials($name) {
+        $parts = explode(' ', trim($name));
+        $initials = '';
+        foreach ($parts as $part) {
+            if (!empty($part)) {
+                $initials .= strtoupper(substr($part, 0, 1));
+            }
+        }
+        return substr($initials, 0, 2) ?: 'ST';
+    }
 }
-$initials = substr($initials, 0, 2);
 
-// Check for dark mode preference
-$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'Resident Verifications';
+$active_nav = 'verifications';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Verifications - Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
-            --tan: #D8BA98;
             --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
+            --maroon-light: #9A1515;
+            --maroon-dark: #5A0202;
+            --gold: #D8BA98;
             --midnight: #0F414A;
-            --white: #FFFFFF;
             
-            /* Light theme defaults */
-            --bg-primary: #E8ECF2;
-            --bg-secondary: #FFFFFF;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-card: #FFFFFF;
+            --bg-card-hover: #F8FAFC;
             --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
+            --bg-sidebar-hover: rgba(255, 255, 255, 0.12);
+            --bg-sidebar-active: rgba(255, 255, 255, 0.18);
+            
+            --text-primary: #1E293B;
+            --text-secondary: #475569;
+            --text-muted: #64748B;
+            --text-sidebar: rgba(255, 255, 255, 0.75);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #C8D0DC;
             
-            /* Enhanced Shadows */
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.10);
-            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
+            --border-color: #E2E8F0;
+            --border-focus: #CBD5E1;
             
-            --search-bg: #FFFFFF;
-            --stat-bg: #FFFFFF;
-            --filter-bg: #FFFFFF;
-            --table-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+            --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.08);
             
-            --radius-card: 20px;
-            --radius-element: 12px;
+            --radius-card: 16px;
+            --radius-element: 10px;
+            --radius-pill: 50px;
+            
+            --status-pending-bg: #FFFBEB;
+            --status-pending-text: #B45309;
+            --status-pending-border: #FDE68A;
+            
+            --status-verified-bg: #ECFDF5;
+            --status-verified-text: #059669;
+            --status-verified-border: #A7F3D0;
+            
+            --status-rejected-bg: #FEF2F2;
+            --status-rejected-text: #DC2626;
+            --status-rejected-border: #FECACA;
         }
 
-        /* ========== DARK THEME ========== */
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
+            --bg-primary: var(--ref-canvas, #0C1417);
+            --bg-card: #141B28;
+            --bg-card-hover: #1A2334;
+            --bg-sidebar: #0F1626;
+            --bg-sidebar-hover: rgba(255, 255, 255, 0.08);
+            --bg-sidebar-active: rgba(255, 255, 255, 0.14);
+            
+            --text-primary: #F1F5F9;
+            --text-secondary: #CBD5E1;
+            --text-muted: #94A3B8;
+            --text-sidebar: rgba(255, 255, 255, 0.65);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
             
-            /* Enhanced Shadows - Dark Mode */
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.25);
+            --border-color: #232E42;
+            --border-focus: #334155;
             
-            --search-bg: #1a2332;
-            --stat-bg: #1a2332;
-            --filter-bg: #1a2332;
-            --table-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
+            --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+            --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+            --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
             
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
+            --status-pending-bg: rgba(245, 158, 11, 0.14);
+            --status-pending-text: #FBBF24;
+            --status-pending-border: rgba(245, 158, 11, 0.3);
+            
+            --status-verified-bg: rgba(16, 185, 129, 0.14);
+            --status-verified-text: #34D399;
+            --status-verified-border: rgba(16, 185, 129, 0.3);
+            
+            --status-rejected-bg: rgba(239, 68, 68, 0.14);
+            --status-rejected-text: #F87171;
+            --status-rejected-border: rgba(239, 68, 68, 0.3);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-secondary);
             line-height: 1.5;
@@ -222,586 +312,681 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease, color 0.3s ease;
         }
 
-        /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            object-fit: contain;
-            background: rgba(255,255,255,0.10);
-            padding: 4px;
-            flex-shrink: 0;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-            flex-shrink: 0;
-        }
-        .logo-text {
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 16px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 12px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-        }
-        .sidebar-footer .avatar {
-            width: 38px;
-            height: 38px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.8rem;
-        }
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .sidebar-footer .user-details p {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.7rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
         .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 16px;
         }
         .page-title h1 {
-            font-size: 1.5rem;
+            font-size: 1.45rem;
             color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .page-title p {
             color: var(--text-muted);
-            font-size: 0.85rem;
+            font-size: 0.84rem;
             margin-top: 2px;
         }
+        
         .top-bar-actions {
             display: flex;
-            gap: 12px;
             align-items: center;
+            gap: 12px;
         }
-        .search-box {
+
+        .header-search-box {
             display: flex;
             align-items: center;
-            background: var(--search-bg);
-            border-radius: 50px;
-            padding: 8px 16px;
+            background: var(--bg-card);
             border: 1px solid var(--border-color);
+            border-radius: 50px;
+            padding: 7px 16px;
             gap: 10px;
-            transition: background 0.3s ease, border-color 0.3s ease;
             box-shadow: var(--shadow-sm);
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .search-box input {
+        .header-search-box:focus-within {
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.08);
+        }
+        .header-search-box input {
             border: none;
             outline: none;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             background: transparent;
-            min-width: 180px;
             color: var(--text-primary);
+            width: 170px;
         }
-        .search-box input::placeholder { color: var(--text-muted); }
-        .search-box i { color: var(--text-muted); }
+        .header-search-box i {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
 
-        .theme-toggle {
+        .theme-toggle, .top-icon {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 38px;
+            height: 38px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
+            font-size: 0.95rem;
             box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
             text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
         }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
+        .theme-toggle:hover, .top-icon:hover {
+            color: var(--maroon);
+            border-color: var(--maroon);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
 
-        /* ========== ALERTS ========== */
-        .alert {
-            padding: 16px 20px;
-            border-radius: var(--radius-element);
+        /* ========== COMPACT ALERT NOTIFICATIONS (NO EMPTY SPACE) ========== */
+        .alert-container {
             margin-bottom: 20px;
+        }
+        .alert {
+            padding: 12px 18px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             gap: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
             box-shadow: var(--shadow-sm);
-            border-left: 4px solid transparent;
+            animation: fadeInDown 0.25s ease;
+            position: relative;
         }
         .alert-success {
-            background: rgba(76, 175, 80, 0.12);
-            color: #4CAF50;
-            border-left-color: #4CAF50;
+            background: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
+            border-left: 4px solid #059669;
         }
         .alert-error {
-            background: rgba(244, 67, 54, 0.12);
-            color: #EF5350;
-            border-left-color: #EF5350;
+            background: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
+            border-left: 4px solid #DC2626;
         }
-        .alert i { font-size: 1.2rem; }
+        .alert-icon {
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .alert-message {
+            flex: 1;
+        }
+        .alert-close-btn {
+            background: none;
+            border: none;
+            color: inherit;
+            opacity: 0.55;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 4px;
+            transition: opacity 0.2s;
+        }
+        .alert-close-btn:hover {
+            opacity: 1;
+        }
 
-        /* ========== STATS GRID ========== */
+        /* ========== STATISTICS CARDS ========== */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 18px;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
         }
         .stat-card {
-            background: var(--stat-bg);
-            border-radius: 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
             padding: 18px 20px;
             display: flex;
             align-items: center;
-            gap: 16px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            justify-content: space-between;
+            gap: 14px;
+            box-shadow: var(--shadow-sm);
+            border: 1.5px solid var(--border-color);
+            transition: all 0.25s ease;
             cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, var(--maroon), transparent);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            border-radius: 20px;
+            text-decoration: none;
         }
         .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-hover);
-            border-color: var(--maroon-light);
-        }
-        .stat-card:hover::after {
-            opacity: 0.03;
-        }
-
-        .stat-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            flex-shrink: 0;
-            position: relative;
-            z-index: 1;
-            box-shadow: var(--shadow-sm);
-        }
-        .stat-icon.total { background: rgba(127, 3, 3, 0.12); color: var(--maroon-light); }
-        .stat-icon.pending { background: rgba(255, 152, 0, 0.12); color: #FF9800; }
-        .stat-icon.verified { background: rgba(76, 175, 80, 0.12); color: #4CAF50; }
-        .stat-icon.rejected { background: rgba(244, 67, 54, 0.12); color: #EF5350; }
-
-        .stat-info {
-            position: relative;
-            z-index: 1;
-        }
-        .stat-info h3 {
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: var(--text-primary);
-            line-height: 1.2;
-            transition: color 0.3s ease;
-        }
-        .stat-info p {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            font-weight: 500;
-            margin-top: 2px;
-        }
-
-        /* ========== FILTER BAR ========== */
-        .filter-bar {
-            background: var(--filter-bg);
-            border-radius: var(--radius-card);
-            padding: 20px 24px;
-            margin-bottom: 24px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-        .filter-form {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            align-items: flex-end;
-        }
-        .filter-group {
-            flex: 1;
-            min-width: 160px;
-        }
-        .filter-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .filter-group select, .filter-group input {
-            width: 100%;
-            padding: 10px 14px;
-            border: 2px solid var(--border-color);
-            border-radius: var(--radius-element);
-            font-size: 0.85rem;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            transition: all 0.3s;
-        }
-        .filter-group select:focus, .filter-group input:focus {
-            outline: none;
-            border-color: var(--maroon-light);
-            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
-        }
-        .filter-group select option {
-            background: var(--bg-card);
-            color: var(--text-primary);
-        }
-        .btn-primary {
-            background: var(--maroon);
-            color: white;
-            padding: 10px 24px;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.85rem;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: var(--shadow-sm);
-        }
-        .btn-primary:hover {
-            background: var(--maroon-light);
             transform: translateY(-2px);
             box-shadow: var(--shadow-md);
+            border-color: #CBD5E1;
         }
-        .clear-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-left: 12px;
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            transition: all 0.3s;
-            padding: 8px 16px;
-            border-radius: 50px;
-            border: 1px solid transparent;
+        .stat-card.active-filter {
+            border: 2px solid var(--maroon, #7F0303) !important;
+            background: #FFFFFF !important;
+            box-shadow: 0 6px 18px rgba(127, 3, 3, 0.12) !important;
         }
-        .clear-link:hover {
-            color: var(--maroon-light);
-            border-color: var(--border-color);
+        [data-theme="dark"] .stat-card.active-filter {
+            border: 2px solid #EF4444 !important;
+            background: var(--bg-card, #1a2332) !important;
+            box-shadow: 0 6px 18px rgba(239, 68, 68, 0.18) !important;
         }
 
-        /* ========== TABLE ========== */
-        .table-container {
-            background: var(--table-bg);
-            border-radius: var(--radius-card);
-            overflow: hidden;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-        .requests-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .requests-table th, .requests-table td {
-            padding: 14px 20px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .requests-table th {
-            background: var(--badge-bg);
-            font-weight: 600;
-            color: var(--text-primary);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .requests-table tr:hover {
-            background: var(--badge-bg);
-        }
-        .requests-table td {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            vertical-align: middle;
-        }
-        .requests-table .user-cell {
+        .stat-info {
             display: flex;
             flex-direction: column;
         }
-        .requests-table .user-cell .name {
+        .stat-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .stat-number {
+            font-size: 1.85rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1.1;
+            margin-top: 4px;
+        }
+
+        .stat-icon-box {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+        }
+        .stat-icon-box.total {
+            background: #FEE2E2;
+            color: var(--maroon);
+        }
+        .stat-icon-box.pending {
+            background: #FEF3C7;
+            color: #D97706;
+        }
+        .stat-icon-box.verified {
+            background: #D1FAE5;
+            color: #059669;
+        }
+        .stat-icon-box.rejected {
+            background: #FEE2E2;
+            color: #DC2626;
+        }
+
+        [data-theme="dark"] .stat-icon-box.total { background: rgba(127, 3, 3, 0.25); color: #F87171; }
+        [data-theme="dark"] .stat-icon-box.pending { background: rgba(217, 119, 6, 0.2); color: #FBBF24; }
+        [data-theme="dark"] .stat-icon-box.verified { background: rgba(5, 150, 105, 0.2); color: #34D399; }
+        [data-theme="dark"] .stat-icon-box.rejected { background: rgba(220, 38, 38, 0.2); color: #F87171; }
+
+        /* ========== COMPACT FILTER TOOLBAR ========== */
+        .filter-toolbar-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            padding: 16px 22px;
+            margin-bottom: 22px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+        .filter-toolbar-form {
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .filter-item label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .filter-item.status-item {
+            min-width: 170px;
+        }
+        .filter-item.search-item {
+            flex: 1;
+            min-width: 220px;
+        }
+
+        .select-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .filter-select {
+            width: 100%;
+            height: 40px;
+            padding: 0 34px 0 14px;
+            border-radius: var(--radius-element);
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.84rem;
+            font-weight: 500;
+            appearance: none;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-select:focus {
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.08);
+            background: var(--bg-card);
+        }
+        .select-arrow {
+            position: absolute;
+            right: 12px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .input-with-icon {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-icon {
+            position: absolute;
+            left: 14px;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+        .filter-input {
+            width: 100%;
+            height: 40px;
+            padding: 0 34px 0 36px;
+            border-radius: var(--radius-element);
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.84rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-input:focus {
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.08);
+            background: var(--bg-card);
+        }
+        .input-clear-btn {
+            position: absolute;
+            right: 10px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.78rem;
+            padding: 4px;
+            text-decoration: none;
+        }
+        .input-clear-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .filter-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            height: 40px;
+        }
+        .btn-filter-apply {
+            background: var(--maroon);
+            color: white;
+            border: 1px solid var(--maroon);
+            border-radius: var(--radius-element);
+            padding: 0 20px;
+            height: 40px;
+            font-weight: 600;
+            font-size: 0.84rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            box-shadow: var(--shadow-sm);
+        }
+        .btn-filter-apply:hover {
+            background: var(--maroon-light);
+            border-color: var(--maroon-light);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-filter-clear {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: var(--radius-element);
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-filter-clear:hover {
+            color: var(--maroon);
+            background: var(--bg-primary);
+        }
+
+        /* ========== MODERN DATA TABLE ========== */
+        .table-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .table-toolbar-header {
+            padding: 16px 22px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: var(--bg-card);
+        }
+        .table-header-count {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .active-filter-tag {
+            background: var(--bg-primary);
+            color: var(--text-muted);
+            padding: 2px 10px;
+            border-radius: 50px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            border: 1px solid var(--border-color);
+        }
+
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+        .table-responsive::-webkit-scrollbar { height: 6px; }
+        .table-responsive::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+
+        .verification-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        .verification-table th {
+            background: var(--bg-primary);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+        .verification-table td {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            transition: background 0.15s ease;
+        }
+        .verification-table tbody tr:hover td {
+            background: var(--bg-card-hover);
+        }
+
+        .id-badge {
+            font-family: monospace;
+            font-weight: 700;
+            font-size: 0.78rem;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            display: inline-block;
+        }
+
+        .applicant-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .applicant-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #F1F5F9;
+            color: #475569;
+            font-size: 0.72rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .applicant-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .applicant-info {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.25;
+        }
+        .applicant-name {
+            font-size: 0.86rem;
             font-weight: 600;
             color: var(--text-primary);
         }
-        .requests-table .user-cell .email {
-            font-size: 0.75rem;
+        .applicant-email {
+            font-size: 0.72rem;
             color: var(--text-muted);
+            margin-top: 1px;
         }
 
-        /* Status Badges */
-        .status-badge {
+        .id-type-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            background: var(--bg-primary);
+            padding: 3px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+        .id-type-pill i {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .location-info {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.82rem;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+        .location-info i {
+            color: var(--maroon);
+            font-size: 0.75rem;
+        }
+
+        .date-cell {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+        .date-main {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .date-sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        /* Pill Status Badges */
+        .status-pill {
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            padding: 4px 14px;
+            padding: 3px 12px;
             border-radius: 50px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            box-shadow: var(--shadow-sm);
+            font-size: 0.72rem;
+            font-weight: 700;
+            white-space: nowrap;
         }
-        .status-badge.pending { background: rgba(255, 152, 0, 0.15); color: #FF9800; }
-        .status-badge.verified { background: rgba(76, 175, 80, 0.15); color: #4CAF50; }
-        .status-badge.rejected { background: rgba(244, 67, 54, 0.15); color: #EF5350; }
+        .status-pill.pending {
+            background: var(--status-pending-bg);
+            color: var(--status-pending-text);
+            border: 1px solid var(--status-pending-border);
+        }
+        .status-pill.verified {
+            background: var(--status-verified-bg);
+            color: var(--status-verified-text);
+            border: 1px solid var(--status-verified-border);
+        }
+        .status-pill.rejected {
+            background: var(--status-rejected-bg);
+            color: var(--status-rejected-text);
+            border: 1px solid var(--status-rejected-border);
+        }
 
         /* Action Buttons */
-        .action-group {
+        .actions-cell {
             display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
         }
-        .btn-view, .btn-verify {
-            padding: 6px 14px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-size: 0.7rem;
+        .btn-table-action {
+            height: 32px;
+            padding: 0 12px;
+            border-radius: 8px;
+            font-size: 0.76rem;
             font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            transition: all 0.3s;
-            border: none;
-            cursor: pointer;
+            text-decoration: none;
+            border: 1px solid transparent;
         }
-        .btn-view {
-            background: var(--badge-bg);
+        .btn-table-view {
+            background: var(--bg-primary);
             color: var(--text-secondary);
+            border-color: var(--border-color);
         }
-        .btn-view:hover {
-            background: var(--maroon);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
-        }
-        .btn-verify {
-            background: var(--maroon);
-            color: white;
-        }
-        .btn-verify:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
+        .btn-table-view:hover {
+            background: var(--border-color);
+            color: var(--text-primary);
+            transform: translateY(-1px);
         }
 
-        .no-data {
+        .btn-table-verify {
+            background: var(--maroon);
+            color: white;
+            border-color: var(--maroon);
+        }
+        .btn-table-verify:hover {
+            background: var(--maroon-light);
+            box-shadow: 0 3px 8px rgba(127, 3, 3, 0.22);
+            transform: translateY(-1px);
+        }
+
+        .btn-table-edit {
+            background: transparent;
+            color: var(--text-muted);
+            border-color: var(--border-color);
+        }
+        .btn-table-edit:hover {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border-color: #CBD5E1;
+            transform: translateY(-1px);
+        }
+
+        /* Table Empty State */
+        .table-empty-state {
             text-align: center;
             padding: 60px 20px;
-        }
-        .no-data i {
-            font-size: 48px;
             color: var(--text-muted);
-            opacity: 0.3;
+        }
+        .table-empty-state i {
+            font-size: 3rem;
+            opacity: 0.25;
+            color: var(--maroon);
+            margin-bottom: 12px;
             display: block;
-            margin-bottom: 16px;
         }
-        .no-data p {
-            color: var(--text-muted);
+        .table-empty-state h4 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        .table-empty-state p {
+            font-size: 0.82rem;
+            max-width: 320px;
+            margin: 0 auto 16px;
         }
 
-        /* ========== MODAL ========== */
+        /* ========== MODERN VERIFY MODAL ========== */
         .modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.6);
+            background: rgba(15, 23, 42, 0.6);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 2000;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.3s;
-            backdrop-filter: blur(6px);
+            transition: opacity 0.25s ease, visibility 0.25s ease;
+            backdrop-filter: blur(4px);
         }
         .modal.active {
             opacity: 1;
@@ -809,421 +994,596 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
         .modal-content {
             background: var(--bg-card);
-            padding: 32px;
-            border-radius: 24px;
-            max-width: 500px;
+            padding: 28px 30px;
+            border-radius: 20px;
+            max-width: 480px;
             width: 90%;
-            animation: slideIn 0.3s ease;
             box-shadow: var(--shadow-lg);
             border: 1px solid var(--border-color);
+            transform: translateY(-20px) scale(0.97);
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        @keyframes slideIn {
-            from {
-                transform: translateY(-30px) scale(0.95);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0) scale(1);
-                opacity: 1;
-            }
+        .modal.active .modal-content {
+            transform: translateY(0) scale(1);
         }
-        .modal-content h3 {
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .modal-header h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 20px;
-            font-size: 1.3rem;
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        .modal-content h3 i {
-            color: var(--maroon-light);
+        .modal-header h3 i {
+            color: var(--maroon);
         }
+        .modal-close-icon {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .modal-close-icon:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-applicant-summary {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+        }
+        .modal-applicant-summary .summary-name {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .modal-applicant-summary .summary-id {
+            font-family: monospace;
+            color: var(--text-muted);
+        }
+
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
         .form-group label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 7px;
             font-weight: 600;
             color: var(--text-secondary);
-            font-size: 0.85rem;
+            font-size: 0.8rem;
         }
         .form-group select, .form-group textarea {
             width: 100%;
-            padding: 12px 16px;
-            border: 2px solid var(--border-color);
+            padding: 10px 14px;
+            border: 1.5px solid var(--border-color);
             border-radius: var(--radius-element);
-            font-size: 0.85rem;
+            font-size: 0.84rem;
             font-family: inherit;
             background: var(--bg-primary);
             color: var(--text-primary);
-            transition: all 0.3s;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
         .form-group select:focus, .form-group textarea:focus {
-            outline: none;
-            border-color: var(--maroon-light);
-            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.08);
+            background: var(--bg-card);
         }
         .form-group textarea {
             resize: vertical;
-            min-height: 80px;
+            min-height: 85px;
         }
+
         .modal-buttons {
             display: flex;
-            gap: 12px;
-            margin-top: 24px;
+            gap: 10px;
+            margin-top: 22px;
         }
         .modal-buttons button {
             flex: 1;
-            padding: 12px;
+            height: 42px;
             border: none;
-            border-radius: 50px;
+            border-radius: var(--radius-element);
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
         }
         .modal-buttons .btn-submit {
             background: var(--maroon);
             color: white;
+            box-shadow: var(--shadow-sm);
         }
         .modal-buttons .btn-submit:hover {
             background: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
         .modal-buttons .btn-cancel {
-            background: var(--badge-bg);
+            background: var(--bg-primary);
             color: var(--text-secondary);
+            border: 1px solid var(--border-color);
         }
         .modal-buttons .btn-cancel:hover {
             background: var(--border-color);
+            color: var(--text-primary);
         }
 
-        /* ========== RESPONSIVE ========== */
-        @media (max-width: 1200px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
-            .search-box { flex: 1; }
-            .search-box input { min-width: 120px; }
-            .stats-grid { grid-template-columns: 1fr; }
-            .filter-form { flex-direction: column; }
-            .filter-group { width: 100%; min-width: unset; }
-            .requests-table { display: block; overflow-x: auto; }
-            .requests-table th, .requests-table td { 
-                padding: 10px 14px; 
-                font-size: 0.75rem;
+
+        /* ========== RESPONSIVE DESIGN ========== */
+        @media (max-width: 1150px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
-            .action-group { flex-direction: column; }
-            .btn-view, .btn-verify { width: 100%; justify-content: center; }
-            .modal-content { padding: 24px; }
-            .modal-buttons { flex-direction: column; }
         }
-        @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .stat-card { padding: 14px 16px; }
-            .stat-icon { width: 40px; height: 40px; font-size: 1.1rem; }
-            .stat-info h3 { font-size: 1.2rem; }
+
+        @media (max-width: 992px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+                padding: 20px 18px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .top-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .top-bar-actions {
+                justify-content: space-between;
+            }
+            .header-search-box {
+                flex: 1;
+            }
+            .header-search-box input {
+                width: 100%;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+            .filter-toolbar-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .filter-item {
+                width: 100%;
+            }
+            .filter-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            .btn-filter-apply {
+                flex: 1;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .stat-number {
+                font-size: 1.6rem;
+            }
+            .modal-content {
+                padding: 20px;
+            }
+            .modal-buttons {
+                flex-direction: column;
+            }
         }
     </style>
-</head>
-<body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <!-- LOGO IMAGE - Replace the src path with your actual logo file path -->
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li><a href="announcements.php"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-            <li><a href="calendar.php"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php" class="active"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <p>Administrator</p>
-                </div>
-            </div>
-        </div>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-shield-alt" style="color: var(--ref-maroon);"></i> Resident Verifications</h1>
+        <p>Review and manage resident residency verification requests</p>
     </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <span class="status-badge-pill verified">
+            <i class="fas fa-shield-check"></i>
+            <span><?php echo number_format($stats['pending'] ?? 0); ?> Pending Review</span>
+        </span>
+    </div>
+</div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-shield-alt" style="color: var(--maroon-light); margin-right: 10px;"></i> Resident Verifications</h1>
-                <p>Review and verify resident residency requests</p>
-            </div>
-            <div class="top-bar-actions">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search verifications..." id="globalSearch">
+        <!-- Alert Notification Banners (Only displayed when message exists) -->
+        <?php if(!empty($success)): ?>
+            <div class="alert-container">
+                <div class="alert alert-success" id="alertSuccessBanner">
+                    <div class="alert-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="alert-message"><?php echo htmlspecialchars($success); ?></div>
+                    <button type="button" class="alert-close-btn" onclick="document.getElementById('alertSuccessBanner').remove();" title="Dismiss"><i class="fas fa-times"></i></button>
                 </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="audit-logs.php" class="top-icon"><i class="fas fa-bell"></i></a>
-                <a href="settings.php" class="top-icon"><i class="fas fa-cog"></i></a>
-            </div>
-        </div>
-        
-        <?php if(isset($success)): ?>
-            <div class="alert alert-success">
-                <i class="fas fa-check-circle"></i> <?php echo $success; ?>
             </div>
         <?php endif; ?>
-        
-        <?php if(isset($error)): ?>
-            <div class="alert alert-error">
-                <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
+
+        <?php if(!empty($error)): ?>
+            <div class="alert-container">
+                <div class="alert alert-error" id="alertErrorBanner">
+                    <div class="alert-icon"><i class="fas fa-exclamation-circle"></i></div>
+                    <div class="alert-message"><?php echo htmlspecialchars($error); ?></div>
+                    <button type="button" class="alert-close-btn" onclick="document.getElementById('alertErrorBanner').remove();" title="Dismiss"><i class="fas fa-times"></i></button>
+                </div>
             </div>
         <?php endif; ?>
-        
-        <!-- Statistics -->
+
+        <!-- Statistics Cards -->
         <div class="stats-grid">
-            <div class="stat-card" onclick="window.location.href='manage-verifications.php?status=all'">
-                <div class="stat-icon total"><i class="fas fa-file-alt"></i></div>
+            <a href="manage-verifications.php?status=all<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" 
+               class="stat-card <?php echo $status_filter == 'all' ? 'active-filter' : ''; ?>" title="View all verification requests">
                 <div class="stat-info">
-                    <h3><?php echo number_format($stats['total'] ?? 0); ?></h3>
-                    <p>Total Requests</p>
+                    <span class="stat-label">Total Requests</span>
+                    <span class="stat-number"><?php echo number_format($stats['total'] ?? 0); ?></span>
                 </div>
-            </div>
-            <div class="stat-card" onclick="window.location.href='manage-verifications.php?status=pending'">
-                <div class="stat-icon pending"><i class="fas fa-clock"></i></div>
+                <div class="stat-icon-box total">
+                    <i class="fas fa-file-invoice"></i>
+                </div>
+            </a>
+
+            <a href="manage-verifications.php?status=pending<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" 
+               class="stat-card <?php echo $status_filter == 'pending' ? 'active-filter' : ''; ?>" title="View pending requests awaiting review">
                 <div class="stat-info">
-                    <h3><?php echo number_format($stats['pending'] ?? 0); ?></h3>
-                    <p>Pending</p>
+                    <span class="stat-label">Pending</span>
+                    <span class="stat-number"><?php echo number_format($stats['pending'] ?? 0); ?></span>
                 </div>
-            </div>
-            <div class="stat-card" onclick="window.location.href='manage-verifications.php?status=verified'">
-                <div class="stat-icon verified"><i class="fas fa-check-circle"></i></div>
+                <div class="stat-icon-box pending">
+                    <i class="fas fa-clock"></i>
+                </div>
+            </a>
+
+            <a href="manage-verifications.php?status=verified<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" 
+               class="stat-card <?php echo $status_filter == 'verified' ? 'active-filter' : ''; ?>" title="View verified residency accounts">
                 <div class="stat-info">
-                    <h3><?php echo number_format($stats['verified'] ?? 0); ?></h3>
-                    <p>Verified</p>
+                    <span class="stat-label">Verified</span>
+                    <span class="stat-number"><?php echo number_format($stats['verified'] ?? 0); ?></span>
                 </div>
-            </div>
-            <div class="stat-card" onclick="window.location.href='manage-verifications.php?status=rejected'">
-                <div class="stat-icon rejected"><i class="fas fa-times-circle"></i></div>
+                <div class="stat-icon-box verified">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+            </a>
+
+            <a href="manage-verifications.php?status=rejected<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?>" 
+               class="stat-card <?php echo $status_filter == 'rejected' ? 'active-filter' : ''; ?>" title="View disapproved requests">
                 <div class="stat-info">
-                    <h3><?php echo number_format($stats['rejected'] ?? 0); ?></h3>
-                    <p>Rejected</p>
+                    <span class="stat-label">Disapproved</span>
+                    <span class="stat-number"><?php echo number_format($stats['rejected'] ?? 0); ?></span>
                 </div>
-            </div>
+                <div class="stat-icon-box rejected">
+                    <i class="fas fa-times-circle"></i>
+                </div>
+            </a>
         </div>
-        
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-            <form method="GET" class="filter-form">
-                <div class="filter-group">
-                    <label><i class="fas fa-filter"></i> Status</label>
-                    <select name="status">
-                        <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Status</option>
-                        <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending</option>
-                        <option value="verified" <?php echo $status_filter == 'verified' ? 'selected' : ''; ?>>Verified</option>
-                        <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
-                    </select>
+
+        <!-- Filter and Search Toolbar -->
+        <div class="filter-toolbar-card">
+            <form method="GET" class="filter-toolbar-form">
+                <div class="filter-item status-item">
+                    <label for="statusFilter"><i class="fas fa-filter"></i> Status</label>
+                    <div class="select-wrapper">
+                        <select name="status" id="statusFilter" class="filter-select">
+                            <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Status</option>
+                            <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending Only</option>
+                            <option value="verified" <?php echo $status_filter == 'verified' ? 'selected' : ''; ?>>Verified Only</option>
+                            <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Disapproved Only</option>
+                        </select>
+                        <i class="fas fa-chevron-down select-arrow"></i>
+                    </div>
                 </div>
-                <div class="filter-group">
-                    <label><i class="fas fa-search"></i> Search</label>
-                    <input type="text" name="search" placeholder="Name or email..." value="<?php echo htmlspecialchars($search); ?>">
+
+                <div class="filter-item search-item">
+                    <label for="searchResident"><i class="fas fa-search"></i> Search Resident</label>
+                    <div class="input-with-icon">
+                        <i class="fas fa-search input-icon"></i>
+                        <input type="text" name="search" id="searchResident" class="filter-input" 
+                               placeholder="Search by name, email, or request ID..." 
+                               value="<?php echo htmlspecialchars($search); ?>">
+                        <?php if(!empty($search)): ?>
+                            <a href="manage-verifications.php?status=<?php echo urlencode($status_filter); ?>" class="input-clear-btn" title="Clear search"><i class="fas fa-times"></i></a>
+                        <?php endif; ?>
+                    </div>
                 </div>
-                <div class="filter-group" style="flex: 0.5; min-width: 120px;">
-                    <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Apply</button>
-                    <?php if($status_filter != 'all' || !empty($search)): ?>
-                    <a href="manage-verifications.php" class="clear-link"><i class="fas fa-times"></i> Clear</a>
+
+                <div class="filter-actions">
+                    <button type="submit" class="btn-filter-apply">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                    <?php if($status_filter != 'pending' || !empty($search)): ?>
+                        <a href="manage-verifications.php" class="btn-filter-clear">
+                            <i class="fas fa-redo"></i> Clear
+                        </a>
                     <?php endif; ?>
                 </div>
             </form>
         </div>
-        
-        <!-- Requests Table -->
-        <div class="table-container">
-            <table class="requests-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Applicant</th>
-                        <th>ID Type</th>
-                        <th>Barangay</th>
-                        <th>Submitted</th>
-                        <th>Status</th>
-                        <th style="text-align: center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if($stmt->rowCount() > 0): ?>
-                        <?php while($row = $stmt->fetch(PDO::FETCH_ASSOC)): ?>
-                        <tr>
-                            <td><strong>#<?php echo str_pad($row['verification_id'], 4, '0', STR_PAD_LEFT); ?></strong></td>
-                            <td>
-                                <div class="user-cell">
-                                    <span class="name"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></span>
-                                    <span class="email"><?php echo htmlspecialchars($row['email']); ?></span>
-                                </div>
-                            </td>
-                            <td><?php echo htmlspecialchars($row['id_type']); ?></td>
-                            <td><?php echo htmlspecialchars($row['barangay_name']); ?></td>
-                            <td><?php echo date('M d, Y', strtotime($row['submitted_date'])); ?></td>
-                            <td>
-                                <span class="status-badge <?php echo $row['status']; ?>">
-                                    <i class="fas fa-<?php 
-                                        echo $row['status'] == 'pending' ? 'clock' : 
-                                            ($row['status'] == 'verified' ? 'check-circle' : 'times-circle'); 
-                                    ?>"></i>
-                                    <?php echo ucfirst($row['status']); ?>
-                                </span>
-                            </td>
-                            <td style="text-align: center;">
-                                <div class="action-group" style="justify-content: center;">
-                                    <a href="view-verification.php?id=<?php echo $row['verification_id']; ?>" class="btn-view">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-                                    <?php if($row['status'] == 'pending'): ?>
-                                    <button onclick="openModal(<?php echo $row['verification_id']; ?>)" class="btn-verify">
-                                        <i class="fas fa-check-circle"></i> Verify
-                                    </button>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endwhile; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="7">
-                                <div class="no-data">
-                                    <i class="fas fa-inbox"></i>
-                                    <p>No verification requests found</p>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
 
-<!-- Verify Modal -->
+        <!-- Verification Data Table -->
+        <div class="table-card">
+            <div class="table-toolbar-header">
+                <div class="table-header-count">
+                    <span>Showing Requests</span>
+                    <span class="active-filter-tag">
+                        <?php 
+                            if ($status_filter === 'all') echo 'All Status';
+                            elseif ($status_filter === 'pending') echo 'Pending Review';
+                            elseif ($status_filter === 'verified') echo 'Verified';
+                            elseif ($status_filter === 'rejected') echo 'Disapproved';
+                        ?>
+                    </span>
+                    <?php if(!empty($search)): ?>
+                        <span class="active-filter-tag" style="background: rgba(127,3,3,0.06); color: var(--maroon);">
+                            "<?php echo htmlspecialchars($search); ?>"
+                        </span>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="verification-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 90px;">ID</th>
+                            <th>Applicant</th>
+                            <th>ID Type</th>
+                            <th>Barangay</th>
+                            <th>Submitted</th>
+                            <th>Status</th>
+                            <th style="text-align: right; padding-right: 28px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if($stmt->rowCount() > 0): ?>
+                            <?php while($row = $stmt->fetch(PDO::FETCH_ASSOC)): 
+                                $applicant_name = trim($row['first_name'] . ' ' . $row['last_name']);
+                                $app_initials = getInitials($applicant_name ?: 'Applicant');
+                                $user_pic = !empty($row['profile_picture']) ? $row['profile_picture'] : '';
+                            ?>
+                            <tr>
+                                <td>
+                                    <span class="id-badge">#<?php echo str_pad($row['verification_id'], 4, '0', STR_PAD_LEFT); ?></span>
+                                </td>
+                                <td>
+                                    <div class="applicant-cell">
+                                        <div class="applicant-avatar">
+                                            <?php if (!empty($user_pic) && file_exists('../' . $user_pic)): ?>
+                                                <img src="../<?php echo htmlspecialchars($user_pic); ?>" alt="Avatar">
+                                            <?php else: ?>
+                                                <?php echo $app_initials; ?>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="applicant-info">
+                                            <span class="applicant-name"><?php echo htmlspecialchars($applicant_name); ?></span>
+                                            <span class="applicant-email"><?php echo htmlspecialchars($row['email']); ?></span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="id-type-pill">
+                                        <i class="fas fa-id-card"></i>
+                                        <?php echo htmlspecialchars(html_entity_decode($row['id_type'])); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="location-info">
+                                        <i class="fas fa-map-marker-alt"></i>
+                                        <?php echo htmlspecialchars($row['barangay_name']); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="date-cell">
+                                        <span class="date-main"><?php echo date('M d, Y', strtotime($row['submitted_date'])); ?></span>
+                                        <span class="date-sub"><?php echo date('h:i A', strtotime($row['submitted_date'])); ?></span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <?php if($row['status'] == 'pending'): ?>
+                                        <span class="status-pill pending">
+                                            <i class="fas fa-clock"></i> Pending
+                                        </span>
+                                    <?php elseif($row['status'] == 'verified'): ?>
+                                        <span class="status-pill verified">
+                                            <i class="fas fa-check-circle"></i> Verified
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="status-pill rejected">
+                                            <i class="fas fa-times-circle"></i> Disapproved
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="text-align: right; padding-right: 20px;">
+                                    <div class="actions-cell" style="justify-content: flex-end;">
+                                        <a href="view-verification.php?id=<?php echo $row['verification_id']; ?>" 
+                                           class="btn-table-action btn-table-view" title="View document and resident details">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        
+                                        <?php if($row['status'] == 'pending'): ?>
+                                            <button type="button" 
+                                                    onclick="openModal(<?php echo $row['verification_id']; ?>, '<?php echo addslashes($applicant_name); ?>', 'pending')" 
+                                                    class="btn-table-action btn-table-verify" title="Review and verify this applicant">
+                                                <i class="fas fa-check-circle"></i> Verify
+                                            </button>
+                                        <?php else: ?>
+                                            <button type="button" 
+                                                    onclick="openModal(<?php echo $row['verification_id']; ?>, '<?php echo addslashes($applicant_name); ?>', '<?php echo $row['status']; ?>')" 
+                                                    class="btn-table-action btn-table-edit" title="Re-evaluate or change status">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endwhile; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="7">
+                                    <div class="table-empty-state">
+                                        <i class="fas fa-inbox"></i>
+                                        <h4>No Verification Requests Found</h4>
+                                        <p>There are no residency requests matching your current filter criteria.</p>
+                                        <?php if($status_filter != 'pending' || !empty($search)): ?>
+                                            <a href="manage-verifications.php" class="btn-filter-apply" style="display:inline-flex; text-decoration:none; line-height:40px;">
+                                                <i class="fas fa-redo"></i> Reset Filters
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+<!-- Modern Verify Modal -->
 <div id="verifyModal" class="modal">
     <div class="modal-content">
-        <h3><i class="fas fa-gavel"></i> Verify Resident</h3>
+        <div class="modal-header">
+            <h3><i class="fas fa-shield-alt"></i> Verify Resident Application</h3>
+            <button type="button" class="modal-close-icon" onclick="closeModal()" title="Close"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="modal-applicant-summary" id="modalApplicantBox">
+            <span class="summary-name" id="modalApplicantName">Applicant Name</span>
+            <span class="summary-id" id="modalRequestId">#0000</span>
+        </div>
+
         <form method="POST">
             <input type="hidden" name="verification_id" id="verification_id">
+            
             <div class="form-group">
-                <label>Verification Status</label>
+                <label for="verify_status">Verification Decision</label>
                 <select name="status" id="verify_status" required>
-                    <option value="verified">? Approve - Verified Resident</option>
-                    <option value="rejected">? Reject - Not Verified</option>
+                    <option value="verified">✓ Approve - Verified Resident</option>
+                    <option value="rejected">✕ Disapproved - Not Verified</option>
                 </select>
             </div>
+
             <div class="form-group" id="reason_group" style="display: none;">
-                <label>Rejection Reason <span style="color: #EF5350;">*</span></label>
-                <textarea name="rejection_reason" id="rejection_reason" rows="3" placeholder="Please provide a reason for rejection..."></textarea>
+                <label for="rejection_reason">Disapproval Reason <span style="color: #DC2626;">*</span></label>
+                <textarea name="rejection_reason" id="rejection_reason" rows="3" placeholder="State reason for disapproving residency request (e.g. invalid document, blurry photo, out of jurisdiction)..."></textarea>
             </div>
+
             <div class="modal-buttons">
-                <button type="submit" name="update_verification" class="btn-submit">Submit</button>
-                <button type="button" onclick="closeModal()" class="btn-cancel">Cancel</button>
+                <button type="submit" name="update_verification" class="btn-submit">
+                    <i class="fas fa-check"></i> Submit Decision
+                </button>
+                <button type="button" onclick="closeModal()" class="btn-cancel">
+                    Cancel
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-// ========== THEME TOGGLE ==========
-const themeToggle = document.getElementById('themeToggle');
-const html = document.documentElement;
 
-// Check for saved theme preference
-const currentTheme = localStorage.getItem('theme') || 
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-// Apply theme
-function setTheme(theme) {
-    html.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    
-    document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-}
-
-setTheme(currentTheme);
-
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
-
-// ========== SEARCH ==========
+// ========== QUICK SEARCH VIA ENTER KEY ==========
 document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
     if (e.key === 'Enter') {
         const query = this.value.trim();
-        if (query) {
-            window.location.href = 'manage-verifications.php?search=' + encodeURIComponent(query) + '&status=<?php echo $status_filter; ?>';
-        }
+        window.location.href = 'manage-verifications.php?search=' + encodeURIComponent(query) + '&status=<?php echo urlencode($status_filter); ?>';
     }
 });
 
-// ========== MODAL ==========
-function openModal(id) {
+// ========== MODAL CONTROLS ==========
+function openModal(id, applicantName = '', currentStatus = 'pending') {
     document.getElementById('verification_id').value = id;
-    document.getElementById('verifyModal').classList.add('active');
+    
+    const nameElem = document.getElementById('modalApplicantName');
+    const idElem = document.getElementById('modalRequestId');
+    if (nameElem && applicantName) nameElem.textContent = applicantName;
+    if (idElem) idElem.textContent = '#' + String(id).padStart(4, '0');
+
+    const statusSelect = document.getElementById('verify_status');
+    if (statusSelect) {
+        statusSelect.value = (currentStatus === 'rejected') ? 'rejected' : 'verified';
+    }
+
+    const reasonGroup = document.getElementById('reason_group');
+    const reasonInput = document.getElementById('rejection_reason');
+    if (currentStatus === 'rejected' && reasonGroup) {
+        reasonGroup.style.display = 'block';
+        if (reasonInput) reasonInput.required = true;
+    } else if (reasonGroup) {
+        reasonGroup.style.display = 'none';
+        if (reasonInput) reasonInput.required = false;
+    }
+
+    const modal = document.getElementById('verifyModal');
+    if (modal) modal.classList.add('active');
 }
 
 function closeModal() {
-    document.getElementById('verifyModal').classList.remove('active');
-    document.getElementById('reason_group').style.display = 'none';
-    document.getElementById('rejection_reason').value = '';
-    document.getElementById('verify_status').value = 'verified';
+    const modal = document.getElementById('verifyModal');
+    if (modal) modal.classList.remove('active');
+    
+    const reasonGroup = document.getElementById('reason_group');
+    const reasonInput = document.getElementById('rejection_reason');
+    if (reasonGroup) reasonGroup.style.display = 'none';
+    if (reasonInput) {
+        reasonInput.value = '';
+        reasonInput.required = false;
+    }
+    
+    const statusSelect = document.getElementById('verify_status');
+    if (statusSelect) statusSelect.value = 'verified';
 }
 
-// Show/hide rejection reason
+// Dynamic Toggle Rejection Reason
 document.addEventListener('DOMContentLoaded', function() {
     const statusSelect = document.getElementById('verify_status');
     if (statusSelect) {
         statusSelect.addEventListener('change', function() {
             const reasonGroup = document.getElementById('reason_group');
+            const reasonInput = document.getElementById('rejection_reason');
             if (this.value === 'rejected') {
-                reasonGroup.style.display = 'block';
-                document.getElementById('rejection_reason').required = true;
+                if (reasonGroup) reasonGroup.style.display = 'block';
+                if (reasonInput) {
+                    reasonInput.required = true;
+                    reasonInput.focus();
+                }
             } else {
-                reasonGroup.style.display = 'none';
-                document.getElementById('rejection_reason').required = false;
+                if (reasonGroup) reasonGroup.style.display = 'none';
+                if (reasonInput) {
+                    reasonInput.required = false;
+                    reasonInput.value = '';
+                }
             }
         });
     }
@@ -1232,14 +1592,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // Close modal when clicking outside
 window.onclick = function(event) {
     const modal = document.getElementById('verifyModal');
-    if (event.target == modal) {
+    if (event.target === modal) {
         closeModal();
     }
-}
+};
+
+// Close modal on Escape key
+window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
+});
 </script>
-</body>
-</html>
-
-
-
-
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>

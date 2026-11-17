@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/config/database.php';
 
 $database = new Database();
@@ -15,12 +15,17 @@ $programs = $programs_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get housing statistics
 $stats_query = "SELECT 
-    COUNT(*) as total_units,
-    SUM(CASE WHEN status = 'active' THEN total_units ELSE 0 END) as available_units,
-    (SELECT COUNT(*) FROM housing_beneficiaries WHERE status = 'approved') as approved_beneficiaries,
+    COUNT(*) as active_programs,
+    COALESCE(SUM(total_units), 0) as total_units,
+    (SELECT COUNT(*) FROM housing_beneficiaries WHERE status IN ('approved', 'released')) as approved_beneficiaries,
     (SELECT COUNT(*) FROM housing_beneficiaries WHERE status = 'pending') as pending_applications
-    FROM housing_programs";
+    FROM housing_programs WHERE status = 'active'";
 $stats = $db->query($stats_query)->fetch(PDO::FETCH_ASSOC);
+
+// Calculate remaining available units
+$occupied = (int)($stats['approved_beneficiaries'] ?? 0);
+$total_cap = (int)($stats['total_units'] ?? 0);
+$stats['available_units'] = max(0, $total_cap - $occupied);
 
 // Get recent housing beneficiaries
 $beneficiaries_query = "SELECT h.*, u.first_name, u.last_name, p.program_name 
@@ -57,7 +62,7 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             --light-blue: #96C0CE;
             --alabaster: #E3E7EB;
             
-            --bg-primary: #E8ECF2;
+            --bg-primary: #E4EFE7;
             --bg-card: #FFFFFF;
             --text-primary: #263238;
             --text-secondary: #3A4A5A;
@@ -79,7 +84,7 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: #0C1417;
             --bg-card: #1a2332;
             --text-primary: #E8EDF5;
             --text-secondary: #B0C4DE;
@@ -673,6 +678,255 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
             color: var(--gold-light);
         }
 
+        /* ========== HOUSING PATHWAYS COMPARISON SECTION (REQ 1) ========== */
+        .pathways-section {
+            padding: 75px 0 35px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .pathway-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 28px;
+            margin-top: 35px;
+        }
+
+        .pathway-hero-card {
+            background: var(--bg-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-card);
+            padding: 34px 30px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .pathway-hero-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .pathway-hero-card.relocation {
+            border-top: 5px solid var(--maroon);
+        }
+
+        .pathway-hero-card.insite {
+            border-top: 5px solid var(--midnight);
+        }
+
+        [data-theme="dark"] .pathway-hero-card.insite {
+            border-top-color: var(--gold-light);
+        }
+
+        .pathway-tag-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            width: fit-content;
+            margin-bottom: 16px;
+        }
+
+        .pathway-hero-card.relocation .pathway-tag-badge {
+            background: rgba(127, 3, 3, 0.12);
+            color: var(--maroon);
+        }
+
+        .pathway-hero-card.insite .pathway-tag-badge {
+            background: rgba(15, 65, 74, 0.14);
+            color: var(--midnight);
+        }
+
+        [data-theme="dark"] .pathway-hero-card.insite .pathway-tag-badge {
+            background: rgba(232, 213, 168, 0.18);
+            color: var(--gold-light);
+        }
+
+        .pathway-hero-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .pathway-hero-icon {
+            width: 58px;
+            height: 58px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            flex-shrink: 0;
+        }
+
+        .pathway-hero-card.relocation .pathway-hero-icon {
+            background: rgba(127, 3, 3, 0.12);
+            color: var(--maroon);
+        }
+
+        .pathway-hero-card.insite .pathway-hero-icon {
+            background: rgba(15, 65, 74, 0.14);
+            color: var(--midnight);
+        }
+
+        [data-theme="dark"] .pathway-hero-card.insite .pathway-hero-icon {
+            background: rgba(232, 213, 168, 0.15);
+            color: var(--gold-light);
+        }
+
+        .pathway-hero-title h3 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0 0 4px;
+        }
+
+        .pathway-hero-title span {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .pathway-hero-desc {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.65;
+            margin-bottom: 22px;
+            flex-grow: 1;
+        }
+
+        .pathway-feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 26px;
+        }
+
+        .pathway-feature-list li {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            padding: 6px 0 6px 24px;
+            position: relative;
+            line-height: 1.5;
+        }
+
+        .pathway-feature-list li::before {
+            content: "✓";
+            color: var(--color-success);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .btn-pathway-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 13px 26px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 0.88rem;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .pathway-hero-card.relocation .btn-pathway-primary {
+            background: var(--maroon);
+            color: white;
+        }
+
+        .pathway-hero-card.relocation .btn-pathway-primary:hover {
+            background: var(--maroon-light);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(127, 3, 3, 0.3);
+        }
+
+        .pathway-hero-card.insite .btn-pathway-primary {
+            background: var(--midnight);
+            color: white;
+        }
+
+        .pathway-hero-card.insite .btn-pathway-primary:hover {
+            background: #155562;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(15, 65, 74, 0.3);
+        }
+
+        /* Filter Tabs */
+        .filter-tabs-bar {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 25px 0 35px;
+            flex-wrap: wrap;
+        }
+
+        .filter-tab-btn {
+            padding: 9px 22px;
+            border-radius: 30px;
+            background: var(--bg-primary);
+            border: 1.5px solid var(--border-color);
+            color: var(--text-secondary);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .filter-tab-btn:hover {
+            border-color: var(--maroon);
+            color: var(--maroon);
+        }
+
+        .filter-tab-btn.active {
+            background: var(--maroon);
+            color: white;
+            border-color: var(--maroon);
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.25);
+        }
+
+        [data-theme="dark"] .filter-tab-btn.active {
+            background: var(--gold-light);
+            color: var(--midnight);
+            border-color: var(--gold-light);
+            box-shadow: 0 4px 12px rgba(232, 213, 168, 0.25);
+        }
+
+        .program-card-type-tag {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 20px;
+            z-index: 3;
+            letter-spacing: 0.3px;
+        }
+
+        .program-card-type-tag.relocation {
+            background: rgba(127, 3, 3, 0.9);
+            color: white;
+        }
+
+        .program-card-type-tag.insite {
+            background: rgba(15, 65, 74, 0.92);
+            color: white;
+        }
+
         /* ========== SUCCESS STORIES ========== */
         .stories-section {
             padding: 80px 0;
@@ -1099,6 +1353,10 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="quick-links-bar">
         <div class="container">
             <div class="quick-links-container">
+                <a href="#pathways" class="quick-link-item">
+                    <i class="fas fa-layer-group"></i>
+                    <span>Housing Options</span>
+                </a>
                 <a href="#programs" class="quick-link-item">
                     <i class="fas fa-house"></i>
                     <span>Available Programs</span>
@@ -1124,24 +1382,99 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="container">
             <div class="stats-container">
                 <div class="stat-item">
-                    <div class="stat-icon-wrapper"><i class="fas fa-city"></i></div>
+                    <div class="stat-icon-wrapper"><i class="fas fa-house-chimney"></i></div>
                     <div class="stat-number" data-target="<?php echo $stats['total_units'] ?? 0; ?>">0</div>
-                    <div class="stat-label">Total Subdivisions</div>
+                    <div class="stat-label">Total Housing Units</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon-wrapper"><i class="fas fa-circle-check"></i></div>
-                    <div class="stat-number" data-target="<?php echo $stats['available_units'] ?? 0; ?>">0</div>
-                    <div class="stat-label">Active Sites</div>
+                    <div class="stat-icon-wrapper"><i class="fas fa-building-columns"></i></div>
+                    <div class="stat-number" data-target="<?php echo $stats['active_programs'] ?? 0; ?>">0</div>
+                    <div class="stat-label">Active Housing Programs</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-icon-wrapper"><i class="fas fa-users-viewfinder"></i></div>
                     <div class="stat-number" data-target="<?php echo $stats['approved_beneficiaries'] ?? 0; ?>">0</div>
-                    <div class="stat-label">Families Relocated</div>
+                    <div class="stat-label">Beneficiaries Supported</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-icon-wrapper"><i class="fas fa-hourglass-half"></i></div>
                     <div class="stat-number" data-target="<?php echo $stats['pending_applications'] ?? 0; ?>">0</div>
-                    <div class="stat-label">Pending Reviews</div>
+                    <div class="stat-label">Pending Applications</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Housing Assistance Options Section (Req 1) -->
+    <section id="pathways" class="pathways-section">
+        <div class="container">
+            <div class="section-header" style="text-align: center; max-width: 820px; margin: 0 auto 10px;">
+                <span class="badge" style="background: rgba(127,3,3,0.1); color: var(--maroon); font-size: 0.8rem; font-weight: 800; padding: 4px 14px; border-radius: 20px; display: inline-block; margin-bottom: 12px;">CSWDO HOUSING ASSISTANCE PATHWAYS</span>
+                <h2 style="font-size: 2.2rem; font-weight: 800; color: var(--text-primary); margin: 0 0 10px;">Two Housing Assistance Options</h2>
+                <p style="color: var(--text-muted); font-size: 1rem; line-height: 1.6;">Whether your household requires resettlement into a planned government community or you own land and wish to build on-site, the City Government of Palayan provides tailored assistance pathways.</p>
+            </div>
+
+            <div class="pathway-cards-grid">
+                <!-- Option 1: Relocation Housing -->
+                <div class="pathway-hero-card relocation">
+                    <span class="pathway-tag-badge"><i class="fas fa-truck-moving"></i> Municipal Resettlement</span>
+                    <div class="pathway-hero-header">
+                        <div class="pathway-hero-icon">
+                            <i class="fas fa-truck-ramp-box"></i>
+                        </div>
+                        <div class="pathway-hero-title">
+                            <h3>Relocation Housing</h3>
+                            <span>Resettlement Communities</span>
+                        </div>
+                    </div>
+                    <p class="pathway-hero-desc">
+                        For qualified beneficiaries who need to be relocated to a designated municipal housing site. Designed for families residing in floodways, danger zones, informal settlements, or displaced by public infrastructure projects.
+                    </p>
+                    <ul class="pathway-feature-list">
+                        <li><strong>Designated Sites:</strong> Akap Village &amp; San Lorenzo NHA Housing</li>
+                        <li><strong>Allocated Units:</strong> Complete subdivision lot and core unit</li>
+                        <li><strong>Community Utilities:</strong> Water, electricity, and drainage integrated</li>
+                        <li><strong>Full Tenurial Award:</strong> Legal occupancy certificate &amp; mortgage plan</li>
+                    </ul>
+                    <div style="margin-top: auto; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <a href="apply-housing.php?type=relocation" class="btn-pathway-primary">
+                            <i class="fas fa-paper-plane"></i> Apply for Relocation
+                        </a>
+                        <button type="button" class="btn-details" onclick="filterHousingPrograms('relocation')">
+                            <i class="fas fa-building"></i> View Sites (2)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Option 2: In-Site Housing -->
+                <div class="pathway-hero-card insite">
+                    <span class="pathway-tag-badge"><i class="fas fa-hammer"></i> Build On Existing Lot</span>
+                    <div class="pathway-hero-header">
+                        <div class="pathway-hero-icon">
+                            <i class="fas fa-house-chimney-user"></i>
+                        </div>
+                        <div class="pathway-hero-title">
+                            <h3>In-Site Housing</h3>
+                            <span>Build on Your Own Land / Property</span>
+                        </div>
+                    </div>
+                    <p class="pathway-hero-desc">
+                        For qualified beneficiaries who already own or have access to their own land or property and want to construct a house on that existing site. Allows CSWDO applicants to receive housing support without being required to relocate.
+                    </p>
+                    <ul class="pathway-feature-list">
+                        <li><strong>No Relocation Required:</strong> Remain in your current neighborhood &amp; barangay</li>
+                        <li><strong>Eligible Lot Status:</strong> Titled land, Tax Declaration, or notarized consent</li>
+                        <li><strong>Building Support:</strong> Core house materials, subsidy, and technical plans</li>
+                        <li><strong>Engineering Oversight:</strong> City Engineer &amp; CSWDO inspection clearance</li>
+                    </ul>
+                    <div style="margin-top: auto; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <a href="apply-housing.php?type=in_site" class="btn-pathway-primary">
+                            <i class="fas fa-hammer"></i> Apply for In-Site Housing
+                        </a>
+                        <button type="button" class="btn-details" onclick="filterHousingPrograms('in_site')">
+                            <i class="fas fa-circle-info"></i> In-Site Program (1)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1166,17 +1499,37 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Available Housing Programs Grid -->
     <section id="programs" class="programs-section">
         <div class="container">
-            <div class="section-header">
-                <h2>Available Programs & Communities</h2>
-                <p>Browse active housing and subdivision development projects managed by the CSWDO Palayan City.</p>
+            <div class="section-header" style="text-align: center;">
+                <h2>Available Programs &amp; Communities</h2>
+                <p>Browse active housing and subdivision development projects managed by CSWDO Palayan City.</p>
             </div>
 
-            <div class="programs-grid">
-                <?php foreach ($programs as $program): ?>
-                <div class="program-card">
-                    <div class="program-image">
-                        <i class="fas fa-hotel"></i>
+            <!-- Filter Tabs (Req 1) -->
+            <div class="filter-tabs-bar">
+                <button type="button" class="filter-tab-btn active" onclick="filterHousingPrograms('all')">
+                    <i class="fas fa-border-all"></i> All Programs (<?php echo count($programs); ?>)
+                </button>
+                <button type="button" class="filter-tab-btn" onclick="filterHousingPrograms('relocation')">
+                    <i class="fas fa-truck-moving"></i> Relocation Housing (2)
+                </button>
+                <button type="button" class="filter-tab-btn" onclick="filterHousingPrograms('in_site')">
+                    <i class="fas fa-hammer"></i> In-Site Housing (1)
+                </button>
+            </div>
+
+            <div class="programs-grid" id="programsGrid">
+                <?php foreach ($programs as $program): 
+                    $p_type = $program['housing_type'] ?? 'relocation';
+                    $is_insite = ($p_type === 'in_site');
+                ?>
+                <div class="program-card" data-type="<?php echo htmlspecialchars($p_type); ?>">
+                    <div class="program-image" style="<?php echo $is_insite ? 'background: linear-gradient(135deg, #0F414A 0%, #1a5864 100%);' : ''; ?>">
+                        <i class="fas fa-<?php echo $is_insite ? 'house-chimney-user' : 'hotel'; ?>"></i>
                         <span class="program-badge"><?php echo htmlspecialchars($program['program_code']); ?></span>
+                        <span class="program-card-type-tag <?php echo $is_insite ? 'insite' : 'relocation'; ?>">
+                            <i class="fas fa-<?php echo $is_insite ? 'hammer' : 'truck-moving'; ?>"></i>
+                            <?php echo $is_insite ? 'In-Site Housing' : 'Relocation Housing'; ?>
+                        </span>
                     </div>
                     <div class="program-content">
                         <h3><?php echo htmlspecialchars($program['program_name']); ?></h3>
@@ -1188,8 +1541,14 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
                         
                         <div class="program-details">
                             <div class="detail-row">
-                                <span class="detail-label">Total Allocation:</span>
-                                <span class="detail-value"><?php echo $program['total_units']; ?> Units</span>
+                                <span class="detail-label"><?php echo $is_insite ? 'Beneficiary Target:' : 'Total Allocation:'; ?></span>
+                                <span class="detail-value"><?php echo $program['total_units']; ?> Units / Slots</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Housing Pathway:</span>
+                                <span class="detail-value" style="color: <?php echo $is_insite ? 'var(--midnight)' : 'var(--maroon)'; ?>; font-weight:800;">
+                                    <?php echo $is_insite ? 'In-Site (Own Land)' : 'Relocation (Resettlement)'; ?>
+                                </span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Program Status:</span>
@@ -1226,7 +1585,7 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
 
                     <div class="program-footer">
                         <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
-                            <a href="apply-housing.php?program_id=<?php echo $program['program_id']; ?>" class="btn-apply">
+                            <a href="apply-housing.php?program_id=<?php echo $program['program_id']; ?><?php echo $is_insite ? '&type=in_site' : '&type=relocation'; ?>" class="btn-apply" style="<?php echo $is_insite ? 'background: var(--midnight);' : ''; ?>">
                                 <i class="fas fa-paper-plane"></i> Apply Online
                             </a>
                         <?php else: ?>
@@ -1259,7 +1618,7 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="story-avatar">
                         <i class="fas fa-house-user"></i>
                     </div>
-                    <h4><?php echo htmlspecialchars($beneficiary['first_name'] . ' ' . $beneficiary['last_name']); ?></h4>
+                    <h4><?php echo htmlspecialchars($beneficiary['first_name'] . ' ' . (!empty($beneficiary['last_name']) ? substr($beneficiary['last_name'], 0, 1) . '.' : '')); ?> (Beneficiary)</h4>
                     <div class="story-location">
                         <i class="fas fa-location-dot"></i>
                         Resettled in <?php echo htmlspecialchars($beneficiary['program_name']); ?>
@@ -1406,6 +1765,31 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         answer.classList.toggle('show');
     }
 
+    // Filter housing programs by type (Req 1)
+    function filterHousingPrograms(type) {
+        document.querySelectorAll('.filter-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.getAttribute('onclick')?.includes(`'${type}'`)) {
+                btn.classList.add('active');
+            }
+        });
+
+        const cards = document.querySelectorAll('#programsGrid .program-card');
+        cards.forEach(card => {
+            const cardType = card.getAttribute('data-type');
+            if (type === 'all' || cardType === type) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        const programsSection = document.getElementById('programs');
+        if (programsSection) {
+            programsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
     // Modal display scripts
     function showProgramDetails(program) {
         const modal = document.getElementById('programModal');
@@ -1413,6 +1797,11 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         const modalContent = document.getElementById('modalContent');
 
         modalName.textContent = program.program_name;
+
+        const isInsite = (program.housing_type === 'in_site');
+        const typeBadge = isInsite
+            ? '<span style="background: rgba(15,65,74,0.12); color: #0F414A; font-weight:800; padding: 4px 12px; border-radius: 20px; font-size:0.8rem; border:1px solid rgba(15,65,74,0.2);"><i class="fas fa-hammer"></i> In-Site Housing (Build on Own Lot)</span>'
+            : '<span style="background: rgba(127,3,3,0.1); color: #7F0303; font-weight:800; padding: 4px 12px; border-radius: 20px; font-size:0.8rem; border:1px solid rgba(127,3,3,0.2);"><i class="fas fa-truck-moving"></i> Relocation Housing (Resettlement Site)</span>';
 
         let requirementsHtml = '';
         if (program.requirements) {
@@ -1427,20 +1816,23 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         modalContent.innerHTML = `
+            <div style="margin-bottom: 16px;">
+                ${typeBadge}
+            </div>
             <div style="margin-bottom: 20px; display: grid; gap: 10px; font-size:0.95rem; border-bottom: 1px solid var(--border-color); padding-bottom:15px;">
                 <p><i class="fas fa-location-dot" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Location:</strong> ${program.location}</p>
-                <p><i class="fas fa-city" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Allocated Units:</strong> ${program.total_units} Units</p>
+                <p><i class="fas fa-city" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Allocated Units:</strong> ${program.total_units} Units / Slots</p>
                 <p><i class="fas fa-circle-info" style="color: var(--maroon); margin-right: 6px;"></i> <strong>Site Status:</strong> <span style="color: ${program.status == 'active' ? 'var(--color-success)' : 'var(--color-danger)'}; font-weight:700;">${program.status.toUpperCase()}</span></p>
             </div>
             <div style="margin-bottom: 20px;">
-                <h4 style="color: var(--text-primary); margin-bottom: 8px; font-weight:700;">Community Description:</h4>
+                <h4 style="color: var(--text-primary); margin-bottom: 8px; font-weight:700;">Program Description:</h4>
                 <p style="line-height: 1.6; color: var(--text-secondary); font-size:0.92rem;">${program.description}</p>
             </div>
             ${requirementsHtml}
             <div style="margin-top: 30px; text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
                 <a href="housing-requirements.php" class="btn-details" style="flex:unset; padding: 10px 20px;">Requirements Guide</a>
                 <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
-                    <a href="apply-housing.php?program_id=${program.program_id}" class="btn-apply" style="flex:unset; padding: 10px 25px;">Apply Online</a>
+                    <a href="apply-housing.php?program_id=${program.program_id}&type=${program.housing_type || 'relocation'}" class="btn-apply" style="flex:unset; padding: 10px 25px;">Apply Online</a>
                 <?php else: ?>
                     <a href="login.php" class="btn-apply" style="flex:unset; padding: 10px 25px;">Login to Apply</a>
                 <?php endif; ?>
@@ -1506,5 +1898,6 @@ $beneficiaries = $beneficiaries_stmt->fetchAll(PDO::FETCH_ASSOC);
         statNumbers.forEach(stat => observer.observe(stat));
     });
     </script>
+    <?php include_once __DIR__ . '/includes/smart-suggestions.php'; ?>
 </body>
 </html>

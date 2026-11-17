@@ -60,7 +60,7 @@ if ($format == 'csv') {
         'Resident Number', 'First Name', 'Last Name', 'Middle Name', 'Suffix', 
         'Gender', 'Birth Date', 'Age', 'Civil Status', 'Contact Number', 
         'Email', 'Street', 'Barangay', 'City', 'Province', 'Postal Code',
-        'Household Number', 'Senior Citizen', 'PWD', 'Occupation', 
+        'Household Number', 'Occupation', 
         'Monthly Income', 'Educational Attainment', 'Emergency Contact Name',
         'Emergency Contact Number', 'Relationship', 'Status', 'Registered Date'
     ]);
@@ -86,8 +86,6 @@ if ($format == 'csv') {
             $resident['province'] ?? '',
             $resident['postal_code'] ?? '',
             $resident['household_number'] ?? '',
-            $resident['senior_citizen'] ? 'Yes' : 'No',
-            $resident['pwd'] ? 'Yes' : 'No',
             $resident['occupation'] ?? '',
             $resident['monthly_income'] ?? 0,
             $resident['educational_attainment'] ?? '',
@@ -112,7 +110,7 @@ if ($format == 'csv') {
     echo '<th>Resident Number</th><th>First Name</th><th>Last Name</th><th>Middle Name</th><th>Suffix</th>';
     echo '<th>Gender</th><th>Birth Date</th><th>Age</th><th>Civil Status</th><th>Contact Number</th>';
     echo '<th>Email</th><th>Street</th><th>Barangay</th><th>City</th><th>Province</th><th>Postal Code</th>';
-    echo '<th>Household Number</th><th>Senior Citizen</th><th>PWD</th><th>Occupation</th>';
+    echo '<th>Household Number</th><th>Occupation</th>';
     echo '<th>Monthly Income</th><th>Educational Attainment</th><th>Emergency Contact Name</th>';
     echo '<th>Emergency Contact Number</th><th>Relationship</th><th>Status</th><th>Registered Date</th>';
     echo '</tr>';
@@ -137,8 +135,6 @@ if ($format == 'csv') {
         echo '<td>' . htmlspecialchars($resident['province'] ?? '') . '</td>';
         echo '<td>' . htmlspecialchars($resident['postal_code'] ?? '') . '</td>';
         echo '<td>' . htmlspecialchars($resident['household_number'] ?? '') . '</td>';
-        echo '<td>' . ($resident['senior_citizen'] ? 'Yes' : 'No') . '</td>';
-        echo '<td>' . ($resident['pwd'] ? 'Yes' : 'No') . '</td>';
         echo '<td>' . htmlspecialchars($resident['occupation'] ?? '') . '</td>';
         echo '<td>' . number_format($resident['monthly_income'] ?? 0, 2) . '</td>';
         echo '<td>' . htmlspecialchars($resident['educational_attainment'] ?? '') . '</td>';

@@ -18,6 +18,7 @@ $user_filter = isset($_GET['user_id']) ? sanitize($_GET['user_id']) : 'all';
 
 // Build query
 $query = "SELECT al.*, 
+          COALESCE(al.new_values, al.old_values, '') as description,
           u.first_name, u.last_name, u.email, u.role,
           CONCAT(u.first_name, ' ', u.last_name) as user_name
           FROM audit_logs al
@@ -43,7 +44,7 @@ if (!empty($date_from) && !empty($date_to)) {
 }
 
 if (!empty($search)) {
-    $query .= " AND (al.action LIKE :search OR al.ip_address LIKE :search OR u.first_name LIKE :search OR u.last_name LIKE :search OR al.description LIKE :search)";
+    $query .= " AND (al.action LIKE :search OR al.ip_address LIKE :search OR u.first_name LIKE :search OR u.last_name LIKE :search OR al.new_values LIKE :search)";
     $params[':search'] = "%$search%";
 }
 
@@ -124,7 +125,7 @@ if (!empty($date_from) && !empty($date_to)) {
     $count_query .= " AND DATE(al.created_at) BETWEEN :date_from AND :date_to";
 }
 if (!empty($search)) {
-    $count_query .= " AND (al.action LIKE :search OR al.ip_address LIKE :search OR u.first_name LIKE :search OR u.last_name LIKE :search OR al.description LIKE :search)";
+    $count_query .= " AND (al.action LIKE :search OR al.ip_address LIKE :search OR u.first_name LIKE :search OR u.last_name LIKE :search OR al.new_values LIKE :search)";
 }
 
 $count_stmt = $db->prepare($count_query);
@@ -156,15 +157,11 @@ $initials = substr($initials, 0, 2);
 
 // Check for dark mode preference
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'System Audit Logs';
+$active_sidebar = 'audit';
+$active_nav = 'audit-logs';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Audit Logs - Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* ========== THEME COLORS ========== */
         :root {
@@ -175,7 +172,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --midnight: #0F414A;
             --white: #FFFFFF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -205,7 +202,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: var(--ref-canvas, #0C1417);
             --bg-secondary: #111827;
             --bg-card: #1a2332;
             --bg-sidebar: #0f1629;
@@ -241,128 +238,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease, color 0.3s ease;
         }
 
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-        }
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            object-fit: contain;
-            background: rgba(255,255,255,0.10);
-            padding: 4px;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .sidebar-menu {
-            list-style: none;
-            padding: 16px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 12px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .user-info .avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.15);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 0.85rem;
-        }
-        .user-details h4 {
-            color: white;
-            font-size: 0.8rem;
-            font-weight: 700;
-            line-height: 1.2;
-        }
-        .user-details p {
-            color: rgba(255,255,255,0.5);
-            font-size: 0.68rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
         .top-bar {
             display: flex;
             justify-content: space-between;
@@ -632,62 +507,25 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .filter-group select, .filter-group input { width: 100% !important; }
         }
     </style>
-</head>
-<body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php" class="active"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Admin'); ?></h4>
-                    <p>Administrator</p>
-                </div>
-            </div>
-        </div>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-history" style="color: var(--ref-maroon);"></i> System Audit Logs</h1>
+        <p>Track administrator and staff activities across the platform</p>
     </div>
-
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-history" style="color: var(--maroon-light); margin-right: 10px;"></i> System Audit Logs</h1>
-                <p>Track administrator and staff activities inside the platform</p>
-            </div>
-            <div class="top-bar-actions">
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-            </div>
-        </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <a href="?<?php echo http_build_query(array_merge($_GET, ['export' => 'csv'])); ?>" class="portal-hdr-pill" style="background: var(--ref-card); border: 1px solid var(--ref-border); font-size: 0.78rem;">
+            <i class="fas fa-download"></i>
+            <span>Export CSV</span>
+        </a>
+    </div>
+</div>
 
         <!-- Filters Form -->
         <div class="filter-bar">
@@ -858,27 +696,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
             <?php endif; ?>
         </div>
-    </div>
-</div>
-
-<script>
-    // Dark mode toggle functionality
-    const themeToggle = document.getElementById('themeToggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('click', function () {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            document.cookie = 'dark_mode=' + (newTheme === 'dark' ? 'enabled' : 'disabled') + '; path=/; max-age=' + (365*24*3600);
-            
-            const icon = themeToggle.querySelector('i');
-            if (icon) {
-                icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-            }
-        });
-    }
-</script>
-</body>
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>
 
 

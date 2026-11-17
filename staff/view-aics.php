@@ -1,6 +1,7 @@
 <?php
 // staff/view-aics.php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/aics-audit-helper.php';
 
 if (!isStaff()) {
     redirect('../login.php');
@@ -8,6 +9,28 @@ if (!isStaff()) {
 
 $database = new Database();
 $db = $database->getConnection();
+
+// Access check: Ensure staff has AICS category permission
+$staff_id_query = "SELECT id FROM staff WHERE user_id = :user_id";
+$staff_id_stmt = $db->prepare($staff_id_query);
+$staff_id_stmt->bindParam(':user_id', $_SESSION['user_id']);
+$staff_id_stmt->execute();
+$staff_data = $staff_id_stmt->fetch(PDO::FETCH_ASSOC);
+$staff_id = $staff_data ? $staff_data['id'] : 0;
+
+$cat_query = "SELECT DISTINCT sc.category_name 
+               FROM staff_service_assignments ssa
+               JOIN service_categories sc ON ssa.category_id = sc.category_id
+               WHERE ssa.staff_id = :staff_id AND ssa.is_active = 1";
+$cat_stmt = $db->prepare($cat_query);
+$cat_stmt->bindParam(':staff_id', $staff_id);
+$cat_stmt->execute();
+$assigned_categories = $cat_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+if (!in_array('AICS', $assigned_categories) && !isAdmin()) {
+    $_SESSION['error'] = "You do not have permission to access or manage AICS applications.";
+    redirect('../staff-dashboard.php');
+}
 
 // Get AICS ID from URL
 $aics_id = isset($_GET['id']) ? sanitize($_GET['id']) : 0;
@@ -65,6 +88,9 @@ if ($stmt->rowCount() == 0) {
 }
 
 $request = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Perform 90-Day Frequency & Duplicate Assistance Audit Check
+$audit_info = checkAicsFrequency($db, (int)$request['user_id'], (int)$aics_id);
 
 // Fetch specific details based on request type
 $specific_details = null;
@@ -286,7 +312,7 @@ function getStatusInfo($status) {
         'submitted' => ['color' => '#FF9800', 'icon' => 'fa-clock', 'text' => 'Submitted', 'bg' => 'rgba(255,152,0,0.12)'],
         'reviewing' => ['color' => '#2196F3', 'icon' => 'fa-search', 'text' => 'Under Review', 'bg' => 'rgba(33,150,243,0.12)'],
         'approved' => ['color' => '#4CAF50', 'icon' => 'fa-check-circle', 'text' => 'Approved', 'bg' => 'rgba(76,175,80,0.12)'],
-        'rejected' => ['color' => '#EF5350', 'icon' => 'fa-times-circle', 'text' => 'Rejected', 'bg' => 'rgba(244,67,54,0.12)'],
+        'rejected' => ['color' => '#EF5350', 'icon' => 'fa-times-circle', 'text' => 'Disapproved', 'bg' => 'rgba(244,67,54,0.12)'],
         'released' => ['color' => '#9C27B0', 'icon' => 'fa-gift', 'text' => 'Released', 'bg' => 'rgba(156,39,176,0.12)']
     ];
     return $statuses[$status] ?? ['color' => '#999', 'icon' => 'fa-question-circle', 'text' => ucfirst($status), 'bg' => '#f5f5f5'];
@@ -366,55 +392,41 @@ $app_pic = !empty($request['profile_picture']) && file_exists(__DIR__ . '/../' .
     : '';
 $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($request['last_name'], 0, 1));
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View AICS Request #<?php echo str_pad($aics_id, 6, '0', STR_PAD_LEFT); ?> - Staff</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
-            --midnight: #0F414A;
-            --white: #FFFFFF;
-            
-            --bg-primary: #E8ECF2;
-            --bg-secondary: #FFFFFF;
-            --bg-card: #FFFFFF;
-            --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #C8D0DC;
-            
-            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
-            --shadow-md: 0 6px 24px rgba(15,65,74,0.12), 0 2px 8px rgba(0,0,0,0.07);
-            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
-            
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
-            
-            --radius-card: 20px;
-            --radius-element: 12px;
-            
-            --color-success: #4CAF50;
-            --color-warning: #FF9800;
-            --color-danger: #EF5350;
-            --color-info: #2196F3;
-            --color-purple: #9C27B0;
-        }
+<?php
+$page_title = 'View AICS Request #' . str_pad($aics_id, 6, '0', STR_PAD_LEFT) . ' - Staff Portal';
+$active_nav = 'aics';
+require_once __DIR__ . '/includes/staff-head.php';
+?>
+<style>
+    /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
+    :root {
+        --tan: var(--ref-gold);
+        --maroon: var(--ref-maroon);
+        --maroon-light: var(--ref-maroon-light);
+        --maroon-dark: #5a0202;
+        --midnight: #0F414A;
+        --white: #FFFFFF;
+        
+        --bg-primary: var(--ref-canvas);
+        --bg-secondary: var(--ref-card);
+        --bg-card: var(--ref-card);
+        --text-primary: var(--ref-text);
+        --text-secondary: var(--ref-text);
+        --text-muted: var(--ref-muted);
+        --border-color: var(--ref-border);
+        
+        --card-bg: var(--ref-card);
+        --badge-bg: var(--ref-card-subtle);
+        
+        --radius-card: 20px;
+        --radius-element: 12px;
+        
+        --color-success: #4CAF50;
+        --color-warning: #FF9800;
+        --color-danger: #EF5350;
+        --color-info: #2196F3;
+        --color-purple: #9C27B0;
+    }
 
         [data-theme="dark"] {
             --bg-primary: #0a0e17;
@@ -1235,65 +1247,47 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
 </head>
 <body>
 <div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Staff Panel</span>
-            </div>
-        </div>
-        
-        <div class="staff-profile">
-            <div class="staff-avatar">
-                <?php if(!empty($avatar_url)): ?>
-                    <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile Picture">
-                <?php else: ?>
-                    <?php echo $initials; ?>
-                <?php endif; ?>
-            </div>
-            <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-            <p><?php echo htmlspecialchars($staff_info['position'] ?? 'Staff Member'); ?></p>
-            <span class="staff-badge"><i class="fas fa-user-check"></i> Staff</span>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="../staff-dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li class="menu-divider">Appointments</li>
-            <li><a href="manage-appointments.php"><i class="fas fa-calendar-check"></i> Manage Appointments</a></li>
-            <li class="menu-divider">Services</li>
-            <li><a href="manage-aics.php"><i class="fas fa-hand-holding-heart"></i> Manage AICS</a></li>
-            <li><a href="manage-housing.php"><i class="fas fa-home"></i> Manage Housing</a></li>
-            <li><a href="reports.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <a href="../index.php"><i class="fas fa-globe"></i> View Main Site</a>
-        </div>
-    </div>
+    <!-- Modern Staff Sidebar -->
+    <?php require_once __DIR__ . '/includes/staff-sidebar.php'; ?>
 
     <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-file-alt" style="color: var(--maroon-light); margin-right: 10px;"></i> AICS Request Details</h1>
-                <p>View and manage assistance request</p>
+    <main class="main-content">
+        <!-- Unified Staff Header Bar -->
+        <?php require_once __DIR__ . '/includes/staff-header.php'; ?>
+
+        <!-- Elevated Big Card Container -->
+        <div class="staff-big-card">
+            <!-- Subheader with Bulgash Signature -->
+            <div class="staff-subheader">
+                <div class="staff-subheader-title">
+                    <h1><i class="fas fa-file-alt"></i> AICS Request Details</h1>
+                    <p>Tracking Number: <strong>AICS-<?php echo str_pad($aics_id, 6, '0', STR_PAD_LEFT); ?></strong> • <?php echo ucfirst(str_replace('_', ' ', $request['request_type'])); ?> Assistance</p>
+                </div>
+                <div class="staff-subheader-actions">
+                    <a href="manage-aics.php" class="btn-primary" style="background: var(--ref-canvas); color: var(--ref-text); border: 1px solid var(--ref-border); border-radius: 50px;">
+                        <i class="fas fa-arrow-left"></i> Back to AICS Requests
+                    </a>
+                </div>
             </div>
-            <div class="top-bar-actions">
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="manage-aics.php" class="top-icon"><i class="fas fa-arrow-left"></i></a>
+
+        <!-- 90-Day Frequency & Duplicate Assistance Audit Protection Banner -->
+        <?php echo renderAicsAuditBanner($audit_info, $request); ?>
+
+        <?php if (!empty($request['audit_override_reason'])): ?>
+        <div class="audit-exception-approved-box" style="background: rgba(127, 3, 3, 0.05); border-left: 4px solid var(--maroon); padding: 14px 18px; border-radius: 10px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--border-color); border-left: 4px solid var(--maroon);">
+            <div style="width: 32px; height: 32px; border-radius: 6px; background: rgba(127, 3, 3, 0.12); color: var(--maroon); display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; margin-top: 2px;">
+                <i class="fas fa-certificate"></i>
+            </div>
+            <div>
+                <div style="font-weight: 800; color: var(--maroon); font-size: 0.88rem; margin-bottom: 3px;">
+                    COA Audit Record: Approved Under 90-Day Policy Exception
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+                    <strong>Social Worker Justification:</strong> <?php echo nl2br(htmlspecialchars($request['audit_override_reason'])); ?>
+                </p>
             </div>
         </div>
-
-        <a href="manage-aics.php" class="back-btn">
-            <i class="fas fa-arrow-left"></i> Back to AICS Requests
-        </a>
+        <?php endif; ?>
 
         <?php $statusInfo = getStatusInfo($request['status']); ?>
         
@@ -1397,6 +1391,15 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
                     <span class="label">Submission Date</span>
                     <span class="value"><?php echo date('F d, Y h:i A', strtotime($request['submission_date'])); ?></span>
                 </div>
+                <?php 
+                $disp_purpose = !empty($request['purpose']) ? $request['purpose'] : ($specific_details['purpose'] ?? '');
+                if (!empty($disp_purpose)): 
+                ?>
+                <div class="info-row">
+                    <span class="label">Purpose / Need</span>
+                    <span class="value"><?php echo nl2br(htmlspecialchars($disp_purpose)); ?></span>
+                </div>
+                <?php endif; ?>
             </div>
             
             <!-- Specific Details based on request type -->
@@ -1407,22 +1410,25 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
                     <h3><?php echo $detail_table; ?></h3>
                 </div>
                 <?php foreach($specific_details as $key => $value): ?>
-                    <?php if($key != 'id' && $key != 'aics_id' && !empty($value) && $value !== null): ?>
+                    <?php 
+                    if (in_array($key, ['id', 'aics_id', 'cash_relief_id', 'medical_id', 'funeral_id', 'educational_id', 'transportation_id', 'food_id', 'material_id', 'created_at', 'updated_at'])) continue;
+                    if ($value === '' || $value === null) continue;
+                    if ($key === 'purpose' && !empty($disp_purpose)) continue;
+                    ?>
                     <div class="info-row">
                         <span class="label"><?php echo formatFieldName($key); ?></span>
                         <span class="value">
                             <?php 
                             if($key == 'amount_requested' || $key == 'estimated_value' || $key == 'tuition_fee' || $key == 'monthly_income' || $key == 'estimated_fare') {
-                                echo '₱' . number_format($value, 2);
+                                echo '₱' . number_format((float)$value, 2);
                             } elseif($key == 'travel_date' || $key == 'incident_date') {
                                 echo date('F d, Y', strtotime($value));
                             } else {
-                                echo nl2br(htmlspecialchars($value));
+                                echo nl2br(htmlspecialchars(ucfirst(str_replace('_', ' ', $value))));
                             }
                             ?>
                         </span>
                     </div>
-                    <?php endif; ?>
                 <?php endforeach; ?>
             </div>
             <?php endif; ?>
@@ -1478,7 +1484,7 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
                             <i class="fas fa-times-circle"></i>
                         </div>
                         <div class="timeline-content">
-                            <h4>Application Rejected</h4>
+                            <h4>Application Disapproved</h4>
                             <p style="color: var(--color-danger); font-weight: 500;">Reason: <?php echo nl2br(htmlspecialchars($request['rejection_reason'])); ?></p>
                             <?php if($request['review_date']): ?>
                             <span class="time"><?php echo date('F d, Y h:i A', strtotime($request['review_date'])); ?></span>
@@ -1668,7 +1674,9 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
             </button>
         </div>
     </div>
-</div>
+</div> <!-- Close staff-big-card -->
+</main>
+</div> <!-- Close app-container -->
 
 <!-- Update Status Modal -->
 <div id="updateModal" class="modal">
@@ -1691,7 +1699,7 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
                     <select name="new_status" id="modal_status" required onchange="toggleFields()">
                         <option value="reviewing">🔍 Under Review</option>
                         <option value="approved">✅ Approve</option>
-                        <option value="rejected">❌ Reject</option>
+                        <option value="rejected">❌ Disapprove</option>
                         <option value="released">💰 Release Payment</option>
                     </select>
                 </div>
@@ -1702,9 +1710,25 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
                 </div>
                 
                 <div class="form-group" id="remarks_field" style="display: none;">
-                    <label>Rejection Reason</label>
-                    <textarea name="remarks" id="remarks" rows="3" placeholder="Enter reason for rejection"></textarea>
+                    <label>Disapproval Reason</label>
+                    <textarea name="remarks" id="remarks" rows="3" placeholder="Enter reason for disapproval"></textarea>
                 </div>
+
+                <!-- 90-Day Policy Audit Override Field (Shown only when approving a flagged request) -->
+                <?php if (!empty($audit_info['is_flagged'])): ?>
+                <div class="form-group" id="audit_override_field" style="display: none;">
+                    <div style="background: rgba(239, 68, 68, 0.08); border: 1.5px solid #EF4444; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                        <div style="font-weight: 700; color: #DC2626; font-size: 0.8rem; margin-bottom: 4px;">
+                            <i class="fas fa-exclamation-triangle"></i> 90-Day Policy Audit Override Required
+                        </div>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.4;">
+                            Applicant received prior assistance <strong><?php echo $audit_info['days_elapsed']; ?> days ago</strong>. To approve within 90 days per COA/DSWD MC 15 S. 2022, please record the Social Worker justification:
+                        </p>
+                        <label style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: #DC2626; display: block; margin-bottom: 4px;">Social Worker Case Justification *</label>
+                        <textarea name="audit_override_reason" id="audit_override_reason" rows="2" placeholder="e.g. Life-saving ongoing chemotherapy / dialysis treatment / emergency house fire calamity exception assessed by Social Worker..." style="width: 100%; font-size: 0.78rem; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);"></textarea>
+                    </div>
+                </div>
+                <?php endif; ?>
                 
                 <div class="email-preview" id="emailPreview" style="display: none;">
                     <h4><i class="fas fa-envelope"></i> Email Preview</h4>
@@ -1723,29 +1747,9 @@ $app_initials = strtoupper(substr($request['first_name'], 0, 1) . substr($reques
 </div>
 
 <script>
-// ========== THEME TOGGLE ==========
-const themeToggle = document.getElementById('themeToggle');
-const html = document.documentElement;
-
-const currentTheme = localStorage.getItem('theme') || 
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-function setTheme(theme) {
-    html.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-}
-
-setTheme(currentTheme);
-
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
-
 // ========== MODAL FUNCTIONS ==========
+const isAuditFlagged = <?php echo !empty($audit_info['is_flagged']) ? 'true' : 'false'; ?>;
+
 function showUpdateModal() {
     document.getElementById('updateModal').classList.add('active');
 }
@@ -1755,6 +1759,15 @@ function closeModal() {
     document.getElementById('amount_field').style.display = 'none';
     document.getElementById('remarks_field').style.display = 'none';
     document.getElementById('emailPreview').style.display = 'none';
+    
+    const auditField = document.getElementById('audit_override_field');
+    const auditReason = document.getElementById('audit_override_reason');
+    if (auditField) auditField.style.display = 'none';
+    if (auditReason) {
+        auditReason.required = false;
+        auditReason.value = '';
+    }
+
     document.getElementById('amount_approved').value = '';
     document.getElementById('remarks').value = '';
     document.getElementById('modal_status').value = 'reviewing';
@@ -1766,19 +1779,31 @@ function toggleFields() {
     const remarksField = document.getElementById('remarks_field');
     const emailPreview = document.getElementById('emailPreview');
     const emailMessage = document.getElementById('emailMessage');
+    const auditField = document.getElementById('audit_override_field');
+    const auditReason = document.getElementById('audit_override_reason');
     
     amountField.style.display = 'none';
     remarksField.style.display = 'none';
+    if (auditField) auditField.style.display = 'none';
+    if (auditReason) auditReason.required = false;
+
     emailPreview.style.display = 'block';
     
     if (status === 'approved') {
         amountField.style.display = 'block';
         document.getElementById('amount_approved').required = true;
-        emailMessage.textContent = '✅ Email will be sent notifying the applicant of APPROVAL.';
+        
+        if (isAuditFlagged && auditField) {
+            auditField.style.display = 'block';
+            if (auditReason) auditReason.required = true;
+            emailMessage.innerHTML = '⚠️ <strong>AUDIT EXCEPTION:</strong> Approving this request requires recorded justification due to the 90-day policy rule. Email will notify the applicant of approval.';
+        } else {
+            emailMessage.textContent = '✅ Email will be sent notifying the applicant of APPROVAL.';
+        }
     } else if (status === 'rejected') {
         remarksField.style.display = 'block';
         document.getElementById('remarks').required = true;
-        emailMessage.textContent = '❌ Email will be sent notifying the applicant of REJECTION.';
+        emailMessage.textContent = '❌ Email will be sent notifying the applicant of DISAPPROVAL.';
     } else if (status === 'reviewing') {
         emailMessage.textContent = '🔍 Email will be sent notifying the applicant that their request is UNDER REVIEW.';
     } else if (status === 'released') {
@@ -1794,5 +1819,6 @@ window.onclick = function(event) {
     }
 }
 </script>
+<?php require_once __DIR__ . '/includes/staff-footer.php'; ?>
 </body>
 </html>

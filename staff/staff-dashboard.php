@@ -1,23 +1,9 @@
-﻿<?php
-require_once __DIR__ . '/config/database.php';
-
-// Check if user is logged in
-if (!isLoggedIn()) {
-    redirect('login.php');
-}
-
-// Check if user is staff or admin
-if (!isStaff() && !isAdmin()) {
-    redirect('dashboard.php');
-}
-
-$database = new Database();
-$db = $database->getConnection();
-
-// Get staff's assigned services - Get staff_id from staff table using user_id
-$staff_id_query = "SELECT id FROM staff WHERE user_id = :user_id";
-$staff_id_stmt = $db->prepare($staff_id_query);
-$staff_id_stmt->bindParam(':user_id', $_SESSION['user_id']);
+<?php
+// staff/staff-dashboard.php - Canonical redirect to unified root staff-dashboard.php
+$query_string = !empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '';
+header('Location: ../staff-dashboard.php' . $query_string);
+exit();
+require_once __DIR__ . '/../config/database.php';
 $staff_id_stmt->execute();
 $staff_data = $staff_id_stmt->fetch(PDO::FETCH_ASSOC);
 $staff_id = $staff_data ? $staff_data['id'] : 0;
@@ -536,15 +522,13 @@ $initials = substr($initials, 0, 2);
                 <?php if($has_housing_access): ?>
                 <li><a href="staff/manage-housing.php"><i class="fas fa-home"></i> Manage Housing</a></li>
                 <?php endif; ?>
-                <?php if($has_senior_access): ?>
+                <?php if($has_senior_access && isPwdSeniorScopeActive()): ?>
                 <li><a href="staff/manage-senior.php"><i class="fas fa-user-graduate"></i> Senior Pension</a></li>
                 <?php endif; ?>
-                <?php if($has_pwd_access): ?>
+                <?php if($has_pwd_access && isPwdSeniorScopeActive()): ?>
                 <li><a href="staff/manage-pwd.php"><i class="fas fa-wheelchair"></i> PWD Registration</a></li>
                 <?php endif; ?>
                 
-                <li class="menu-divider">Verifications</li>
-                <li><a href="staff/verify-documents.php"><i class="fas fa-file-alt"></i> Verify Documents</a></li>
                 <li><a href="staff/reports.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
                 
                 <?php if(isAdmin()): ?>
@@ -599,14 +583,6 @@ $initials = substr($initials, 0, 2);
             </div>
             <?php endif; ?>
             
-            <div class="stat-card" onclick="window.location.href='staff/verify-documents.php'">
-                <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo number_format($stats['pending_documents'] ?? 0); ?></h3>
-                    <p>Pending Documents</p>
-                </div>
-            </div>
-            
             <div class="stat-card" onclick="window.location.href='admin/manage-verifications.php?status=pending'">
                 <div class="stat-icon"><i class="fas fa-shield-alt"></i></div>
                 <div class="stat-info">
@@ -634,7 +610,6 @@ $initials = substr($initials, 0, 2);
                 <a href="staff/manage-housing.php" class="action-btn"><i class="fas fa-home"></i> Review Housing</a>
                 <?php endif; ?>
                 <a href="staff/manage-appointments.php" class="action-btn"><i class="fas fa-calendar-check"></i> View Appointments</a>
-                <a href="staff/verify-documents.php" class="action-btn"><i class="fas fa-file-alt"></i> Verify Documents</a>
                 <a href="admin/manage-verifications.php" class="action-btn"><i class="fas fa-shield-alt"></i> Verify Residents</a>
                 <a href="staff/reports.php" class="action-btn"><i class="fas fa-chart-bar"></i> Generate Reports</a>
             </div>

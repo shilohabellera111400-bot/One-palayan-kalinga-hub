@@ -1,0 +1,2255 @@
+diff --git a/dashboard.php b/dashboard.php
+index ecfa0e2..edface0 100644
+--- a/dashboard.php
++++ b/dashboard.php
+@@ -111,6 +111,107 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
+ $hour = date('H');
+ $greeting = $hour < 12 ? 'Morning' : ($hour < 18 ? 'Afternoon' : 'Evening');
+ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
++
++// Check residents table details
++$has_profile_details = false;
++$user_is_senior = false;
++try {
++    $res_info_query = "SELECT birth_date, civil_status, senior_citizen FROM residents WHERE user_id = :user_id";
++    $res_info_stmt = $db->prepare($res_info_query);
++    $res_info_stmt->bindParam(':user_id', $_SESSION['user_id']);
++    $res_info_stmt->execute();
++    $resident_record = $res_info_stmt->fetch(PDO::FETCH_ASSOC);
++    $has_profile_details = !empty($resident_record['birth_date']) && !empty($resident_record['civil_status']);
++
++    if (!empty($resident_record['birth_date']) && $resident_record['birth_date'] !== '0000-00-00') {
++        $bDate = new DateTime($resident_record['birth_date']);
++        $today = new DateTime();
++        $rAge = $today->diff($bDate)->y;
++        if ($rAge >= 60) {
++            $user_is_senior = true;
++            $_SESSION['is_senior_citizen'] = true;
++            if (($resident_record['senior_citizen'] ?? 0) != 1) {
++                $db->prepare("UPDATE residents SET senior_citizen = 1 WHERE user_id = :uid")->execute([':uid' => $_SESSION['user_id']]);
++                $resident_record['senior_citizen'] = 1;
++            }
++        } else {
++            if (($resident_record['senior_citizen'] ?? 0) == 1) {
++                $db->prepare("UPDATE residents SET senior_citizen = 0 WHERE user_id = :uid")->execute([':uid' => $_SESSION['user_id']]);
++                $resident_record['senior_citizen'] = 0;
++            }
++            $_SESSION['is_senior_citizen'] = false;
++        }
++    }
++} catch (Exception $e) {
++    $has_profile_details = false;
++}
++if (isset($_SESSION['is_senior_citizen'])) {
++    $user_is_senior = !empty($_SESSION['is_senior_citizen']);
++}
++
++// Calculate Profile Completeness Percentage
++$has_avatar = !empty($profile_picture) && file_exists($profile_picture);
++if ($has_profile_details) {
++    $profile_percent = 100;
++    $is_profile_complete = true;
++} else {
++    $profile_score = 1;
++    if ($verification_status === 'verified') $profile_score++;
++    if ($has_avatar) $profile_score++;
++    $profile_percent = round(($profile_score / 3) * 100);
++    $is_profile_complete = false;
++}
++
++// Determine guided onboarding milestone & target
++if ($verification_status !== 'verified') {
++    $guided_step = 1;
++    $guided_url = 'verify-resident.php';
++    $guided_badge = 'Step 1 of 2 • Citizen Onboarding';
++    $guided_title = 'Step 1: Verify Your Palayan Residency 🏛️';
++    $guided_desc = 'Upload your valid government ID and proof of residency to verify your account with CSWDO and unlock all city services.';
++    $guided_btn = 'Step 1: Verify Residency';
++} elseif (!$has_profile_details) {
++    $guided_step = 2;
++    $guided_url = 'update-profile-info.php?guided=1';
++    $guided_badge = 'Step 2 of 2 • Complete Your Profile';
++    $guided_title = 'Step 2: Complete Your Resident Profile 📝';
++    $guided_desc = 'Your residency is verified! Fill in your demographic, household, and emergency contact details to enable one-click assistance applications.';
++    $guided_btn = 'Step 2: Complete Profile';
++} else {
++    $guided_step = 3;
++    $guided_url = 'profile.php';
++    $guided_badge = 'Profile Complete';
++    $guided_title = 'Your Profile is Complete! 🎉';
++    $guided_desc = 'You have full access to appointments, financial assistance, and Senior/PWD benefits.';
++    $guided_btn = 'View Profile';
++}
++
++// Include interactive resident calendar helper
++if (file_exists(__DIR__ . '/includes/resident-calendar-helper.php')) {
++    require_once __DIR__ . '/includes/resident-calendar-helper.php';
++}
++$cal_req_month = isset($_GET['cal_month']) ? (int)$_GET['cal_month'] : (int)date('n');
++$cal_req_year = isset($_GET['cal_year']) ? (int)$_GET['cal_year'] : (int)date('Y');
++if ($cal_req_month < 1) { $cal_req_month = 12; $cal_req_year--; }
++elseif ($cal_req_month > 12) { $cal_req_month = 1; $cal_req_year++; }
++
++$resident_cal = function_exists('getResidentCalendarData')
++    ? getResidentCalendarData($db, $_SESSION['user_id'], $cal_req_month, $cal_req_year)
++    : [];
++$show_welcome_modal = false;
++if (!empty($_SESSION['show_welcome_modal']) || isset($_GET['welcome'])) {
++    if (!$has_profile_details) {
++        $show_welcome_modal = true;
++    }
++    unset($_SESSION['show_welcome_modal']);
++}
++
++// Profile Completed Confirmation Modal Flag (Req 2)
++$show_profile_completed_modal = false;
++if (isset($_GET['profile_completed']) || !empty($_SESSION['profile_just_completed'])) {
++    $show_profile_completed_modal = true;
++    unset($_SESSION['profile_just_completed']);
++}
+ ?>
+ <!DOCTYPE html>
+ <html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
+@@ -118,1387 +219,930 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Dashboard - One Palayan-Kalinga Hub</title>
++    <title>Citizen Portal Dashboard - One Palayan-Kalinga Hub</title>
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+-    <link
+-        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap"
+-        rel="stylesheet">
+-    <link rel="stylesheet" href="css/portal-layout.css">
++    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cinzel:wght@600;700;800&display=swap" rel="stylesheet">
+     <style>
+-        /* ========== PROFILE HEADER ========== */
+-        .profile-header {
+-            background: linear-gradient(135deg, var(--header-gradient-start), var(--header-gradient-end));
+-            border-radius: var(--radius-card);
+-            padding: 32px 36px;
+-            margin-bottom: 28px;
+-            position: relative;
+-            overflow: hidden;
+-            box-shadow: var(--shadow-md);
+-            animation: fadeInScale 0.6s ease;
+-        }
+-
+-        .profile-header::before {
+-            content: '';
+-            position: absolute;
+-            top: -40%;
+-            right: -10%;
+-            width: 500px;
+-            height: 500px;
+-            background: rgba(255, 255, 255, 0.03);
+-            border-radius: 50%;
+-            pointer-events: none;
++        /* ========== DASHBOARD SYSTEM STYLES ========== */
++        :root {
++            --ref-canvas: #E4EFE7;
++            --ref-card: #FFFFFF;
++            --ref-pill-dark: #191D1E;
++            --ref-text: #192126;
++            --ref-muted: #71818B;
++            --ref-border: rgba(0, 0, 0, 0.05);
++            --ref-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
++            
++            /* Pastel Card Colors */
++            --card-yellow-bg: #FEF7DF;
++            --card-yellow-border: rgba(245, 158, 11, 0.22);
++            --card-blue-bg: #E7F1FE;
++            --card-blue-border: rgba(59, 130, 246, 0.22);
++            --card-pink-bg: #FDE8E8;
++            --card-pink-border: rgba(239, 68, 68, 0.22);
++
++            --accent-gold: #E5B338;
++            --accent-green: #10B981;
++            --maroon: #7F0303;
++            --maroon-light: #9A1515;
++        }
++
++        [data-theme="dark"] {
++            --ref-canvas: #0C1417;
++            --ref-card: #152227;
++            --ref-pill-dark: #080D0E;
++            --ref-text: #E5EFF2;
++            --ref-muted: #8AA0A9;
++            --ref-border: rgba(255, 255, 255, 0.08);
++            --ref-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
++            
++            --card-yellow-bg: #292415;
++            --card-yellow-border: rgba(245, 158, 11, 0.3);
++            --card-blue-bg: #142435;
++            --card-blue-border: rgba(59, 130, 246, 0.3);
++            --card-pink-bg: #2C181C;
++            --card-pink-border: rgba(239, 68, 68, 0.3);
++        }
++
++        * {
++            margin: 0;
++            padding: 0;
++            box-sizing: border-box;
++        }
++
++        img {
++            max-width: 100%;
++            height: auto;
++            display: block;
+         }
+ 
+-        .profile-header::after {
+-            content: '';
+-            position: absolute;
+-            bottom: -30%;
+-            left: -5%;
+-            width: 400px;
+-            height: 400px;
+-            background: rgba(255, 255, 255, 0.02);
+-            border-radius: 50%;
+-            pointer-events: none;
++        body {
++            background-color: var(--ref-canvas);
++            font-family: 'Plus Jakarta Sans', 'Poppins', sans-serif;
++            color: var(--ref-text);
++            min-height: 100vh;
++            padding: 20px 24px 60px;
++            transition: background-color 0.35s ease, color 0.35s ease;
++            overflow-x: hidden;
+         }
+ 
+-        .profile-row {
++        /* Outer Dashboard Container Frame */
++        .dashboard-container {
++            max-width: 1440px;
++            margin: 0 auto;
+             display: flex;
+-            align-items: center;
+-            gap: 28px;
+-            flex-wrap: wrap;
++            gap: 20px;
++            align-items: stretch;
+             position: relative;
+-            z-index: 2;
+         }
+ 
+-        .large-avatar {
+-            width: 100px;
+-            height: 100px;
+-            border-radius: 50%;
++        /* Main Dashboard Canvas */
++        .dashboard-main {
++            flex: 1;
++            min-width: 0;
+             display: flex;
+-            align-items: center;
+-            justify-content: center;
+-            font-size: 2.8rem;
+-            font-weight: 700;
+-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+-            border: 3px solid rgba(255, 255, 255, 0.25);
+-            overflow: hidden;
+-            background: linear-gradient(135deg, var(--gold-light), var(--gold));
+-            color: var(--maroon);
+-            flex-shrink: 0;
+-            transition: transform 0.3s ease;
+-        }
+-
+-        .large-avatar:hover {
+-            transform: scale(1.02);
+-        }
+-
+-        .large-avatar img {
+-            width: 100%;
+-            height: 100%;
+-            object-fit: cover;
+-        }
+-
+-        .profile-info h1 {
+-            color: white;
+-            font-size: 1.7rem;
+-            font-weight: 800;
+-            margin-bottom: 6px;
+-            letter-spacing: -0.5px;
++            flex-direction: column;
++            gap: 16px;
+         }
+ 
+-        .profile-info .details {
+-            color: rgba(255, 255, 255, 0.8);
+-            font-size: 0.85rem;
++        /* Subheader Bar (← Citizen Profile & Services) */
++        .dash-subheader {
+             display: flex;
+             align-items: center;
+-            gap: 18px;
++            justify-content: space-between;
++            padding: 2px 4px 6px;
+             flex-wrap: wrap;
++            gap: 12px;
+         }
+ 
+-        .profile-info .details i {
+-            width: 18px;
+-            color: var(--gold-light);
+-        }
+-
+-        .profile-stats {
++        .subheader-title-wrap {
+             display: flex;
+-            gap: 16px;
+-            margin-top: 12px;
+-            flex-wrap: wrap;
++            align-items: center;
++            gap: 12px;
+         }
+ 
+-        .profile-stat {
+-            background: rgba(255, 255, 255, 0.08);
+-            padding: 6px 16px;
+-            border-radius: 30px;
+-            backdrop-filter: blur(10px);
+-            display: flex;
+-            align-items: center;
+-            gap: 8px;
+-            transition: all 0.3s ease;
++        .btn-back-arrow {
++            color: var(--ref-text);
++            text-decoration: none;
++            font-size: 1.1rem;
++            font-weight: 700;
++            transition: transform 0.2s ease;
+         }
+ 
+-        .profile-stat:hover {
+-            background: rgba(255, 255, 255, 0.15);
+-            transform: translateY(-2px);
++        .btn-back-arrow:hover {
++            transform: translateX(-3px);
++            color: #7F0303;
+         }
+ 
+-        .profile-stat span {
+-            color: white;
+-            font-weight: 600;
+-            font-size: 0.9rem;
++        .subheader-title-wrap h1 {
++            font-size: 1.35rem;
++            font-weight: 800;
++            color: var(--ref-text);
++            letter-spacing: -0.02em;
+         }
+ 
+-        .profile-stat small {
+-            color: rgba(255, 255, 255, 0.6);
+-            font-size: 0.65rem;
++        .subheader-status-wrap {
++            display: flex;
++            align-items: center;
++            gap: 10px;
+         }
+ 
+-        .verification-badge {
+-            padding: 4px 14px;
+-            border-radius: 30px;
+-            font-size: 0.65rem;
+-            font-weight: 600;
++        .status-badge-pill {
+             display: inline-flex;
+             align-items: center;
+             gap: 6px;
++            padding: 7px 16px;
++            border-radius: 20px;
++            background: var(--ref-card);
++            border: 1px solid var(--ref-border);
++            font-size: 0.78rem;
++            font-weight: 700;
++            color: var(--ref-muted);
++            box-shadow: var(--ref-shadow);
+         }
+ 
+-        .badge-verified {
+-            background: var(--color-success);
+-            color: white;
++        .status-badge-pill.verified {
++            color: #059669;
++            background: rgba(16, 185, 129, 0.1);
++            border-color: rgba(16, 185, 129, 0.25);
+         }
+ 
+-        .badge-pending {
+-            background: var(--color-warning);
+-            color: white;
++        .status-badge-pill.pending {
++            color: #D97706;
++            background: rgba(245, 158, 11, 0.1);
++            border-color: rgba(245, 158, 11, 0.25);
+         }
+ 
+-        .badge-rejected {
+-            background: var(--color-danger);
+-            color: white;
++        /* 2-Column Content Grid */
++        .dash-content-grid {
++            display: grid;
++            grid-template-columns: 390px 1fr;
++            gap: 20px;
++            align-items: start;
+         }
+ 
+-        .edit-profile-btn {
+-            margin-left: auto;
+-            background: rgba(255, 255, 255, 0.12);
+-            border: none;
+-            padding: 10px 22px;
+-            border-radius: 30px;
+-            color: white;
+-            font-weight: 600;
+-            font-size: 0.82rem;
+-            cursor: pointer;
+-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
++        /* Column Left */
++        .column-left {
+             display: flex;
+-            align-items: center;
+-            gap: 8px;
+-            text-decoration: none;
+-            backdrop-filter: blur(10px);
+-        }
+-
+-        .edit-profile-btn:hover {
+-            background: rgba(255, 255, 255, 0.25);
+-            transform: translateY(-2px) scale(1.02);
+-            box-shadow: var(--shadow-sm);
++            flex-direction: column;
++            gap: 20px;
+         }
+ 
+-        /* ========== STATS GRID ========== */
+-        .stats-grid {
+-            display: grid;
+-            grid-template-columns: repeat(4, 1fr);
+-            gap: 18px;
+-            margin-bottom: 28px;
++        /* Card 1A: Profile Summary Card */
++        .ref-card-profile {
++            background: var(--ref-card);
++            border-radius: 28px;
++            padding: 24px;
++            border: 1px solid var(--ref-border);
++            box-shadow: var(--ref-shadow);
++            position: relative;
+         }
+ 
+-        .stat-card {
+-            background: var(--stat-bg);
+-            border-radius: var(--radius-card);
+-            padding: 20px 24px;
++        .profile-card-top {
+             display: flex;
+             align-items: center;
+-            gap: 18px;
+-            box-shadow: var(--shadow-md);
+-            border: 1px solid var(--border-color);
+-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+-            cursor: pointer;
+-            position: relative;
+-            overflow: hidden;
+-            animation: fadeInUp 0.6s ease both;
+-        }
+-
+-        .stat-card:nth-child(1) {
+-            animation-delay: 0.1s;
+-        }
+-
+-        .stat-card:nth-child(2) {
+-            animation-delay: 0.2s;
+-        }
+-
+-        .stat-card:nth-child(3) {
+-            animation-delay: 0.3s;
+-        }
+-
+-        .stat-card:nth-child(4) {
+-            animation-delay: 0.4s;
+-        }
+-
+-        .stat-card::before {
+-            content: '';
+-            position: absolute;
+-            top: 0;
+-            left: 0;
+-            right: 0;
+-            bottom: 0;
+-            background: linear-gradient(135deg, var(--maroon), transparent);
+-            opacity: 0;
+-            transition: opacity 0.4s ease;
+-            border-radius: var(--radius-card);
+-        }
+-
+-        .stat-card::after {
+-            content: '';
+-            position: absolute;
+-            top: -50%;
+-            right: -50%;
+-            width: 100%;
+-            height: 100%;
+-            background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
+-            opacity: 0;
+-            transition: opacity 0.4s ease;
+-            pointer-events: none;
+-        }
+-
+-        .stat-card:hover {
+-            transform: translateY(-6px) scale(1.01);
+-            box-shadow: var(--shadow-hover);
+-            border-color: var(--maroon-light);
+-        }
+-
+-        .stat-card:hover::before {
+-            opacity: 0.04;
+-        }
+-
+-        .stat-card:hover::after {
+-            opacity: 1;
++            justify-content: space-between;
++            margin-bottom: 20px;
+         }
+ 
+-        .stat-card:active {
+-            transform: scale(0.97);
++        .profile-user-summary {
++            display: flex;
++            align-items: center;
++            gap: 16px;
+         }
+ 
+-        .stat-icon {
+-            width: 52px;
+-            height: 52px;
+-            border-radius: 14px;
++        .profile-avatar-circle {
++            width: 72px;
++            height: 72px;
++            border-radius: 50%;
++            overflow: hidden;
++            background: #FDE68A;
++            border: 2.5px solid #E5B338;
++            flex-shrink: 0;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+-            font-size: 1.3rem;
+-            flex-shrink: 0;
+-            position: relative;
+-            z-index: 1;
+-            transition: all 0.3s ease;
+-        }
+-
+-        .stat-card:hover .stat-icon {
+-            transform: scale(1.05) rotate(-5deg);
+-        }
+-
+-        .stat-icon.appointments {
+-            background: rgba(33, 150, 243, 0.12);
+-            color: var(--color-info);
+-        }
+-
+-        .stat-icon.aics {
+-            background: rgba(127, 3, 3, 0.12);
+-            color: var(--maroon-light);
+-        }
+-
+-        .stat-icon.housing {
+-            background: rgba(76, 175, 80, 0.12);
+-            color: var(--color-success);
+-        }
+-
+-        .stat-icon.documents {
+-            background: rgba(255, 152, 0, 0.12);
+-            color: var(--color-warning);
++            font-weight: 800;
++            font-size: 1.4rem;
++            color: #7F0303;
++            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+         }
+ 
+-        .stat-info {
+-            position: relative;
+-            z-index: 1;
++        .profile-avatar-circle img {
++            width: 100% !important;
++            height: 100% !important;
++            object-fit: cover !important;
++            display: block !important;
+         }
+ 
+-        .stat-info h3 {
+-            font-size: 1.4rem;
++        .profile-user-headings h3 {
++            font-size: 1.15rem;
+             font-weight: 800;
+-            color: var(--text-primary);
+-            line-height: 1.2;
+-            transition: color 0.3s ease;
++            color: var(--ref-text);
++            margin-bottom: 4px;
+         }
+ 
+-        .stat-info p {
+-            font-size: 0.7rem;
+-            color: var(--text-muted);
++        .profile-user-headings p {
++            font-size: 0.78rem;
++            color: var(--ref-muted);
+             font-weight: 500;
+-            margin-top: 2px;
+-            text-transform: uppercase;
+-            letter-spacing: 0.3px;
+-        }
+-
+-        /* ========== QUICK ACTIONS ========== */
+-        .quick-section {
+-            background: var(--quick-bg);
+-            border-radius: var(--radius-card);
+-            padding: 20px 24px;
+-            margin-bottom: 28px;
+-            border: 1px solid var(--border-color);
+-            transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.3s ease;
+-            box-shadow: var(--shadow-sm);
+-            animation: fadeInUp 0.7s ease;
+         }
+ 
+-        .quick-section:hover {
+-            box-shadow: var(--shadow-md);
+-        }
+-
+-        .quick-section h3 {
+-            color: var(--text-primary);
+-            font-size: 1rem;
+-            font-weight: 700;
+-            margin-bottom: 16px;
++        .profile-action-circles {
+             display: flex;
+             align-items: center;
+-            gap: 10px;
+-        }
+-
+-        .quick-section h3 i {
+-            color: var(--gold);
+-        }
+-
+-        .action-buttons {
+-            display: flex;
+             gap: 12px;
+-            flex-wrap: wrap;
++            margin-bottom: 22px;
+         }
+ 
+-        .action-btn {
+-            background: var(--bg-card);
+-            padding: 10px 22px;
+-            border-radius: 50px;
+-            text-decoration: none;
+-            color: var(--text-secondary);
+-            font-weight: 600;
+-            font-size: 0.8rem;
++        .action-circle-btn {
++            width: 44px;
++            height: 44px;
++            border-radius: 50%;
++            background: rgba(45, 74, 62, 0.08);
++            border: 1px solid rgba(45, 74, 62, 0.16);
+             display: flex;
+             align-items: center;
+-            gap: 8px;
+-            border: 1px solid var(--border-color);
+-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+-            box-shadow: var(--shadow-sm);
+-            position: relative;
+-            overflow: hidden;
+-        }
+-
+-        .action-btn::after {
+-            content: '';
+-            position: absolute;
+-            inset: 0;
+-            background: var(--maroon);
+-            opacity: 0;
+-            transition: opacity 0.3s ease;
+-        }
+-
+-        .action-btn:hover {
+-            background: var(--maroon);
+-            color: white;
+-            transform: translateY(-3px) scale(1.02);
+-            box-shadow: var(--shadow-md);
+-            border-color: var(--maroon);
+-        }
+-
+-        .action-btn:hover::after {
+-            opacity: 0.05;
+-        }
+-
+-        .action-btn:hover i {
+-            color: white;
+-        }
+-
+-        .action-btn i {
+-            position: relative;
+-            z-index: 1;
+-            transition: color 0.3s ease;
+-        }
+-
+-        .action-btn span {
+-            position: relative;
+-            z-index: 1;
+-        }
+-
+-        /* ========== TWO COLUMNS ========== */
+-        .two-columns {
+-            display: grid;
+-            grid-template-columns: 1fr 1fr;
+-            gap: 24px;
+-            margin-bottom: 28px;
+-        }
+-
+-        .dashboard-card {
+-            background: var(--card-bg);
+-            border-radius: var(--radius-card);
+-            padding: 20px 24px;
+-            box-shadow: var(--shadow-md);
+-            border: 1px solid var(--border-color);
+-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+-            animation: fadeInUp 0.7s ease both;
++            justify-content: center;
++            color: #2D4A3E;
++            text-decoration: none;
++            font-size: 1.05rem;
++            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
++            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+         }
+ 
+-        .dashboard-card:nth-child(1) {
+-            animation-delay: 0.1s;
++        .action-circle-btn:hover {
++            background: #7F0303;
++            color: #ffffff;
++            border-color: #7F0303;
++            transform: translateY(-3px) scale(1.08);
++            box-shadow: 0 6px 16px rgba(127, 3, 3, 0.3);
+         }
+ 
+-        .dashboard-card:nth-child(2) {
+-            animation-delay: 0.2s;
++        [data-theme="dark"] .action-circle-btn {
++            background: rgba(255, 255, 255, 0.08);
++            color: #D4AF37;
++            border-color: rgba(255, 255, 255, 0.12);
+         }
+-
+-        .dashboard-card:hover {
+-            box-shadow: var(--shadow-hover);
+-            transform: translateY(-2px);
+-            border-color: var(--maroon-light);
++        [data-theme="dark"] .action-circle-btn:hover {
++            background: #7F0303;
++            color: #ffffff;
++            border-color: #7F0303;
+         }
+ 
+-        .card-header {
++        .profile-slots-row {
+             display: flex;
+-            justify-content: space-between;
+             align-items: center;
+-            margin-bottom: 16px;
+-            padding-bottom: 12px;
+-            border-bottom: 2px solid var(--border-color);
++            justify-content: space-between;
++            padding-top: 16px;
++            border-top: 1px solid var(--ref-border);
+         }
+ 
+-        .card-header h3 {
+-            font-size: 0.95rem;
+-            font-weight: 700;
+-            color: var(--text-primary);
+-            display: flex;
++        .slot-pill {
++            display: inline-flex;
+             align-items: center;
+             gap: 8px;
+-        }
+-
+-        .card-header h3 i {
+-            color: var(--gold);
+-        }
+-
+-        .card-header a {
+-            color: var(--maroon-light);
+-            font-size: 0.7rem;
+-            text-decoration: none;
+-            font-weight: 600;
+-            transition: all 0.3s ease;
+-            padding: 4px 12px;
++            padding: 8px 14px;
+             border-radius: 20px;
+-            background: rgba(127, 3, 3, 0.05);
+-        }
+-
+-        .card-header a:hover {
+-            background: var(--maroon);
+-            color: white;
+-            transform: translateX(4px);
+-        }
+-
+-        .item-list {
+-            display: flex;
+-            flex-direction: column;
+-            gap: 2px;
++            background: var(--ref-canvas);
++            border: 1px solid var(--ref-border);
++            font-size: 0.76rem;
++            font-weight: 600;
++            color: var(--ref-text);
+         }
+ 
+-        .list-item {
+-            display: flex;
+-            justify-content: space-between;
++        .meetings-counter-badge {
++            display: inline-flex;
+             align-items: center;
+-            padding: 10px 0;
+-            border-bottom: 1px solid var(--border-color);
+-            transition: all 0.3s ease;
+-        }
+-
+-        .list-item:last-child {
+-            border-bottom: none;
+-        }
+-
+-        .list-item:hover {
+-            background: var(--badge-bg);
+-            margin: 0 -8px;
+-            padding: 10px 8px;
+-            border-radius: var(--radius-element);
+-            transform: translateX(4px);
+-        }
+-
+-        .item-info h4 {
+-            font-size: 0.82rem;
+-            font-weight: 600;
+-            color: var(--text-primary);
++            gap: 6px;
++            font-size: 0.78rem;
++            font-weight: 700;
++            color: var(--ref-text);
+         }
+ 
+-        .item-info p {
++        .counter-pill-black {
++            background: var(--ref-pill-dark);
++            color: #ffffff;
+             font-size: 0.7rem;
+-            color: var(--text-muted);
+-            margin-top: 2px;
+-        }
+-
+-        .status-badge {
+-            padding: 3px 12px;
+-            border-radius: 50px;
+-            font-size: 0.6rem;
+-            font-weight: 600;
+-            text-transform: uppercase;
+-            letter-spacing: 0.3px;
+-            transition: all 0.3s ease;
+-        }
+-
+-        .status-badge:hover {
+-            transform: scale(1.05);
+-        }
+-
+-        .status-badge.pending {
+-            background: rgba(255, 152, 0, 0.15);
+-            color: var(--color-warning);
+-        }
+-
+-        .status-badge.confirmed {
+-            background: rgba(33, 150, 243, 0.15);
+-            color: var(--color-info);
+-        }
+-
+-        .status-badge.completed {
+-            background: rgba(76, 175, 80, 0.15);
+-            color: var(--color-success);
+-        }
+-
+-        .status-badge.cancelled {
+-            background: rgba(244, 67, 54, 0.15);
+-            color: var(--color-danger);
+-        }
+-
+-        .status-badge.approved {
+-            background: rgba(76, 175, 80, 0.15);
+-            color: var(--color-success);
+-        }
+-
+-        .status-badge.rejected {
+-            background: rgba(244, 67, 54, 0.15);
+-            color: var(--color-danger);
++            font-weight: 800;
++            padding: 2px 7px;
++            border-radius: 12px;
+         }
+ 
+-        .status-badge.submitted {
+-            background: rgba(255, 152, 0, 0.15);
+-            color: var(--color-warning);
++        [data-theme="dark"] .counter-pill-black {
++            background: #ffffff;
++            color: #191D1E;
+         }
+ 
+-        .status-badge.reviewing {
+-            background: rgba(33, 150, 243, 0.15);
+-            color: var(--color-info);
++        /* Card 1B: Detailed Information Card (with Compact Actions underneath) */
++        .ref-card-details {
++            background: var(--ref-card);
++            border-radius: 28px;
++            padding: 24px;
++            border: 1px solid var(--ref-border);
++            box-shadow: var(--ref-shadow);
+         }
+ 
+-        .status-badge.released {
+-            background: rgba(0, 150, 136, 0.15);
+-            color: #009688;
++        .card-details-header {
++            display: flex;
++            align-items: center;
++            justify-content: space-between;
++            margin-bottom: 18px;
+         }
+ 
+-        .status-badge.qualified {
+-            background: rgba(33, 150, 243, 0.15);
+-            color: var(--color-info);
++        .card-details-header h4 {
++            font-size: 0.98rem;
++            font-weight: 800;
++            color: var(--ref-text);
+         }
+ 
+-        .amount-tag {
++        .online-pill-tag {
++            font-size: 0.68rem;
+             font-weight: 700;
+-            color: var(--maroon-light);
+-            font-size: 0.85rem;
+-            transition: all 0.3s ease;
+-        }
+-
+-        .list-item:hover .amount-tag {
+-            transform: scale(1.05);
+-            color: var(--maroon);
+-        }
+-
+-        .empty-state {
+-            text-align: center;
+-            padding: 30px 20px;
+-        }
+-
+-        .empty-state i {
+-            font-size: 36px;
+-            color: var(--text-muted);
+-            opacity: 0.3;
+-            display: block;
+-            margin-bottom: 10px;
+-            transition: all 0.3s ease;
+-        }
+-
+-        .empty-state:hover i {
+-            opacity: 0.5;
+-            transform: scale(1.05) rotate(-5deg);
+-        }
+-
+-        .empty-state p {
+-            color: var(--text-muted);
+-            font-size: 0.82rem;
+-        }
+-
+-        .empty-state a {
+-            color: var(--maroon-light);
+-            font-weight: 600;
+-            text-decoration: none;
+-            transition: all 0.3s ease;
+-        }
+-
+-        .empty-state a:hover {
+-            color: var(--maroon);
+-            text-decoration: underline;
+-        }
+-
+-        /* ========== NOTIFICATIONS ========== */
+-        .notification-card {
+-            background: var(--card-bg);
+-            border-radius: var(--radius-card);
+-            padding: 20px 24px;
+-            box-shadow: var(--shadow-md);
+-            border: 1px solid var(--border-color);
+-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+-            animation: fadeInUp 0.8s ease;
++            color: #059669;
++            background: rgba(16, 185, 129, 0.12);
++            padding: 4px 10px;
++            border-radius: 16px;
++            display: inline-flex;
++            align-items: center;
++            gap: 4px;
+         }
+ 
+-        .notification-card:hover {
+-            box-shadow: var(--shadow-hover);
+-            transform: translateY(-2px);
++        .online-pill-tag::before {
++            content: '';
++            width: 6px;
++            height: 6px;
++            border-radius: 50%;
++            background: #10B981;
+         }
+ 
+-        .notification-card .card-header {
++        .details-list {
+             display: flex;
+-            justify-content: space-between;
+-            align-items: center;
+-            margin-bottom: 16px;
+-            padding-bottom: 12px;
+-            border-bottom: 2px solid var(--border-color);
++            flex-direction: column;
++            gap: 12px;
++            margin-bottom: 20px;
+         }
+ 
+-        .notification-card .card-header h3 {
+-            font-size: 0.95rem;
+-            font-weight: 700;
+-            color: var(--text-primary);
++        .detail-item-row {
+             display: flex;
+             align-items: center;
+-            gap: 8px;
+-        }
+-
+-        .notification-card .card-header h3 i {
+-            color: var(--gold);
+-        }
+-
+-        .notification-card .card-header a {
+-            color: var(--maroon-light);
+-            font-size: 0.7rem;
+-            text-decoration: none;
+-            font-weight: 600;
+-            padding: 4px 12px;
+-            border-radius: 20px;
+-            background: rgba(127, 3, 3, 0.05);
+-            transition: all 0.3s ease;
++            justify-content: space-between;
++            padding: 10px 14px;
++            border-radius: 16px;
++            background: var(--ref-canvas);
++            border: 1px solid var(--ref-border);
++            transition: background 0.2s ease;
+         }
+ 
+-        .notification-card .card-header a:hover {
+-            background: var(--maroon);
+-            color: white;
+-            transform: translateX(4px);
++        .detail-item-row:hover {
++            background: rgba(0, 0, 0, 0.03);
+         }
+ 
+-        .notif-list {
++        .detail-item-left {
+             display: flex;
+-            flex-direction: column;
+-            gap: 10px;
+-        }
+-
+-        .notif-item {
+-            padding: 12px 16px;
+-            background: var(--badge-bg);
+-            border-radius: var(--radius-element);
+-            border-left: 3px solid var(--gold);
+-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+-            position: relative;
+-            overflow: hidden;
+-        }
+-
+-        .notif-item::before {
+-            content: '';
+-            position: absolute;
+-            top: 0;
+-            left: 0;
+-            right: 0;
+-            bottom: 0;
+-            background: linear-gradient(135deg, var(--maroon), transparent);
+-            opacity: 0;
+-            transition: opacity 0.3s ease;
+-            border-radius: var(--radius-element);
++            align-items: center;
++            gap: 12px;
++            min-width: 0;
+         }
+ 
+-        .notif-item:hover {
+-            transform: translateX(6px);
+-            box-shadow: var(--shadow-sm);
++        .detail-radio-icon {
++            color: #7F0303;
++            font-size: 0.85rem;
++            flex-shrink: 0;
+         }
+ 
+-        .notif-item:hover::before {
+-            opacity: 0.03;
++        .detail-text-wrap {
++            min-width: 0;
+         }
+ 
+-        .notif-item h4 {
+-            font-size: 0.8rem;
++        .detail-label {
++            font-size: 0.68rem;
++            color: var(--ref-muted);
+             font-weight: 600;
+-            color: var(--text-primary);
+-            position: relative;
+-            z-index: 1;
+-        }
+-
+-        .notif-item p {
+-            font-size: 0.72rem;
+-            color: var(--text-muted);
+-            margin-top: 4px;
+-            position: relative;
+-            z-index: 1;
+-        }
+-
+-        .notif-item .time {
+-            font-size: 0.6rem;
+-            color: var(--text-muted);
+-            margin-top: 4px;
+-            position: relative;
+-            z-index: 1;
+-            display: flex;
+-            align-items: center;
+-            gap: 4px;
+-        }
+-
+-        /* ========== RESPONSIVE ========== */
+-        @media (max-width: 1200px) {
+-            .stats-grid {
+-                grid-template-columns: repeat(2, 1fr);
+-            }
+-        }
+-
+-        @media (max-width: 992px) {
+-            .sidebar {
+-                transform: translateX(-100%);
+-                width: 280px;
+-            }
+-
+-            .sidebar.open {
+-                transform: translateX(0);
+-            }
+-
+-            .sidebar-close {
+-                display: block;
+-            }
+-
+-            .main-content {
+-                margin-left: 0;
+-                padding: 20px;
+-            }
+-
+-            .hamburger-btn {
+-                display: flex;
+-            }
+-
+-            .stats-grid {
+-                grid-template-columns: repeat(2, 1fr);
+-            }
+-
+-            .two-columns {
+-                grid-template-columns: 1fr;
+-            }
+-
+-            .profile-row {
+-                flex-direction: column;
+-                text-align: center;
+-            }
+-
+-            .profile-stats {
+-                justify-content: center;
+-            }
+-
+-            .edit-profile-btn {
+-                margin-left: 0;
+-            }
++            text-transform: uppercase;
++            letter-spacing: 0.03em;
++            margin-bottom: 2px;
+         }
+ 
+-        @media (max-width: 768px) {
+-            .top-bar {
+-                flex-direction: column;
+-                align-items: stretch;
+-                gap: 16px;
+-            }
+-
+-            .top-bar-left {
+-                width: 100%;
+-                justify-content: space-between;
+-            }
+-
+-            .welcome-text h1 {
+-                font-size: 1.3rem;
+-            }
+-
+-            .top-bar-actions {
+-                justify-content: stretch;
+-                flex-wrap: wrap;
+-                width: 100%;
+-            }
+-
+-            .stats-grid {
+-                grid-template-columns: 1fr;
+-            }
+-
+-            .profile-header {
+-                padding: 24px;
+-            }
+-
+-            .large-avatar {
+-                width: 80px;
+-                height: 80px;
+-                font-size: 2rem;
+-            }
+-
+-            .profile-info h1 {
+-                font-size: 1.3rem;
+-            }
+-
+-            .profile-info .details {
+-                font-size: 0.75rem;
+-                gap: 10px;
+-                flex-direction: column;
+-                align-items: center;
+-            }
+-
+-            .action-buttons {
+-                flex-direction: column;
+-            }
+-
+-            .action-btn {
+-                width: 100%;
+-                justify-content: center;
+-            }
+-
+-            .dashboard-card {
+-                padding: 16px;
+-            }
+-
+-            .notification-card {
+-                padding: 16px;
+-            }
+-
+-            .stat-card {
+-                padding: 16px 18px;
+-            }
+-
+-            .stat-icon {
+-                width: 44px;
+-                height: 44px;
+-                font-size: 1.1rem;
+-            }
+-
+-            .hamburger-btn span {
+-                display: inline;
+-            }
++        .detail-value {
++            font-size: 0.82rem;
++            font-weight: 700;
++            color: var(--ref-text);
++            white-space: nowrap;
++            overflow: hidden;
++            text-overflow: ellipsis;
+         }
+ 
+-        @media (max-width: 480px) {
+-            .main-content {
+-                padding: 14px;
+-            }
++        /* Compact Icon Actions Section (Relocated from upper-right profile per Req 5) */
++                    </section>
+ 
+-            .profile-header {
+-                padding: 16px;
+-            }
++                    <!-- Card 1B: Detailed Information Card (with Compact Icon Actions) -->
++                    <section class="ref-card-details">
++                        <div class="card-details-header">
++                            <h4>Personal Details</h4>
++                            <span class="online-pill-tag">
++                                <?php echo $verification_status == 'verified' ? 'Active Resident' : 'Registered'; ?>
++                            </span>
++                        </div>
+ 
+-            .profile-stat {
+-                padding: 4px 12px;
+-            }
++                        <div class="details-list">
++                            <!-- Full Name -->
++                            <div class="detail-item-row">
++                                <div class="detail-item-left">
++                                    <i class="fas fa-dot-circle detail-radio-icon"></i>
++                                    <div class="detail-text-wrap">
++                                        <div class="detail-label">Full Name</div>
++                                        <div class="detail-value"><?php echo htmlspecialchars($_SESSION['full_name']); ?></div>
++                                    </div>
++                                </div>
++                                <a href="profile.php" class="detail-action-icon" title="View Profile"><i class="fas fa-chevron-right"></i></a>
++                            </div>
+ 
+-            .profile-stat span {
+-                font-size: 0.75rem;
+-            }
++                            <!-- Email Address -->
++                            <div class="detail-item-row">
++                                <div class="detail-item-left">
++                                    <i class="fas fa-dot-circle detail-radio-icon"></i>
++                                    <div class="detail-text-wrap">
++                                        <div class="detail-label">Email Address</div>
++                                        <div class="detail-value"><?php echo htmlspecialchars($user['email'] ?? 'Not provided'); ?></div>
++                                    </div>
++                                </div>
++                                <a href="update-profile-info.php" class="detail-action-icon" title="Edit Email"><i class="fas fa-envelope"></i></a>
++                            </div>
+ 
+-            .stat-card {
+-                padding: 14px 16px;
+-            }
++                            <!-- Contact Number -->
++                            <div class="detail-item-row">
++                                <div class="detail-item-left">
++                                    <i class="fas fa-dot-circle detail-radio-icon"></i>
++                                    <div class="detail-text-wrap">
++                                        <div class="detail-label">Contact Number</div>
++                                        <div class="detail-value"><?php echo htmlspecialchars($user['contact_number'] ?? 'Not provided'); ?></div>
++                                    </div>
++                                </div>
++                                <a href="update-profile-info.php" class="detail-action-icon" title="Edit Phone"><i class="fas fa-phone-alt"></i></a>
++                            </div>
+ 
+-            .stat-info h3 {
+-                font-size: 1.1rem;
+-            }
++                            <!-- Resident Address -->
++                            <div class="detail-item-row">
++                                <div class="detail-item-left">
++                                    <i class="fas fa-dot-circle detail-radio-icon"></i>
++                                    <div class="detail-text-wrap">
++                                        <div class="detail-label">Resident Address</div>
++                                        <div class="detail-value"><?php echo htmlspecialchars($user['address'] ?? 'Palayan City, Nueva Ecija'); ?></div>
++                                    </div>
++                                </div>
++                                <a href="update-profile-info.php" class="detail-action-icon" title="Edit Address"><i class="fas fa-map-marker-alt"></i></a>
++                            </div>
+ 
+-            .hamburger-btn {
+-                padding: 6px 10px;
+-                font-size: 1rem;
+-            }
++                            <!-- Verification Status -->
++                            <div class="detail-item-row">
++                                <div class="detail-item-left">
++                                    <i class="fas fa-dot-circle detail-radio-icon"></i>
++                                    <div class="detail-text-wrap">
++                                        <div class="detail-label">Citizenship Verification</div>
++                                        <div class="detail-value" style="color: <?php echo $verification_status == 'verified' ? '#059669' : '#D97706'; ?>;">
++                                            <?php echo ucfirst($verification_status); ?>
++                                        </div>
++                                    </div>
++                                </div>
++                                <a href="verify-resident.php" class="detail-action-icon" title="Check Status"><i class="fas fa-id-card"></i></a>
++                            </div>
++                        </div>
+ 
+-            .hamburger-btn span {
+-                font-size: 0.65rem;
+-            }
+-        }
+-    </style>
+-</head>
+-
+-<body>
+-    <div class="app-container">
+-        <!-- Sidebar Overlay -->
+-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+-
+-        <!-- Sidebar -->
+-        <div class="sidebar" id="sidebar">
+-            <div class="sidebar-header">
+-                <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
+-                <div class="logo-text">
+-                    <h2>One Palayan-Kalinga Hub</h2>
+-                    <span>Integrated Service Portal</span>
++                    </section>
+                 </div>
+-                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
+-                    <i class="fas fa-times"></i>
+-                </button>
+-            </div>
+ 
+-            <div class="user-info-sidebar">
+-                <div class="user-avatar-sidebar">
+-                    <?php if (!empty($avatar_url)): ?>
+-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
+-                    <?php else: ?>
+-                        <?php echo $initials; ?>
+-                    <?php endif; ?>
+-                </div>
+-                <div>
+-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
+-                    <span>Resident</span>
+-                </div>
+-            </div>
++                <!-- ================= RIGHT COLUMN ================= -->
++                <div class="column-right">
++                    <!-- Top Section: Ongoing Programs & Services Header -->
++                    <div class="ongoing-section-header">
++                        <div class="ongoing-badge-pill">
++                            <i class="fas fa-layer-group"></i>
++                            <span>Ongoing Services</span>
++                        </div>
+ 
+-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
++                        <!-- Brand Title Brought Back (Req: One-Palayan Kalinga Hub) -->
++                        <h2 class="dash-branding-heading dash-cursive-title">One-Palayan Kalinga Hub</h2>
+ 
+-            <div class="sidebar-footer">
+-                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
+-            </div>
+-        </div>
+-
+-        <!-- Main Content -->
+-        <div class="main-content">
+-            <!-- Top Bar -->
+-            <div class="top-bar">
+-                <div class="top-bar-left">
+-                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
+-                        <i class="fas fa-bars"></i>
+-                        <span>Menu</span>
+-                    </button>
+-                    <div class="welcome-text">
+-                        <h1>
+-                            <span class="greeting-emoji"><?php echo $greeting_emoji; ?></span>
+-                            Good <?php echo $greeting; ?>, <?php echo explode(' ', $_SESSION['full_name'])[0]; ?>!
+-                        </h1>
+-                        <p><?php echo date('l, F d, Y'); ?></p>
++                        <!-- Clean Active Programs Indicator (3 buttons above appointment desk removed) -->
++                        <div class="ongoing-active-indicator">
++                            <span class="active-dot-live"></span>
++                            <span>2026 Active Programs</span>
++                        </div>
+                     </div>
+-                </div>
+-                <div class="top-bar-actions">
+-                    <a href="notifications.php" class="notification-bell">
+-                        <i class="fas fa-bell"></i>
+-                        <?php if (($counts['unread_notifications'] ?? 0) > 0): ?>
+-                            <span class="badge"><?php echo $counts['unread_notifications']; ?></span>
+-                        <?php endif; ?>
+-                    </a>
+-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
+-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
+-                    </button>
+-                    <a href="profile.php" class="top-icon"><i class="fas fa-user"></i></a>
+-                </div>
+-            </div>
+ 
+-            <!-- Profile Header -->
+-            <div class="profile-header">
+-                <div class="profile-row">
+-                    <div class="large-avatar">
+-                        <?php if (!empty($avatar_url)): ?>
+-                            <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile Picture">
+-                        <?php else: ?>
+-                            <?php echo $initials; ?>
+-                        <?php endif; ?>
+-                    </div>
+-                    <div class="profile-info">
+-                        <h1><?php echo htmlspecialchars($_SESSION['full_name']); ?></h1>
+-                        <div class="details">
+-                            <span><i class="fas fa-envelope"></i>
+-                                <?php echo htmlspecialchars($user['email'] ?? 'Not provided'); ?></span>
+-                            <span><i class="fas fa-phone"></i>
+-                                <?php echo htmlspecialchars($user['contact_number'] ?? 'Not provided'); ?></span>
+-                            <span><i class="fas fa-map-marker-alt"></i>
+-                                <?php echo htmlspecialchars($user['address'] ?? 'Not provided'); ?></span>
+-                        </div>
+-                        <div class="profile-stats">
+-                            <div class="profile-stat">
+-                                <i class="fas fa-calendar-alt" style="color: rgba(255,255,255,0.6);"></i>
+-                                <span><?php echo date('M d, Y', strtotime($user['created_at'] ?? 'now')); ?></span>
+-                                <small>Member since</small>
++                    <!-- 3 Colored Cards Grid (Enlarged with Service Logos as Giant Half-Visible Watermarks & Creative Borders) -->
++                    <div class="colored-cards-grid">
++                        <!-- Card 1: Pastel Yellow (Housing Programs -> housing-applications.php) -->
++                        <article class="ref-service-card card-yellow service-card-minimal" onclick="window.location.href='housing-applications.php'">
++                            <i class="fas fa-home service-card-giant-watermark"></i>
++                            <div class="service-card-top-tag">
++                                <span class="service-category-pill pill-yellow"><i class="fas fa-building"></i> Shelter &amp; Lots</span>
+                             </div>
+-                            <div class="profile-stat">
+-                                <span class="verification-badge badge-<?php echo $verification_status; ?>">
+-                                    <i class="fas fa-<?php
+-                                    echo $verification_status == 'verified' ? 'check-circle' :
+-                                        ($verification_status == 'pending' ? 'clock' : 'times-circle');
+-                                    ?>"></i>
+-                                    <?php echo ucfirst($verification_status); ?>
+-                                </span>
++                            <div class="service-card-center">
++                                <h4 class="service-card-title">Housing Programs</h4>
+                             </div>
+-                        </div>
+-                    </div>
+-                    <a href="profile.php" class="edit-profile-btn">
+-                        <i class="fas fa-edit"></i> Edit Profile
+-                    </a>
+-                </div>
+-            </div>
++                            <div class="service-card-bottom-minimal">
++                                <span class="service-card-action-text">Explore Housing</span>
++                                <a href="housing-applications.php" class="service-card-arrow-btn" aria-label="Go to Housing Programs">
++                                    <i class="fas fa-arrow-right"></i>
++                                </a>
++                            </div>
++                        </article>
+ 
+-            <!-- Stats Grid -->
+-            <div class="stats-grid">
+-                <div class="stat-card" onclick="window.location.href='my-appointments.php'">
+-                    <div class="stat-icon appointments"><i class="fas fa-calendar-alt"></i></div>
+-                    <div class="stat-info">
+-                        <h3><?php echo $counts['total_appointments'] ?? 0; ?></h3>
+-                        <p>Appointments</p>
+-                    </div>
+-                </div>
+-                <div class="stat-card" onclick="window.location.href='aics-requests.php'">
+-                    <div class="stat-icon aics"><i class="fas fa-hand-holding-heart"></i></div>
+-                    <div class="stat-info">
+-                        <h3><?php echo $counts['total_aics'] ?? 0; ?></h3>
+-                        <p>AICS Requests</p>
+-                    </div>
+-                </div>
+-                <div class="stat-card" onclick="window.location.href='my-housing.php'">
+-                    <div class="stat-icon housing"><i class="fas fa-home"></i></div>
+-                    <div class="stat-info">
+-                        <h3><?php echo $counts['total_housing'] ?? 0; ?></h3>
+-                        <p>Housing Apps</p>
+-                    </div>
+-                </div>
+-                <div class="stat-card" onclick="window.location.href='documents.php'">
+-                    <div class="stat-icon documents"><i class="fas fa-file-alt"></i></div>
+-                    <div class="stat-info">
+-                        <h3><?php echo $counts['total_documents'] ?? 0; ?></h3>
+-                        <p>Documents</p>
++                        <!-- Card 2: Pastel Soft Blue (AICS Assistance -> aics.php) -->
++                        <article class="ref-service-card card-blue service-card-minimal" onclick="window.location.href='aics.php'">
++                            <i class="fas fa-hand-holding-heart service-card-giant-watermark"></i>
++                            <div class="service-card-top-tag">
++                                <span class="service-category-pill pill-blue"><i class="fas fa-hand-holding-usd"></i> Financial &amp; Crisis</span>
++                            </div>
++                            <div class="service-card-center">
++                                <h4 class="service-card-title">AICS Assistance</h4>
++                            </div>
++                            <div class="service-card-bottom-minimal">
++                                <span class="service-card-action-text">Apply Assistance</span>
++                                <a href="aics.php" class="service-card-arrow-btn" aria-label="Go to AICS Assistance">
++                                    <i class="fas fa-arrow-right"></i>
++                                </a>
++                            </div>
++                        </article>
++
++                        <!-- Card 3: Pastel Soft Pink (Appointment Desk -> appointments.php) -->
++                        <article class="ref-service-card card-pink service-card-minimal" onclick="window.location.href='appointments.php'">
++                            <i class="fas fa-calendar-check service-card-giant-watermark"></i>
++                            <div class="service-card-top-tag">
++                                <span class="service-category-pill pill-pink"><i class="fas fa-clock"></i> Consultations</span>
++                            </div>
++                            <div class="service-card-center">
++                                <h4 class="service-card-title">Appointment Desk</h4>
++                            </div>
++                            <div class="service-card-bottom-minimal">
++                                <span class="service-card-action-text">Book Appointment</span>
++                                <a href="appointments.php" class="service-card-arrow-btn" aria-label="Go to Appointment Desk">
++                                    <i class="fas fa-arrow-right"></i>
++                                </a>
++                            </div>
++                        </article>
+                     </div>
+-                </div>
+-            </div>
+ 
+-            <!-- Quick Actions -->
+-            <div class="quick-section">
+-                <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+-                <div class="action-buttons">
+-                    <a href="track-aics.php" class="action-btn"><i class="fas fa-chart-line"></i> <span>Track
+-                            AICS</span></a>
+-                    <a href="my-housing.php" class="action-btn"><i class="fas fa-home"></i> <span>My Housing
+-                            Status</span></a>
+-                    <a href="aics-requests.php" class="action-btn"><i class="fas fa-list"></i> <span>My AICS
+-                            Requests</span></a>
+-                    <a href="documents.php" class="action-btn"><i class="fas fa-upload"></i> <span>Upload
+-                            Document</span></a>
+-                    <a href="notifications.php" class="action-btn"><i class="fas fa-bell"></i>
+-                        <span>Notifications</span></a>
+-                </div>
+-            </div>
++                    <!-- Bottom Split Section (Calendar & Appointments + Inbox & Activity) -->
++                    <div class="bottom-split-grid">
++                        <!-- Calendar & Appointments Card -->
++                        <section class="ref-card-calendar">
++                            <?php
++                            $c_disp_m = $resident_cal['month'] ?? (int)date('n');
++                            $c_disp_y = $resident_cal['year'] ?? (int)date('Y');
++                            $c_disp_name = $resident_cal['month_name'] ?? date('F');
++                            $prev_m = ($c_disp_m === 1) ? 12 : ($c_disp_m - 1);
++                            $prev_y = ($c_disp_m === 1) ? ($c_disp_y - 1) : $c_disp_y;
++                            $next_m = ($c_disp_m === 12) ? 1 : ($c_disp_m + 1);
++                            $next_y = ($c_disp_m === 12) ? ($c_disp_y + 1) : $c_disp_y;
++                            ?>
++                            <div class="calendar-header">
++                                <h4><i class="fas fa-calendar-alt"></i> Calendar</h4>
++                                <div class="calendar-month-selector">
++                                    <a href="?cal_month=<?php echo $prev_m; ?>&cal_year=<?php echo $prev_y; ?>" class="btn-cal-nav" title="Previous Month"><i class="fas fa-chevron-left"></i></a>
++                                    <span><?php echo htmlspecialchars($c_disp_name . ' ' . $c_disp_y); ?></span>
++                                    <a href="?cal_month=<?php echo $next_m; ?>&cal_year=<?php echo $next_y; ?>" class="btn-cal-nav" title="Next Month"><i class="fas fa-chevron-right"></i></a>
++                                </div>
++                            </div>
+ 
+-            <!-- Two Columns: Appointments & AICS -->
+-            <div class="two-columns">
+-                <div class="dashboard-card">
+-                    <div class="card-header">
+-                        <h3><i class="fas fa-calendar-week"></i> Recent Appointments</h3>
+-                        <a href="my-appointments.php">View all →</a>
+-                    </div>
+-                    <?php
+-                    $appointments_stmt->execute();
+-                    if ($appointments_stmt->rowCount() > 0):
+-                        ?>
+-                        <div class="item-list">
+-                            <?php while ($appointment = $appointments_stmt->fetch(PDO::FETCH_ASSOC)): ?>
+-                                <div class="list-item">
+-                                    <div class="item-info">
+-                                        <h4><?php echo htmlspecialchars($appointment['service_name']); ?></h4>
+-                                        <p><?php echo date('M d, Y', strtotime($appointment['appointment_date'])); ?> •
+-                                            <?php echo date('h:i A', strtotime($appointment['appointment_time'])); ?></p>
++                            <!-- Mini Calendar Grid -->
++                            <div class="mini-calendar-grid">
++                                <div class="cal-day-header">M</div>
++                                <div class="cal-day-header">T</div>
++                                <div class="cal-day-header">W</div>
++                                <div class="cal-day-header">T</div>
++                                <div class="cal-day-header">F</div>
++                                <div class="cal-day-header">S</div>
++                                <div class="cal-day-header">S</div>
++
++                                <?php
++                                $first_dow = $resident_cal['first_dow'] ?? 1; // 1 = Monday, 7 = Sunday
++                                $days_in_m = $resident_cal['days_in_month'] ?? (int)date('t');
++                                $today_str = date('Y-m-d');
++                                $activities = $resident_cal['activities'] ?? [];
++
++                                // Preceding empty cells
++                                for ($empty = 1; $empty < $first_dow; $empty++):
++                                ?>
++                                    <div class="cal-day-cell empty"></div>
++                                <?php endfor; ?>
++
++                                <?php
++                                for ($d = 1; $d <= $days_in_m; $d++):
++                                    $d_str = sprintf('%04d-%02d-%02d', $c_disp_y, $c_disp_m, $d);
++                                    $is_today = ($d_str === $today_str);
++                                    $day_data = $activities[$d_str] ?? null;
++
++                                    $has_yellow = !empty($day_data['has_yellow']);
++                                    $has_red = !empty($day_data['has_red']);
++                                    $has_events = ($has_yellow || $has_red);
++
++                                    $cell_classes = ['cal-day-cell'];
++                                    if ($is_today) $cell_classes[] = 'is-today';
++                                    if ($has_yellow && $has_red) {
++                                        $cell_classes[] = 'has-event-dual';
++                                    } elseif ($has_yellow) {
++                                        $cell_classes[] = 'has-event-yellow';
++                                    } elseif ($has_red) {
++                                        $cell_classes[] = 'has-event-red';
++                                    }
++                                ?>
++                                    <div class="<?php echo implode(' ', $cell_classes); ?>" tabindex="0">
++                                        <?php echo $d; ?>
++                                        <?php if ($has_events && !empty($day_data)): ?>
++                                            <div class="cal-hover-popover">
++                                                <div class="popover-date-head">
++                                                    <i class="fas fa-calendar-day"></i> <?php echo date('D, M j, Y', strtotime($d_str)); ?>
++                                                </div>
++                                                <?php if (!empty($day_data['personal'])): ?>
++                                                    <?php foreach ($day_data['personal'] as $p): ?>
++                                                        <div class="popover-item">
++                                                            <span class="popover-tag tag-yellow"><i class="fas fa-user-check"></i> <?php echo htmlspecialchars($p['time']); ?></span>
++                                                            <div class="popover-title"><?php echo htmlspecialchars($p['title']); ?></div>
++                                                            <div class="popover-desc"><?php echo htmlspecialchars($p['ref']); ?> &bull; <strong><?php echo ucfirst(htmlspecialchars($p['status'])); ?></strong></div>
++                                                        </div>
++                                                    <?php endforeach; ?>
++                                                <?php endif; ?>
++                                                <?php if (!empty($day_data['announcements'])): ?>
++                                                    <?php foreach ($day_data['announcements'] as $a): ?>
++                                                        <div class="popover-item">
++                                                            <span class="popover-tag tag-red"><i class="fas fa-bullhorn"></i> <?php echo htmlspecialchars($a['category'] ?? 'Announcement'); ?></span>
++                                                            <div class="popover-title"><?php echo htmlspecialchars($a['title']); ?></div>
++                                                            <?php if (!empty($a['details'])): ?>
++                                                                <div class="popover-desc"><?php echo htmlspecialchars($a['details']); ?></div>
++                                                            <?php endif; ?>
++                                                        </div>
++                                                    <?php endforeach; ?>
++                                                <?php endif; ?>
++                                            </div>
++                                        <?php endif; ?>
+                                     </div>
+-                                    <span
+-                                        class="status-badge <?php echo strtolower($appointment['status']); ?>"><?php echo ucfirst($appointment['status']); ?></span>
+-                                </div>
+-                            <?php endwhile; ?>
+-                        </div>
+-                    <?php else: ?>
+-                        <div class="empty-state">
+-                            <i class="fas fa-calendar-times"></i>
+-                            <p>No appointments yet. <a href="appointments.php">Book one now</a></p>
+-                        </div>
+-                    <?php endif; ?>
+-                </div>
++                                <?php endfor; ?>
++                            </div>
+ 
+-                <div class="dashboard-card">
+-                    <div class="card-header">
+-                        <h3><i class="fas fa-file-invoice"></i> AICS Requests</h3>
+-                        <a href="aics-requests.php">View all →</a>
+-                    </div>
+-                    <?php
+-                    $aics_stmt->execute();
+-                    if ($aics_stmt->rowCount() > 0):
+-                        ?>
+-                        <div class="item-list">
+-                            <?php while ($aics = $aics_stmt->fetch(PDO::FETCH_ASSOC)): ?>
+-                                <div class="list-item">
+-                                    <div class="item-info">
+-                                        <h4><?php echo ucfirst($aics['request_type']); ?></h4>
+-                                        <p>Submitted: <?php echo date('M d, Y', strtotime($aics['submission_date'])); ?></p>
++                            <!-- Color Indicator Legend -->
++                            <div class="calendar-legend">
++                                <span class="legend-pill"><span class="legend-dot dot-yellow"></span> Appointments / Applied</span>
++                                <span class="legend-pill"><span class="legend-dot dot-red"></span> Announcements / Events</span>
++                            </div>
++
++                            <!-- Recent Booked Appointments -->
++                            <div class="calendar-upcoming-list">
++                                <?php
++                                $appointments_stmt->execute();
++                                if ($appointments_stmt->rowCount() > 0):
++                                    $counter = 0;
++                                    while ($app = $appointments_stmt->fetch(PDO::FETCH_ASSOC)):
++                                        if ($counter >= 2) break;
++                                ?>
++                                    <div class="upcoming-item">
++                                        <div class="upcoming-item-left">
++                                            <i class="fas fa-calendar-check" style="color: #059669;"></i>
++                                            <span><?php echo htmlspecialchars($app['service_name']); ?></span>
++                                        </div>
++                                        <span class="upcoming-badge-time">
++                                            <?php echo date('M d', strtotime($app['appointment_date'])); ?> &bull; <?php echo date('h:i A', strtotime($app['appointment_time'])); ?>
++                                        </span>
+                                     </div>
+-                                    <span class="amount-tag">₱<?php echo number_format($aics['amount_requested'], 2); ?></span>
+-                                </div>
+-                            <?php endwhile; ?>
+-                        </div>
+-                    <?php else: ?>
+-                        <div class="empty-state">
+-                            <i class="fas fa-inbox"></i>
+-                            <p>No AICS requests yet. <a href="aics.php">Apply now</a></p>
+-                        </div>
+-                    <?php endif; ?>
+-                </div>
+-            </div>
++                                <?php
++                                        $counter++;
++                                    endwhile;
++                                else:
++                                ?>
++                                    <div class="upcoming-item" style="color: var(--ref-muted); font-size: 0.74rem;">
++                                        <span>No booked visits yet. <a href="appointments.php" style="color: #7F0303; font-weight: 700;">Book now</a></span>
++                                    </div>
++                                <?php endif; ?>
++                            </div>
++                        </section>
+ 
+-            <!-- Notifications -->
+-            <?php
+-            $notif_stmt->execute();
+-            if ($notif_stmt->rowCount() > 0):
+-                ?>
+-                <div class="notification-card">
+-                    <div class="card-header">
+-                        <h3><i class="fas fa-bell"></i> Latest Notifications</h3>
+-                        <a href="notifications.php">View all →</a>
+-                    </div>
+-                    <div class="notif-list">
+-                        <?php
+-                        $notif_stmt->execute();
+-                        $counter = 0;
+-                        while ($notif = $notif_stmt->fetch(PDO::FETCH_ASSOC)):
+-                            if ($counter >= 5)
+-                                break;
+-                            ?>
+-                            <div class="notif-item">
+-                                <h4><?php echo htmlspecialchars($notif['title']); ?></h4>
+-                                <p><?php echo htmlspecialchars(substr($notif['message'], 0, 100)); ?>...</p>
+-                                <div class="time"><i class="far fa-clock"></i>
+-                                    <?php echo date('M d, h:i A', strtotime($notif['created_at'])); ?></div>
++                        <!-- Inbox & Notifications Card -->
++                        <section class="ref-card-inbox">
++                            <div class="inbox-header">
++                                <h4><i class="fas fa-inbox"></i> Inbox &amp; Updates</h4>
++                                <a href="notifications.php" class="btn-round-mini" title="All Notifications"><i class="fas fa-ellipsis-h"></i></a>
+                             </div>
+-                            <?php
+-                            $counter++;
+-                        endwhile;
+-                        ?>
++
++                            <div class="inbox-items-list">
++                                <?php
++                                $notif_stmt->execute();
++                                $has_notifs = false;
++                                if ($notif_stmt->rowCount() > 0):
++                                    $has_notifs = true;
++                                    $n_idx = 0;
++                                    while ($notif = $notif_stmt->fetch(PDO::FETCH_ASSOC)):
++                                        if ($n_idx >= 3) break;
++                                ?>
++                                    <div class="inbox-item-row <?php echo $n_idx === 1 ? 'highlighted' : ''; ?>">
++                                        <div class="inbox-item-left">
++                                            <div class="inbox-avatar-mini">
++                                                <i class="fas fa-bell"></i>
++                                            </div>
++                                            <div class="inbox-content-mini">
++                                                <h5><?php echo htmlspecialchars($notif['title']); ?></h5>
++                                                <p><?php echo htmlspecialchars(substr($notif['message'], 0, 48)); ?>...</p>
++                                            </div>
++                                        </div>
++                                        <a href="notifications.php" class="inbox-action-arrow">
++                                            <i class="fas fa-chevron-right"></i>
++                                        </a>
++                                    </div>
++                                <?php
++                                        $n_idx++;
++                                    endwhile;
++                                endif;
++
++                                if (!$has_notifs):
++                                ?>
++                                    <div class="inbox-item-row">
++                                        <div class="inbox-item-left">
++                                            <div class="inbox-avatar-mini"><i class="fas fa-check"></i></div>
++                                            <div class="inbox-content-mini">
++                                                <h5>All Caught Up</h5>
++                                                <p>No new notifications at this time.</p>
++                                            </div>
++                                        </div>
++                                    </div>
++                                <?php endif; ?>
++                            </div>
++                        </section>
+                     </div>
+                 </div>
+-            <?php endif; ?>
+-        </div>
++            </div>
++        </main>
+     </div>
+ 
+-    <script>
+-        // ========== MOBILE SIDEBAR TOGGLE ==========
+-        const sidebar = document.getElementById('sidebar');
+-        const sidebarOverlay = document.getElementById('sidebarOverlay');
+-        const hamburgerBtn = document.getElementById('hamburgerBtn');
+-        const sidebarClose = document.getElementById('sidebarClose');
+-
+-        function openSidebar() {
+-            sidebar.classList.add('open');
+-            sidebarOverlay.classList.add('active');
+-            document.body.style.overflow = 'hidden';
+-        }
+-
+-        function closeSidebar() {
+-            sidebar.classList.remove('open');
+-            sidebarOverlay.classList.remove('active');
+-            document.body.style.overflow = '';
+-        }
+-
+-        hamburgerBtn.addEventListener('click', openSidebar);
+-        sidebarClose.addEventListener('click', closeSidebar);
+-        sidebarOverlay.addEventListener('click', closeSidebar);
+-
+-        // Close sidebar on Escape key
+-        document.addEventListener('keydown', function (e) {
+-            if (e.key === 'Escape') {
+-                closeSidebar();
+-            }
+-        });
++    <!-- Integrated Search Modal Overlay -->
++    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
+ 
+-        // ========== THEME TOGGLE ==========
+-        const themeToggle = document.getElementById('themeToggle');
+-        const html = document.documentElement;
++    <!-- Verified Resident Celebration Modal & Interactive Confetti Controller -->
++    <?php if ($verification_status === 'verified' && !isStaff() && !isAdmin()): ?>
++    <script>
++        (function() {
++            const userId = <?php echo json_encode($_SESSION['user_id'] ?? 0); ?>;
++            window.__pkh_user_id = userId;
++            const celebrationStorageKey = 'pkh_verified_celebration_seen_user_' + userId;
++            const hasProfileDetails = <?php echo $has_profile_details ? 'true' : 'false'; ?>;
++            const forceWelcome = <?php echo ($show_welcome_modal || isset($_GET['welcome']) || isset($_GET['verified'])) ? 'true' : 'false'; ?>;
++            
++            const modalBackdrop = document.getElementById('welcomeModalBackdrop');
++            if (!modalBackdrop) return;
++
++            // Global trigger function to open from banner button
++            window.openWelcomeModal = function() {
++                modalBackdrop.classList.add('open');
++                document.body.style.overflow = 'hidden';
++                fireDirectConfetti();
++            };
+ 
+-        const currentTheme = localStorage.getItem('theme') ||
+-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
++            window.dismissWelcomeModal = function() {
++                modalBackdrop.classList.remove('open');
++                document.body.style.overflow = '';
++                try {
++                    localStorage.setItem(celebrationStorageKey, '1');
++                    localStorage.setItem('pkh_welcome_dismissed_user_' + userId, '1');
++                    localStorage.setItem('pkh_welcome_seen', '1');
++                    sessionStorage.setItem('palayan_welcome_seen', '1');
++                } catch(e) {}
++            };
+ 
+-        function setTheme(theme) {
+-            html.setAttribute('data-theme', theme);
+-            localStorage.setItem('theme', theme);
+-            const icon = themeToggle.querySelector('i');
+-            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+-            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
++            const closeBtn = document.getElementById('welcomeCloseBtn');
++            const laterBtn = document.getElementById('welcomeMaybeLaterBtn');
++            if (closeBtn) closeBtn.addEventListener('click', dismissWelcomeModal);
++            if (laterBtn) laterBtn.addEventListener('click', dismissWelcomeModal);
+ 
+-            document.body.style.transition = 'background 0.4s ease, color 0.4s ease';
+-        }
++            modalBackdrop.addEventListener('click', function(e) {
++                if (e.target === modalBackdrop) {
++                    dismissWelcomeModal();
++                }
++            });
+ 
+-        setTheme(currentTheme);
+-
+-        themeToggle.addEventListener('click', () => {
+-            const current = html.getAttribute('data-theme');
+-            const newTheme = current === 'dark' ? 'light' : 'dark';
+-            setTheme(newTheme);
+-
+-            themeToggle.style.transform = 'scale(0.9)';
+-            setTimeout(() => {
+-                themeToggle.style.transform = '';
+-            }, 200);
+-        });
+-
+-        // ========== ANIMATED COUNTERS ==========
+-        document.addEventListener('DOMContentLoaded', function () {
+-            const statNumbers = document.querySelectorAll('.stat-info h3');
+-
+-            statNumbers.forEach((el, index) => {
+-                const target = parseInt(el.textContent);
+-                if (target > 0) {
+-                    let current = 0;
+-                    const increment = Math.ceil(target / 40);
+-                    const duration = 800;
+-                    const stepTime = Math.floor(duration / 40);
+-
+-                    const counter = setInterval(() => {
+-                        current += increment;
+-                        if (current >= target) {
+-                            el.textContent = target;
+-                            clearInterval(counter);
+-                        } else {
+-                            el.textContent = current;
+-                        }
+-                    }, stepTime);
++            document.addEventListener('keydown', function(e) {
++                if (e.key === 'Escape' && modalBackdrop.classList.contains('open')) {
++                    dismissWelcomeModal();
+                 }
+             });
+-        });
+ 
+-        // ========== SMOOTH SCROLL ANIMATIONS ==========
+-        document.addEventListener('DOMContentLoaded', function () {
+-            const cards = document.querySelectorAll('.stat-card, .dashboard-card, .notification-card');
++            const dismissedKey = 'pkh_welcome_dismissed_user_' + userId;
+ 
+-            const observerOptions = {
+-                threshold: 0.1,
+-                rootMargin: '0px 0px -50px 0px'
+-            };
++            // Immediately sanitize URL parameters to prevent re-triggering upon reload or back-navigation
++            if (window.location.search && (window.location.search.includes('welcome') || window.location.search.includes('verified') || window.location.search.includes('profile_completed'))) {
++                try {
++                    const cleanUrl = window.location.pathname;
++                    window.history.replaceState({}, document.title, cleanUrl);
++                } catch(e) {}
++            }
+ 
+-            const observer = new IntersectionObserver((entries) => {
+-                entries.forEach((entry, index) => {
+-                    if (entry.isIntersecting) {
+-                        setTimeout(() => {
+-                            entry.target.style.opacity = '1';
+-                            entry.target.style.transform = 'translateY(0)';
+-                        }, index * 100);
+-                    }
++            // If resident has already completed their profile, permanently record dismissal
++            if (hasProfileDetails) {
++                try {
++                    localStorage.setItem(celebrationStorageKey, '1');
++                    localStorage.setItem(dismissedKey, '1');
++                    localStorage.setItem('pkh_welcome_seen', '1');
++                    sessionStorage.setItem('palayan_welcome_seen', '1');
++                } catch(e) {}
++            }
++
++            // Handle Profile Completed Confirmation Modal if displayed
++            const completedModal = document.getElementById('profileCompletedModalBackdrop');
++            if (completedModal) {
++                completedModal.classList.add('open');
++                const closeCompleted = function() {
++                    completedModal.classList.remove('open');
++                    completedModal.style.display = 'none';
++                    document.body.style.overflow = '';
++                };
++                const cCloseBtn = completedModal.querySelector('.welcome-modal-close');
++                const cActionBtn = completedModal.querySelector('.btn-welcome-primary');
++                if (cCloseBtn) cCloseBtn.addEventListener('click', closeCompleted);
++                if (cActionBtn) cActionBtn.addEventListener('click', closeCompleted);
++                completedModal.addEventListener('click', function(e) {
++                    if (e.target === completedModal) closeCompleted();
+                 });
+-            }, observerOptions);
++                setTimeout(closeCompleted, 5500);
++            }
+ 
+-            cards.forEach(card => {
+-                card.style.opacity = '0';
+-                card.style.transform = 'translateY(30px)';
+-                card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+-                observer.observe(card);
+-            });
+-        });
+-
+-        // ========== STAT CARD CLICK FEEDBACK ==========
+-        document.querySelectorAll('.stat-card').forEach(card => {
+-            card.addEventListener('click', function (e) {
+-                const ripple = document.createElement('span');
+-                ripple.style.cssText = `
+-            position: absolute;
+-            border-radius: 50%;
+-            background: rgba(127, 3, 3, 0.3);
+-            width: 100px;
+-            height: 100px;
+-            margin-left: -50px;
+-            margin-top: -50px;
+-            top: ${e.offsetY}px;
+-            left: ${e.offsetX}px;
+-            transform: scale(0);
+-            animation: ripple 0.6s ease-out;
+-            pointer-events: none;
+-        `;
+-                this.appendChild(ripple);
+-                setTimeout(() => ripple.remove(), 600);
+-            });
+-        });
+-
+-        const style = document.createElement('style');
+-        style.textContent = `
+-    @keyframes ripple {
+-        to {
+-            transform: scale(4);
+-            opacity: 0;
+-        }
+-    }
+-`;
+-        document.head.appendChild(style);
+-
+-        // ========== LIVE CLOCK UPDATE ==========
+-        function updateClock() {
+-            const now = new Date();
+-            const options = {
+-                weekday: 'long',
+-                year: 'numeric',
+-                month: 'long',
+-                day: 'numeric',
+-                hour: '2-digit',
+-                minute: '2-digit',
+-                second: '2-digit'
+-            };
+-            const dateStr = now.toLocaleDateString('en-US', options);
+-            const dateElement = document.querySelector('.welcome-text p');
+-            if (dateElement) {
+-                dateElement.textContent = dateStr;
++            // Auto-trigger condition:
++            // MUST NOT auto-open if already seen, dismissed, OR if profile is already complete
++            const alreadySeen = localStorage.getItem(celebrationStorageKey) === '1' || 
++                                localStorage.getItem(dismissedKey) === '1' || 
++                                localStorage.getItem('pkh_welcome_seen') === '1' || 
++                                sessionStorage.getItem('palayan_welcome_seen') === '1';
++            
++            if (!hasProfileDetails && !alreadySeen && (forceWelcome || (modalBackdrop && modalBackdrop.dataset.autoOpen === 'true'))) {
++                setTimeout(function() {
++                    openWelcomeModal();
++                }, 350);
+             }
+-        }
+ 
+-        setInterval(updateClock, 1000);
++            function fireDirectConfetti() {
++                let canvas = document.getElementById('portalCelebrationCanvas');
++                if (!canvas) {
++                    canvas = document.createElement('canvas');
++                    canvas.id = 'portalCelebrationCanvas';
++                    canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:99999;';
++                    document.body.appendChild(canvas);
++                }
++                const ctx = canvas.getContext('2d');
++                let width = (canvas.width = window.innerWidth);
++                let height = (canvas.height = window.innerHeight);
++
++                const colors = ['#10B981', '#7F0303', '#D8BA98', '#F59E0B', '#3B82F6', '#EC4899'];
++                const particles = [];
++                for (let i = 0; i < 70; i++) {
++                    particles.push({
++                        x: width * 0.5 + (Math.random() - 0.5) * 140,
++                        y: height * 0.35 + (Math.random() - 0.5) * 80,
++                        vx: (Math.random() - 0.5) * 10,
++                        vy: -Math.random() * 8 - 4,
++                        size: Math.random() * 8 + 4,
++                        color: colors[Math.floor(Math.random() * colors.length)],
++                        rotation: Math.random() * 360,
++                        vRot: (Math.random() - 0.5) * 10,
++                        opacity: 1
++                    });
++                }
+ 
+-        // ========== KEYBOARD SHORTCUTS ==========
+-        document.addEventListener('keydown', function (e) {
+-            // Ctrl + D for dashboard
+-            if (e.ctrlKey && e.key === 'd') {
+-                e.preventDefault();
+-                window.location.href = 'dashboard.php';
+-            }
+-            // Ctrl + P for profile
+-            if (e.ctrlKey && e.key === 'p') {
+-                e.preventDefault();
+-                window.location.href = 'profile.php';
+-            }
+-            // Ctrl + N for notifications
+-            if (e.ctrlKey && e.key === 'n') {
+-                e.preventDefault();
+-                window.location.href = 'notifications.php';
+-            }
+-            // Escape to close sidebar on mobile
+-            if (e.key === 'Escape') {
+-                closeSidebar();
+-            }
+-        });
++                let startTime = null;
++                function animate(timestamp) {
++                    if (!startTime) startTime = timestamp;
++                    const elapsed = timestamp - startTime;
++                    ctx.clearRect(0, 0, width, height);
++
++                    let alive = false;
++                    particles.forEach(p => {
++                        p.x += p.vx;
++                        p.y += p.vy;
++                        p.vy += 0.22; // gravity
++                        p.rotation += p.vRot;
++                        if (elapsed > 1800) {
++                            p.opacity -= 0.02;
++                        }
++                        if (p.opacity > 0 && p.y < height) {
++                            alive = true;
++                            ctx.save();
++                            ctx.translate(p.x, p.y);
++                            ctx.rotate((p.rotation * Math.PI) / 180);
++                            ctx.globalAlpha = Math.max(0, p.opacity);
++                            ctx.fillStyle = p.color;
++                            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
++                            ctx.restore();
++                        }
++                    });
+ 
+-        console.log('🚀 One Palayan-Kalinga Hub Dashboard loaded successfully!');
+-        console.log('💡 Keyboard shortcuts: Ctrl+D (Dashboard), Ctrl+P (Profile), Ctrl+N (Notifications)');
+-        console.log('📱 Mobile navigation: Click the hamburger menu (☰) to open sidebar');
++                    if (alive && elapsed < 3500) {
++                        requestAnimationFrame(animate);
++                    } else {
++                        ctx.clearRect(0, 0, width, height);
++                        if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
++                    }
++                }
++                requestAnimationFrame(animate);
++            }
++        })();
+     </script>
++    <?php endif; ?>
+ </body>
+-
+-</html>
+\ No newline at end of file
++</html>

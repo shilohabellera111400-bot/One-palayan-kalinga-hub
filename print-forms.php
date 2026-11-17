@@ -39,6 +39,16 @@ $res_stmt->bindParam(':user_id', $_SESSION['user_id']);
 $res_stmt->execute();
 $resident_info = $res_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
+// Fetch latest PWD application if any (for PWD ID number, application date, and status)
+$pwd_app_stmt = $db->prepare("SELECT * FROM pwd_applications WHERE user_id = :user_id ORDER BY application_id DESC LIMIT 1");
+$pwd_app_stmt->execute([':user_id' => $_SESSION['user_id']]);
+$pwd_app = $pwd_app_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+// Fetch latest Senior application if any (for tracking number and application date)
+$senior_app_stmt = $db->prepare("SELECT * FROM senior_applications WHERE user_id = :user_id ORDER BY application_id DESC LIMIT 1");
+$senior_app_stmt->execute([':user_id' => $_SESSION['user_id']]);
+$senior_app = $senior_app_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
 // Get initials for sidebar avatar
 $initials = '';
 $name_parts = explode(' ', $_SESSION['full_name']);
@@ -72,7 +82,7 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
         href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="css/portal-layout.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
         /* ========== FORMS GRID ========== */
         .forms-grid {
@@ -227,29 +237,45 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
         }
 
         @media print {
-            body * {
-                visibility: hidden;
+            @page {
+                size: auto;
+                margin: 8mm 10mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
 
-            .print-modal,
-            .print-modal * {
-                visibility: visible;
+            body > *:not(#printModal) {
+                display: none !important;
             }
 
             .print-modal {
-                position: fixed;
-                inset: 0;
-                background: white;
-                padding: 0;
-                backdrop-filter: none;
+                display: block !important;
+                position: static !important;
+                inset: auto !important;
+                background: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                backdrop-filter: none !important;
+                box-shadow: none !important;
+                width: 100% !important;
             }
 
             .print-modal .modal-content {
-                box-shadow: none;
-                border: none;
-                padding: 40px;
-                border-radius: 0;
-                background: white;
+                box-shadow: none !important;
+                border: none !important;
+                padding: 10px !important;
+                margin: 0 !important;
+                border-radius: 0 !important;
+                background: #ffffff !important;
+                max-width: 100% !important;
+                width: 100% !important;
             }
 
             .print-modal .modal-actions {
@@ -306,66 +332,27 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
 
 <body>
     <div class="app-container">
-        <!-- Sidebar Overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-print"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Integrated Service Portal</span>
-                </div>
-                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-
-            <div class="user-info-sidebar">
-                <div class="user-avatar-sidebar">
-                    <?php if (!empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
-                    <?php else: ?>
-                        <?php echo $initials; ?>
-                    <?php endif; ?>
-                </div>
-                <div>
-                    <h4>
-                        <?php echo htmlspecialchars($_SESSION['full_name']); ?>
-                    </h4>
-                    <span>Resident</span>
-                </div>
-            </div>
-
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-
-            <div class="sidebar-footer">
-                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
-            </div>
-        </div>
+        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="top-bar-left">
-                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
-                        <i class="fas fa-bars"></i>
-                        <span>Menu</span>
-                    </button>
-                    <div class="page-title">
-                        <h1><i class="fas fa-print"></i> Printable Forms</h1>
-                        <p>Download or print pre-filled forms with your information</p>
-                    </div>
-                </div>
-                <div class="top-bar-actions">
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="dashboard.php" class="top-icon"><i class="fas fa-tachometer-alt"></i></a>
-                </div>
-            </div>
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = 'Printable Forms & Templates';
+            $banner_subtitle = 'Download or print official pre-filled citizen assistance forms';
+            $banner_icon = 'fa-print';
+            $banner_actions = [
+                ['label' => 'Upload New Form', 'url' => 'documents.php', 'icon' => 'fa-file-upload', 'type' => 'primary'],
+                ['label' => 'My Documents', 'url' => 'documents.php', 'icon' => 'fa-folder-open', 'type' => 'secondary']
+            ];
+            include __DIR__ . '/includes/portal-banner.php';
+            ?>
 
             <!-- Forms Grid -->
             <div class="forms-grid">
@@ -379,6 +366,7 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
                     </button>
                 </div>
 
+                <?php if (defined('FEATURE_ENABLE_PWD_SENIOR') && FEATURE_ENABLE_PWD_SENIOR): ?>
                 <!-- Form 2: PWD Registration -->
                 <div class="form-item-card">
                     <i class="fas fa-wheelchair form-item-icon"></i>
@@ -399,6 +387,7 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
                         <i class="fas fa-print"></i> Print Form
                     </button>
                 </div>
+                <?php endif; ?>
 
                 <!-- Form 4: Housing Application -->
                 <div class="form-item-card">
@@ -407,27 +396,6 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
                     <p>Porma para sa pag-apply ng socialized housing programs tulad ng AKAP Village at San Lorenzo
                         Residences.</p>
                     <button onclick="openPrintModal('housing')" class="btn-primary">
-                        <i class="fas fa-print"></i> Print Form
-                    </button>
-                </div>
-
-                <!-- Form 5: Medical Assistance -->
-                <div class="form-item-card">
-                    <i class="fas fa-medkit form-item-icon"></i>
-                    <h3>Medical Assistance Form</h3>
-                    <p>Porma para sa pag-apply ng medical assistance, hospital bills, at iba pang health-related
-                        support.</p>
-                    <button onclick="openPrintModal('medical')" class="btn-primary">
-                        <i class="fas fa-print"></i> Print Form
-                    </button>
-                </div>
-
-                <!-- Form 6: Burial Assistance -->
-                <div class="form-item-card">
-                    <i class="fas fa-cross form-item-icon"></i>
-                    <h3>Burial Assistance Form</h3>
-                    <p>Porma para sa pag-apply ng burial assistance at iba pang funeral support services.</p>
-                    <button onclick="openPrintModal('burial')" class="btn-primary">
                         <i class="fas fa-print"></i> Print Form
                     </button>
                 </div>
@@ -451,68 +419,16 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
     </div>
 
     <script>
-        // ========== MOBILE SIDEBAR TOGGLE ==========
-        const sidebar = document.getElementById('sidebar');
-        const sidebarOverlay = document.getElementById('sidebarOverlay');
-        const hamburgerBtn = document.getElementById('hamburgerBtn');
-        const sidebarClose = document.getElementById('sidebarClose');
-
-        function openSidebar() {
-            sidebar.classList.add('open');
-            sidebarOverlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeSidebar() {
-            sidebar.classList.remove('open');
-            sidebarOverlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-
-        hamburgerBtn.addEventListener('click', openSidebar);
-        sidebarClose.addEventListener('click', closeSidebar);
-        sidebarOverlay.addEventListener('click', closeSidebar);
-
-        // Close sidebar on Escape key
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                closeSidebar();
-            }
-        });
-
-        // ========== THEME TOGGLE ==========
-        const themeToggle = document.getElementById('themeToggle');
-        const html = document.documentElement;
-
-        const currentTheme = localStorage.getItem('theme') ||
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-        function setTheme(theme) {
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = themeToggle.querySelector('i');
-            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-
-            document.body.style.transition = 'background 0.4s ease, color 0.4s ease';
-        }
-
-        setTheme(currentTheme);
-
-        themeToggle.addEventListener('click', function () {
-            const current = html.getAttribute('data-theme');
-            const newTheme = current === 'dark' ? 'light' : 'dark';
-            setTheme(newTheme);
-
-            themeToggle.style.transform = 'scale(0.9)';
-            setTimeout(() => {
-                themeToggle.style.transform = '';
-            }, 200);
-        });
-
         // ========== PRINT MODAL ==========
-        const userInfo = <?php echo json_encode($user_info); ?>;
-        const residentInfo = <?php echo json_encode($resident_info); ?>;
+        const userInfo = <?php echo json_encode($user_info ?: []); ?>;
+        const residentInfo = <?php echo json_encode($resident_info ?: []); ?>;
+        const pwdApp = <?php echo json_encode($pwd_app ?: []); ?>;
+        const seniorApp = <?php echo json_encode($senior_app ?: []); ?>;
+        const pkhLogoSrc = <?php 
+            $print_logo_file = __DIR__ . '/images/pkh-logo-print.png';
+            if (!file_exists($print_logo_file)) $print_logo_file = __DIR__ . '/images/logo.png';
+            echo json_encode('data:image/png;base64,' . base64_encode(file_get_contents($print_logo_file)));
+        ?>;
 
         function openPrintModal(type) {
             let html = '';
@@ -555,7 +471,7 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
                     <tr>
                       <td style="width:42%;border-right:1px solid #000;padding:5px 8px;vertical-align:middle;">
                         <div style="display:flex;align-items:center;gap:8px;">
-                          <img src="images/logo.png" style="width:45px;height:45px;object-fit:contain;" alt="Logo">
+                          <img src="${pkhLogoSrc}" style="width:48px;height:48px;object-fit:contain;flex-shrink:0;" alt="One Palayan Kalinga Hub Logo">
                           <div style="font-size:7.5pt;line-height:1.3;font-family:Arial,sans-serif;">
                             <span style="font-size:6pt;display:block;margin-bottom:2px;color:#555;">Rev. 04.11.14</span>
                             Republic of the Philippines<br>
@@ -951,137 +867,668 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
                 </div>
                 `;
             } else if (type === 'pwd') {
-                html = `
-                    <div style="border: 2px solid #000; padding: 30px; font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #000; background: #fff;">
-                        <h3 style="text-align: center; margin: 0;">PWD REGISTRATION AND APPLICATION FORM</h3>
-                        <h4 style="text-align: center; margin-top: 5px; color: #555;">City of Palayan</h4>
-                        <hr style="border-top: 2px solid #000; margin-top: 15px;">
+                const r = residentInfo || {};
+                const u = userInfo || {};
+                const pa = pwdApp || {};
 
-                        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                const ln  = (r.last_name  || u.last_name  || '').toUpperCase();
+                const fn  = (r.first_name || u.first_name || '').toUpperCase();
+                const mn  = (r.middle_name || '').toUpperCase();
+                const sfx = (r.suffix || '').toUpperCase();
+
+                const dob = r.birth_date || '';
+                let dobFormatted = '';
+                if (dob && dob !== '0000-00-00') {
+                    const d = new Date(dob + 'T00:00:00');
+                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    const yyyy = d.getFullYear();
+                    dobFormatted = `${mm}/${dd}/${yyyy}`;
+                }
+
+                const gen  = (r.gender || '').toLowerCase();
+                const cs   = (r.civil_status || '').toLowerCase();
+                const brgy = (r.barangay || '').toUpperCase();
+                const str  = (r.street || r.address || '').toUpperCase();
+                const cont = r.contact_number || u.contact_number || '';
+                const email = (r.email || u.email || '').toLowerCase();
+                const occ  = (r.occupation || '').toUpperCase();
+                const edu  = (r.educational_attainment || '').toLowerCase();
+
+                const isRenewal = (r.pwd == 1 && pa.pwd_id_number);
+                const pwdNumber = pa.pwd_id_number || (r.resident_number ? ('03-4919-' + r.resident_number.replace('RES-', '')) : '___________________________________');
+                const dateApplied = pa.created_at ? new Date(pa.created_at).toLocaleDateString() : new Date().toLocaleDateString();
+
+                html = `
+                <div style="font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; max-width: 820px; margin: 0 auto; padding: 10px; font-size: 8pt; line-height: 1.25;">
+
+                    <!-- LOGO HEADER (DOH Seal on Left, City Government of Palayan Seal on Right) -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 10px;">
+                        <div style="text-align: left;">
+                            <img src="images/doh-logo.png" style="width: 78px; height: 78px; object-fit: contain;" alt="Department of Health Seal">
+                        </div>
+                        <div style="text-align: center; flex: 1; padding: 0 15px;">
+                            <div style="font-size: 7.5pt; font-weight: bold; text-transform: uppercase; color: #333; letter-spacing: 0.5px;">Republic of the Philippines</div>
+                            <div style="font-size: 10.5pt; font-weight: 800; text-transform: uppercase; margin: 2px 0; color: #000;">Department of Health</div>
+                            <div style="font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #004D40;">Philippine Registry for Persons with Disability</div>
+                            <div style="font-size: 7.5pt; font-weight: 600; color: #555;">City Social Welfare &amp; Development Office &bull; Palayan City</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <img src="${pkhLogoSrc}" style="width: 78px; height: 78px; object-fit: contain;" alt="One Palayan Kalinga Hub Logo">
+                        </div>
+                    </div>
+
+                    <!-- MAIN BORDERED FORM CONTAINER -->
+                    <div style="border: 2px solid #000;">
+
+                        <!-- SECTION 0: APPLICANT TYPE, PWD NUMBER, NAME & 1X1 PHOTO -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 2px solid #000;">
                             <tr>
-                                <td style="padding: 10px; border: 1px solid #000; font-weight: bold;">Name:</td>
-                                <td style="padding: 10px; border: 1px solid #000;" colspan="3">${userInfo.first_name} ${userInfo.last_name}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 10px; border: 1px solid #000; font-weight: bold;">Contact No:</td>
-                                <td style="padding: 10px; border: 1px solid #000;">${userInfo.contact_number || 'N/A'}</td>
-                                <td style="padding: 10px; border: 1px solid #000; font-weight: bold;">Email:</td>
-                                <td style="padding: 10px; border: 1px solid #000;">${userInfo.email || 'N/A'}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 10px; border: 1px solid #000; font-weight: bold;">Address:</td>
-                                <td style="padding: 10px; border: 1px solid #000;" colspan="3">${userInfo.address || 'Palayan City, Nueva Ecija'}</td>
+                                <td style="width: 78%; padding: 0; vertical-align: top; border-right: 2px solid #000;">
+                                    <!-- Row A: Applicant Type & Date -->
+                                    <div style="display: flex; align-items: center; padding: 5px 8px; border-bottom: 1px solid #000; font-size: 8pt; font-weight: bold;">
+                                        <div style="margin-right: 20px; display: inline-flex; align-items: center; gap: 4px;">
+                                            <span style="display: inline-block; width: 11px; height: 11px; border: 1.2px solid #000; text-align: center; line-height: 10px; font-size: 8pt;">${isRenewal ? '' : '✓'}</span> NEW APPLICANT
+                                        </div>
+                                        <div style="margin-right: 25px; display: inline-flex; align-items: center; gap: 4px;">
+                                            <span style="display: inline-block; width: 11px; height: 11px; border: 1.2px solid #000; text-align: center; line-height: 10px; font-size: 8pt;">${isRenewal ? '✓' : ''}</span> RENEWAL
+                                        </div>
+                                        <div style="flex: 1; text-align: right;">
+                                            DATE APPLIED: <span style="display: inline-block; border-bottom: 1px solid #000; min-width: 130px; text-align: center; font-weight: bold;">${dateApplied}</span>
+                                        </div>
+                                    </div>
+                                    <!-- Row B: PWD Number -->
+                                    <div style="padding: 5px 8px; border-bottom: 1px solid #000; font-size: 8pt; font-weight: bold;">
+                                        1. PWD NUMBER (RR-PPMM-BBB-NNNNNNN): <span style="font-family: monospace; font-size: 8.5pt; font-weight: bold; letter-spacing: 0.5px;">${pwdNumber}</span>
+                                    </div>
+                                    <!-- Row C: Full Name -->
+                                    <div style="padding: 5px 8px; font-size: 7.5pt; font-weight: bold;">
+                                        <div style="display: flex; gap: 8px;">
+                                            <div style="flex: 1.2;">
+                                                2. LAST NAME:<br>
+                                                <span style="display: block; border-bottom: 1px solid #000; min-height: 16px; font-size: 8.5pt; font-weight: 600; padding-top: 2px;">${ln}</span>
+                                            </div>
+                                            <div style="flex: 1.2;">
+                                                FIRST NAME:<br>
+                                                <span style="display: block; border-bottom: 1px solid #000; min-height: 16px; font-size: 8.5pt; font-weight: 600; padding-top: 2px;">${fn}</span>
+                                            </div>
+                                            <div style="flex: 1.2;">
+                                                MIDDLE NAME:<br>
+                                                <span style="display: block; border-bottom: 1px solid #000; min-height: 16px; font-size: 8.5pt; font-weight: 600; padding-top: 2px;">${mn}</span>
+                                            </div>
+                                            <div style="width: 55px;">
+                                                SUFFIX:<br>
+                                                <span style="display: block; border-bottom: 1px solid #000; min-height: 16px; font-size: 8.5pt; font-weight: 600; padding-top: 2px;">${sfx}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <!-- 1x1 Photo placeholder -->
+                                <td style="width: 22%; text-align: center; vertical-align: middle; padding: 6px;">
+                                    <div style="width: 95px; height: 95px; border: 1.5px dashed #444; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; font-size: 7.5pt; color: #444; line-height: 1.3;">
+                                        PLACE 1X1<br>PHOTO HERE
+                                    </div>
+                                </td>
                             </tr>
                         </table>
 
-                        <div style="margin-top: 30px;">
-                            <p>I hereby certify that I have a disability and wish to register for the PWD ID Card of Palayan City.</p>
-                        </div>
+                        <!-- SECTION 3 & 4: TYPE & CAUSE OF DISABILITY -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000;">
+                            <tr>
+                                <td style="width: 54%; border-right: 1.5px solid #000; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 8pt; margin-bottom: 4px;">3. TYPE OF DISABILITY: <em>(check all that apply)</em></div>
+                                    <div style="display: flex; gap: 8px; font-size: 7.5pt; line-height: 1.65;">
+                                        <div style="flex: 1;">
+                                            <div>&#9744; DEAF/HARD OF HEARING</div>
+                                            <div>&#9744; INTELLECTUAL DISABILITY</div>
+                                            <div>&#9744; LEARNING DISABILITY</div>
+                                            <div>&#9744; MENTAL DISABILITY</div>
+                                            <div>&#9744; PHYSICAL DISABILITY</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div>&#9744; PSYCHOSOCIAL DISABILITY</div>
+                                            <div>&#9744; SPEECH/LANGUAGE IMPAIRMENT</div>
+                                            <div>&#9744; VISUAL DISABILITY</div>
+                                            <div>&#9744; CANCER (RA-11215)</div>
+                                            <div>&#9744; RARE DISEASE (RA-10747)</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td style="width: 46%; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 8pt; margin-bottom: 4px;">4. CAUSE OF DISABILITY:</div>
+                                    <div style="display: flex; gap: 8px; font-size: 7.5pt; line-height: 1.65;">
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: bold;">&#9744; CONGENITAL/INBORN</div>
+                                            <div style="padding-left: 12px;">&#9744; AUTISM</div>
+                                            <div style="padding-left: 12px;">&#9744; ADHD</div>
+                                            <div style="padding-left: 12px;">&#9744; DOWN SYNDROME</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: bold;">&#9744; ACQUIRED</div>
+                                            <div style="padding-left: 12px;">&#9744; CHRONIC ILLNESS</div>
+                                            <div style="padding-left: 12px;">&#9744; CEREBRAL PALSY</div>
+                                            <div style="padding-left: 12px;">&#9744; INJURY</div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
 
-                        <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Applicant's Signature</p>
-                            </div>
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Date</p>
-                            </div>
-                        </div>
+                        <!-- SECTION 5: ADDRESS -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000; font-size: 7.5pt;">
+                            <tr>
+                                <td style="width: 65%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold;">5. ADDRESS: HOUSE NO. AND STREET NAME:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding-top: 2px; text-transform: uppercase;">${str || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 35%; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold;">BARANGAY:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding-top: 2px; text-transform: uppercase;">${brgy || '&nbsp;'}</div>
+                                </td>
+                            </tr>
+                            <tr style="border-top: 1px solid #000;">
+                                <td colspan="2" style="padding: 4px 8px;">
+                                    <div style="display: flex; justify-content: space-between; font-size: 7.5pt;">
+                                        <div><strong>CITY/MUNICIPALITY:</strong> <span style="font-weight: 600; font-size: 8pt; text-transform: uppercase;">PALAYAN CITY</span></div>
+                                        <div><strong>PROVINCE:</strong> <span style="font-weight: 600; font-size: 8pt; text-transform: uppercase;">NUEVA ECIJA</span></div>
+                                        <div><strong>REGION:</strong> <span style="font-weight: 600; font-size: 8pt; text-transform: uppercase;">REGION III</span></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- SECTION 6: CONTACT DETAILS -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000; font-size: 7.5pt;">
+                            <tr>
+                                <td style="width: 30%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold;">6. CONTACT DETAILS:</div>
+                                    <div>LANDLINE: <span style="border-bottom: 1px solid #000; display: inline-block; width: 105px;">&nbsp;</span></div>
+                                </td>
+                                <td style="width: 35%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold;">MOBILE NUMBER:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding-top: 2px;">${cont || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 35%; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold;">EMAIL ADDRESS:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding-top: 2px;">${email || '&nbsp;'}</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- SECTION 7, 8, 9: DATE OF BIRTH, SEX, CIVIL STATUS -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000; font-size: 7.5pt;">
+                            <tr>
+                                <td style="width: 28%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold;">7. DATE OF BIRTH (mm/dd/yyyy):</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding-top: 3px;">${dobFormatted || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 24%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; margin-bottom: 2px;">8. SEX:</div>
+                                    <div style="display: flex; gap: 12px; font-size: 7.5pt; padding-top: 1px;">
+                                        <div><span style="font-size: 8.5pt;">${gen === 'male' ? '&#9745;' : '&#9744;'}</span> MALE</div>
+                                        <div><span style="font-size: 8.5pt;">${gen === 'female' ? '&#9745;' : '&#9744;'}</span> FEMALE</div>
+                                    </div>
+                                </td>
+                                <td style="width: 48%; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; margin-bottom: 2px;">9. CIVIL STATUS:</div>
+                                    <div style="font-size: 7.5pt; line-height: 1.5;">
+                                        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                            <div><span style="font-size: 8.5pt;">${cs === 'single' ? '&#9745;' : '&#9744;'}</span> SINGLE</div>
+                                            <div><span style="font-size: 8.5pt;">${cs === 'separated' ? '&#9745;' : '&#9744;'}</span> SEPARATED</div>
+                                            <div><span style="font-size: 8.5pt;">${cs === 'cohabitation' || cs === 'live-in' ? '&#9745;' : '&#9744;'}</span> COHABITATION (LIVE-IN)</div>
+                                        </div>
+                                        <div style="display: flex; gap: 12px; margin-top: 2px;">
+                                            <div><span style="font-size: 8.5pt;">${cs === 'married' ? '&#9745;' : '&#9744;'}</span> MARRIED</div>
+                                            <div><span style="font-size: 8.5pt;">${cs === 'widow' || cs === 'widowed' || cs === 'widower' ? '&#9745;' : '&#9744;'}</span> WIDOW/ER</div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- SECTION 10, 11, 12: EDUCATION, EMPLOYMENT, OCCUPATION -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000; font-size: 7pt;">
+                            <tr>
+                                <!-- 10. Educational Attainment -->
+                                <td style="width: 32%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 3px;">10. EDUCATIONAL ATTAINMENT:</div>
+                                    <div style="line-height: 1.6;">
+                                        <div><span style="font-size: 8pt;">${edu === 'none' ? '&#9745;' : '&#9744;'}</span> NONE</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('kindergarten') ? '&#9745;' : '&#9744;'}</span> KINDERGARTEN</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('elementary') ? '&#9745;' : '&#9744;'}</span> ELEMENTARY</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('junior') ? '&#9745;' : '&#9744;'}</span> JUNIOR HIGH SCHOOL</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('senior') ? '&#9745;' : '&#9744;'}</span> SENIOR HIGH SCHOOL</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('college') ? '&#9745;' : '&#9744;'}</span> COLLEGE</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('vocational') ? '&#9745;' : '&#9744;'}</span> VOCATIONAL</div>
+                                        <div><span style="font-size: 8pt;">${edu.includes('post') ? '&#9745;' : '&#9744;'}</span> POST GRADUATE</div>
+                                    </div>
+                                </td>
+                                <!-- 11. Employment Status -->
+                                <td style="width: 34%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 3px;">11. EMPLOYMENT STATUS:</div>
+                                    <div style="line-height: 1.55;">
+                                        <div>&#9744; EMPLOYED</div>
+                                        <div>&#9744; UNEMPLOYED</div>
+                                        <div>&#9744; SELF EMPLOYED</div>
+                                    </div>
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin: 4px 0 2px;">11.1. CATEGORY OF EMPLOYMENT</div>
+                                    <div style="line-height: 1.55;">
+                                        <div>&#9744; GOVERNMENT</div>
+                                        <div>&#9744; PRIVATE</div>
+                                    </div>
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin: 4px 0 2px;">11.2. NATURE OF EMPLOYMENT</div>
+                                    <div style="line-height: 1.55;">
+                                        <div>&#9744; PERMANENT/REGULAR</div>
+                                        <div>&#9744; CASUAL</div>
+                                        <div>&#9744; SEASONAL</div>
+                                        <div>&#9744; EMERGENCY</div>
+                                    </div>
+                                </td>
+                                <!-- 12. Occupation -->
+                                <td style="width: 34%; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 3px;">12. OCCUPATION:</div>
+                                    <div style="line-height: 1.5;">
+                                        <div>&#9744; MANAGER</div>
+                                        <div>&#9744; PROFESSIONAL</div>
+                                        <div>&#9744; TECHNICIAN AND ASSOCIATE PROFESSIONALS</div>
+                                        <div>&#9744; CLERICAL SUPPORT WORKERS</div>
+                                        <div>&#9744; SERVICE AND SALES WORKERS</div>
+                                        <div>&#9744; SKILLED AGRICULTURAL, FORESTRY AND FISHERY WORKERS</div>
+                                        <div>&#9744; CRAFT &amp; RELATED TRADE WORKERS</div>
+                                        <div>&#9744; PLANT &amp; MACHINE OPERATORS AND ASSEMBLERS</div>
+                                        <div>&#9744; ELEMENTARY OCCUPATIONS</div>
+                                        <div>&#9744; ARMED FORCES OCCUPATIONS</div>
+                                        <div style="margin-top: 2px;">
+                                            &#9744; OTHER, SPECIFY: <span style="border-bottom: 1px solid #000; display: inline-block; width: 90px; text-transform: uppercase;">${occ || '&nbsp;'}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- SECTION 13, 14, 15: BLOOD TYPE, ORGANIZATION, ID REFERENCE -->
+                        <table style="width: 100%; border-collapse: collapse; font-size: 7pt;">
+                            <tr>
+                                <!-- 13. Blood Type -->
+                                <td style="width: 24%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 3px;">13. BLOOD TYPE:</div>
+                                    <div style="display: flex; gap: 14px; line-height: 1.6;">
+                                        <div>
+                                            <div>&#9744; A+</div>
+                                            <div>&#9744; A-</div>
+                                            <div>&#9744; B+</div>
+                                            <div>&#9744; B-</div>
+                                        </div>
+                                        <div>
+                                            <div>&#9744; AB+</div>
+                                            <div>&#9744; AB-</div>
+                                            <div>&#9744; O+</div>
+                                            <div>&#9744; O-</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <!-- 14. Organization Affiliated -->
+                                <td style="width: 38%; border-right: 1px solid #000; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 3px;">14. ORGANIZATION AFFILIATED:</div>
+                                    <div style="line-height: 1.65;">
+                                        <div>Organization Affiliated: <span style="border-bottom: 1px solid #000; display: inline-block; width: 130px;">&nbsp;</span></div>
+                                        <div>Contact Person: <span style="border-bottom: 1px solid #000; display: inline-block; width: 165px;">&nbsp;</span></div>
+                                        <div>Office Address: <span style="border-bottom: 1px solid #000; display: inline-block; width: 170px;">&nbsp;</span></div>
+                                        <div>Tel No.: <span style="border-bottom: 1px solid #000; display: inline-block; width: 195px;">&nbsp;</span></div>
+                                    </div>
+                                </td>
+                                <!-- 15. ID Reference No. -->
+                                <td style="width: 38%; padding: 4px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 3px;">15. ID REFERENCE NO.</div>
+                                    <div style="line-height: 1.6;">
+                                        <div>&#9744; SSS NO. <span style="border-bottom: 1px solid #000; display: inline-block; width: 155px;">&nbsp;</span></div>
+                                        <div>&#9744; GSIS NO. <span style="border-bottom: 1px solid #000; display: inline-block; width: 150px;">&nbsp;</span></div>
+                                        <div>&#9744; PSN NO. <span style="border-bottom: 1px solid #000; display: inline-block; width: 155px;">&nbsp;</span></div>
+                                        <div>&#9744; PHILHEALTH NO. <span style="border-bottom: 1px solid #000; display: inline-block; width: 110px;">&nbsp;</span></div>
+                                        <div style="padding-left: 16px;">
+                                            <div>&#9744; Philhealth Member</div>
+                                            <div>&#9744; Philhealth Member-Dependent</div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+
                     </div>
+                </div>
                 `;
             } else if (type === 'senior') {
+                const r = residentInfo || {};
+                const u = userInfo || {};
+                const sa = seniorApp || {};
+
+                const fn  = (r.first_name || u.first_name || '').toUpperCase();
+                const mn  = (r.middle_name || '').toUpperCase();
+                const ln  = (r.last_name  || u.last_name  || '').toUpperCase();
+                const sfx = (r.suffix || '').toUpperCase();
+                const fullName = [fn, mn, ln, sfx].filter(Boolean).join(' ');
+
+                const brgy = (r.barangay || '').toUpperCase();
+                const str  = (r.street || r.address || '').toUpperCase();
+                const fullAddress = [str, brgy, 'PALAYAN CITY', 'NUEVA ECIJA'].filter(Boolean).join(', ');
+                const cont = r.contact_number || u.contact_number || '';
+
+                const dob = r.birth_date || '';
+                let dobFormatted = '';
+                let age = '';
+                if (dob && dob !== '0000-00-00') {
+                    const d = new Date(dob + 'T00:00:00');
+                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    const yyyy = d.getFullYear();
+                    dobFormatted = `${mm}/${dd}/${yyyy}`;
+                    
+                    const today = new Date();
+                    let ageVal = today.getFullYear() - d.getFullYear();
+                    const mDiff = today.getMonth() - d.getMonth();
+                    if (mDiff < 0 || (mDiff === 0 && today.getDate() < d.getDate())) {
+                        ageVal--;
+                    }
+                    age = ageVal >= 0 ? ageVal : '';
+                }
+
+                const gen = (r.gender || '').toUpperCase();
+                const cs  = (r.civil_status || '').toUpperCase();
+                const currentDate = new Date().toLocaleDateString();
+
                 html = `
-                    <div style="border: 2px solid #000; padding: 30px; font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #000; background: #fff;">
-                        <h3 style="text-align: center; margin: 0;">SENIOR CITIZEN REGISTRATION FORM</h3>
-                        <h4 style="text-align: center; margin-top: 5px; color: #555;">Palayan City Senior Citizen Affairs Office</h4>
-                        <hr style="border-top: 2px solid #000; margin-top: 15px;">
+                <div style="font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; max-width: 820px; margin: 0 auto; padding: 12px 16px; font-size: 8.5pt; line-height: 1.3;">
 
-                        <div style="margin-top: 30px; line-height: 2;">
-                            <p><strong>Name:</strong> ${userInfo.first_name} ${userInfo.last_name}</p>
-                            <p><strong>Address:</strong> ${userInfo.address || 'Palayan City, Nueva Ecija'}</p>
-                            <p><strong>Contact Number:</strong> ${userInfo.contact_number || 'N/A'}</p>
-                            <p><strong>Email:</strong> ${userInfo.email || 'N/A'}</p>
-                            <p><strong>Date of Registration:</strong> ${new Date().toLocaleDateString()}</p>
-                        </div>
-
-                        <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Applicant's Signature</p>
-                            </div>
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Date</p>
-                            </div>
+                    <!-- LOGO & HEADER -->
+                    <div style="position: relative; text-align: center; margin-bottom: 12px; min-height: 80px;">
+                        <img src="${pkhLogoSrc}" style="position: absolute; left: 10px; top: 0; width: 75px; height: 75px; object-fit: contain;" alt="One Palayan Kalinga Hub Logo">
+                        
+                        <div style="padding: 0 90px;">
+                            <div style="font-size: 8.5pt; color: #333;">Republic of the Philippines</div>
+                            <div style="font-size: 10pt; font-weight: bold; margin: 1px 0;">City of Palayan</div>
+                            <div style="font-size: 8.5pt; font-weight: bold; color: #000; margin-top: 6px;">OFFICE OF THE SENIOR CITIZENS AFFAIRS (OSCA)</div>
+                            <div style="font-size: 7.5pt; color: #0288D1; text-decoration: underline; margin-top: 2px;">palayan-kalinga-hub.cityhall.gov.ph</div>
                         </div>
                     </div>
+
+                    <!-- TITLE & BARANGAY / DATE BAR -->
+                    <h2 style="text-align: center; font-size: 12.5pt; font-weight: 800; letter-spacing: 0.5px; margin: 12px 0 10px; text-transform: uppercase;">
+                        SENIOR CITIZENS APPLICATION FORM
+                    </h2>
+
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; font-size: 8.5pt; font-weight: bold; margin-bottom: 6px; padding: 0 2px;">
+                        <div>
+                            BARANGAY: <span style="text-decoration: underline; text-transform: uppercase; font-weight: 800;">${brgy ? (brgy + ', PALAYAN CITY') : 'PALAYAN CITY'}</span>
+                        </div>
+                        <div>
+                            Date: <span style="border-bottom: 1px solid #000; display: inline-block; min-width: 140px; text-align: center; font-weight: bold;">${currentDate}</span>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 8pt; font-weight: bold; margin-bottom: 6px;">
+                        Note: PLEASE PRINT
+                    </div>
+
+                    <!-- MAIN BORDERED APPLICATION TABLE -->
+                    <div style="border: 1.5px solid #000;">
+
+                        <!-- ROW 1: GIVEN NAME -->
+                        <div style="border-bottom: 1px solid #000; padding: 5px 8px;">
+                            <div style="font-size: 7.5pt; font-weight: bold;">GIVEN NAME:</div>
+                            <div style="font-size: 9pt; font-weight: 600; text-transform: uppercase; padding: 2px 0;">${fn || '&nbsp;'}</div>
+                        </div>
+
+                        <!-- ROW 2: MIDDLE NAME -->
+                        <div style="border-bottom: 1px solid #000; padding: 5px 8px;">
+                            <div style="font-size: 7.5pt; font-weight: bold;">MIDDLE NAME:</div>
+                            <div style="font-size: 9pt; font-weight: 600; text-transform: uppercase; padding: 2px 0;">${mn || '&nbsp;'}</div>
+                        </div>
+
+                        <!-- ROW 3: SURNAME -->
+                        <div style="border-bottom: 1px solid #000; padding: 5px 8px;">
+                            <div style="font-size: 7.5pt; font-weight: bold;">SURNAME:</div>
+                            <div style="font-size: 9pt; font-weight: 600; text-transform: uppercase; padding: 2px 0;">${ln}${sfx ? (' ' + sfx) : ''}</div>
+                        </div>
+
+                        <!-- ROW 4: ADDRESS & CONTACT NUMBER (2 COLUMNS) -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1px solid #000;">
+                            <tr>
+                                <td style="width: 65%; border-right: 1px solid #000; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-size: 7.5pt; font-weight: bold;">COMPLETE ADDRESS (Number, Street or Purok, Barangay)</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; text-transform: uppercase; padding: 2px 0;">${fullAddress || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 35%; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-size: 7.5pt; font-weight: bold;">CONTACT NUMBER:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding: 2px 0;">${cont || '&nbsp;'}</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- ROW 5: DATE OF BIRTH, AGE, PLACE OF BIRTH (3 COLUMNS) -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1px solid #000;">
+                            <tr>
+                                <td style="width: 35%; border-right: 1px solid #000; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-size: 7.5pt; font-weight: bold;">DATE OF BIRTH:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding: 2px 0;">${dobFormatted || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 20%; border-right: 1px solid #000; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-size: 7.5pt; font-weight: bold;">AGE:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; padding: 2px 0;">${age ? (age + ' yrs') : '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 45%; padding: 5px 8px; vertical-align: top;">
+                                    <div style="font-size: 7.5pt; font-weight: bold;">PLACE OF BIRTH:</div>
+                                    <div style="font-size: 8.5pt; font-weight: 600; text-transform: uppercase; padding: 2px 0;">PALAYAN CITY, NUEVA ECIJA</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- ROW 6: RELIGION, BLOOD TYPE, CIVIL STATUS, GENDER, NO. OF YRS IN PALAYAN, CITIZENSHIP (6 COLUMNS) -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000; font-size: 7.5pt;">
+                            <tr>
+                                <td style="width: 16%; border-right: 1px solid #000; padding: 5px 6px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7pt;">RELIGION:</div>
+                                    <div style="font-size: 8pt; font-weight: 600; padding: 2px 0; text-transform: uppercase;">ROMAN CATHOLIC</div>
+                                </td>
+                                <td style="width: 15%; border-right: 1px solid #000; padding: 5px 6px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7pt;">BLOOD TYPE:</div>
+                                    <div style="font-size: 8pt; font-weight: 600; padding: 2px 0;">&nbsp;</div>
+                                </td>
+                                <td style="width: 17%; border-right: 1px solid #000; padding: 5px 6px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7pt;">CIVIL STATUS:</div>
+                                    <div style="font-size: 8pt; font-weight: 600; padding: 2px 0; text-transform: uppercase;">${cs || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 14%; border-right: 1px solid #000; padding: 5px 6px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7pt;">GENDER:</div>
+                                    <div style="font-size: 8pt; font-weight: 600; padding: 2px 0; text-transform: uppercase;">${gen || '&nbsp;'}</div>
+                                </td>
+                                <td style="width: 20%; border-right: 1px solid #000; padding: 5px 6px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7pt;">NO. OF YRS IN PALAYAN:</div>
+                                    <div style="font-size: 8pt; font-weight: 600; padding: 2px 0;">SINCE BIRTH</div>
+                                </td>
+                                <td style="width: 18%; padding: 5px 6px; vertical-align: top;">
+                                    <div style="font-weight: bold; font-size: 7pt;">CITIZENSHIP:</div>
+                                    <div style="font-size: 8pt; font-weight: 600; padding: 2px 0; text-transform: uppercase;">FILIPINO</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- SECTION 2: REQUIREMENTS -->
+                        <div style="padding: 6px 10px; border-bottom: 1.5px solid #000; font-size: 7.5pt; line-height: 1.55;">
+                            <div style="font-weight: bold; font-size: 8pt; margin-bottom: 3px;">REQUIREMENTS:</div>
+                            <ul style="margin: 0 0 4px 18px; padding: 0; list-style-type: disc;">
+                                <li>2 PCS 1X1 PICTURE</li>
+                                <li>XEROX COPY BIRTH CERTIFICATE/BAPTISMAL</li>
+                                <li>COMELEC CERTIFICATION</li>
+                                <li>BARANGAY CLEARANCE</li>
+                                <li>CEDULA (LATEST) XEROX COPY</li>
+                            </ul>
+                            <div style="padding-left: 18px; font-size: 7.5pt;">
+                                Other supporting Documents: Any Valid ID (SSS, PRC, GSIS, TIN, PASSPORT, POSTAL ID)
+                            </div>
+                        </div>
+
+                        <!-- SECTION 3: THUMBMARK & SIGNATURE -->
+                        <table style="width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #000;">
+                            <tr>
+                                <td style="width: 25%; border-right: 1.5px solid #000; padding: 6px 8px; vertical-align: top; text-align: center;">
+                                    <div style="font-weight: bold; font-size: 7.5pt; margin-bottom: 6px; text-align: left;">THUMBMARK</div>
+                                    <div style="width: 80px; height: 75px; border: 1px dashed #666; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 7pt; color: #888;">
+                                        Right Thumb
+                                    </div>
+                                </td>
+                                <td style="width: 75%; padding: 10px 15px; vertical-align: bottom; text-align: center;">
+                                    <div style="border-bottom: 1px solid #000; width: 85%; margin: 0 auto 4px; min-height: 38px; display: flex; align-items: flex-end; justify-content: center; font-weight: bold; font-size: 9.5pt; text-transform: uppercase;">
+                                        ${fullName}
+                                    </div>
+                                    <div style="font-weight: bold; font-size: 7.5pt; text-transform: uppercase;">
+                                        SIGNATURE OVER PRINTED NAME OF APPLICANT
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- SECTION 4: CERTIFIED BY -->
+                        <div style="padding: 8px 12px; border-bottom: 2px solid #000; font-size: 8pt;">
+                            <div style="font-weight: bold; margin-bottom: 15px;">CERTIFIED BY:</div>
+                            <div style="text-align: center; width: 60%; margin: 0 auto;">
+                                <div style="border-bottom: 1px solid #000; width: 100%; min-height: 25px;">&nbsp;</div>
+                                <div style="font-weight: bold; font-size: 7.5pt; margin-top: 4px; text-transform: uppercase;">
+                                    PRESIDENT – SENIOR CITIZEN ASSOCIATION
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SECTION 5: OFFICE USE ONLY (4 COLUMNS) -->
+                        <table style="width: 100%; border-collapse: collapse; font-size: 7.5pt;">
+                            <tr>
+                                <!-- REMARKS -->
+                                <td style="width: 28%; border-right: 1px solid #000; padding: 6px 8px; vertical-align: top; line-height: 1.7;">
+                                    <div style="font-weight: bold; margin-bottom: 4px;">REMARKS:</div>
+                                    <div>New : <span style="border-bottom: 1px solid #000; display: inline-block; width: 120px;">&nbsp;</span></div>
+                                    <div>Lost : <span style="border-bottom: 1px solid #000; display: inline-block; width: 120px;">&nbsp;</span></div>
+                                    <div>Change : <span style="border-bottom: 1px solid #000; display: inline-block; width: 105px;">&nbsp;</span></div>
+                                    <div>Transfer : <span style="border-bottom: 1px solid #000; display: inline-block; width: 100px;">&nbsp;</span></div>
+                                </td>
+                                <!-- ISSUED BY -->
+                                <td style="width: 24%; border-right: 1px solid #000; padding: 6px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; margin-bottom: 50px;">ISSUED BY:</div>
+                                    <div style="border-top: 1px solid #000; padding-top: 2px; text-align: center; font-size: 7pt; color: #555;">OSCA Officer Signature</div>
+                                </td>
+                                <!-- DATE ISSUED -->
+                                <td style="width: 24%; border-right: 1px solid #000; padding: 6px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; margin-bottom: 50px;">DATE ISSUED:</div>
+                                    <div style="border-top: 1px solid #000; padding-top: 2px; text-align: center; font-size: 7pt; color: #555;">Date Stamp</div>
+                                </td>
+                                <!-- RECEIVED BY -->
+                                <td style="width: 24%; padding: 6px 8px; vertical-align: top;">
+                                    <div style="font-weight: bold; margin-bottom: 50px;">RECEIVED BY:</div>
+                                    <div style="border-top: 1px solid #000; padding-top: 2px; text-align: center; font-size: 7pt; color: #555;">Applicant Signature</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                    </div>
+                </div>
                 `;
             } else if (type === 'housing') {
                 html = `
-                    <div style="border: 2px solid #000; padding: 30px; font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #000; background: #fff;">
-                        <h3 style="text-align: center; margin: 0;">HOUSING APPLICATION FORM</h3>
-                        <h4 style="text-align: center; margin-top: 5px; color: #555;">Palayan City Housing Program</h4>
-                        <hr style="border-top: 2px solid #000; margin-top: 15px;">
-
-                        <div style="margin-top: 30px; line-height: 2;">
-                            <p><strong>Name:</strong> ${userInfo.first_name} ${userInfo.last_name}</p>
-                            <p><strong>Address:</strong> ${userInfo.address || 'Palayan City, Nueva Ecija'}</p>
-                            <p><strong>Contact Number:</strong> ${userInfo.contact_number || 'N/A'}</p>
-                            <p><strong>Email:</strong> ${userInfo.email || 'N/A'}</p>
-                            <p><strong>Date of Application:</strong> ${new Date().toLocaleDateString()}</p>
+                    <div style="border: 2px solid #000; padding: 25px; font-family: Arial, sans-serif; max-width: 820px; margin: 0 auto; color: #000; background: #fff;">
+                        <div style="position: relative; text-align: center; margin-bottom: 12px; min-height: 65px;">
+                            <img src="${pkhLogoSrc}" style="position: absolute; left: 0; top: 0; width: 60px; height: 60px; object-fit: contain;" alt="One Palayan Kalinga Hub Logo">
+                            <div style="font-size: 8.5pt; font-weight: bold; text-transform: uppercase;">Republic of the Philippines &bull; Province of Nueva Ecija</div>
+                            <h3 style="margin: 3px 0; font-size: 13pt;">CITY SOCIAL WELFARE AND DEVELOPMENT OFFICE</h3>
+                            <div style="font-size: 9pt; font-weight: bold; letter-spacing: 1px;">CITY GOVERNMENT OF PALAYAN</div>
+                            <h4 style="margin: 8px 0 0; font-size: 11pt; text-decoration: underline; letter-spacing: 0.5px;">SOCIALIZED HOUSING ASSISTANCE APPLICATION FORM</h4>
                         </div>
+                        <hr style="border: none; border-top: 1.5px solid #000; margin: 8px 0 14px;">
 
-                        <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Applicant's Signature</p>
-                            </div>
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Date</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else if (type === 'medical') {
-                html = `
-                    <div style="border: 2px solid #000; padding: 30px; font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #000; background: #fff;">
-                        <h3 style="text-align: center; margin: 0;">MEDICAL ASSISTANCE FORM</h3>
-                        <h4 style="text-align: center; margin-top: 5px; color: #555;">CSWDO Palayan City</h4>
-                        <hr style="border-top: 2px solid #000; margin-top: 15px;">
-
-                        <div style="margin-top: 30px; line-height: 2;">
-                            <p><strong>Name:</strong> ${userInfo.first_name} ${userInfo.last_name}</p>
-                            <p><strong>Address:</strong> ${userInfo.address || 'Palayan City, Nueva Ecija'}</p>
-                            <p><strong>Contact Number:</strong> ${userInfo.contact_number || 'N/A'}</p>
-                            <p><strong>Date of Application:</strong> ${new Date().toLocaleDateString()}</p>
-                        </div>
-
-                        <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Applicant's Signature</p>
-                            </div>
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Date</p>
+                        <!-- HOUSING ASSISTANCE PATHWAY SELECTION -->
+                        <div style="border: 1px solid #000; padding: 8px 12px; margin-bottom: 12px; background: #f5f5f5;">
+                            <div style="font-weight: bold; font-size: 9pt; margin-bottom: 6px;">I. HOUSING ASSISTANCE PATHWAY (Pumili ng Isa):</div>
+                            <div style="display: flex; gap: 24px; font-size: 8.5pt; line-height: 1.6;">
+                                <div style="flex: 1; border-right: 1px dashed #999; padding-right: 12px;">
+                                    <div style="font-weight: bold;">&#9744; RELOCATION HOUSING</div>
+                                    <div style="font-size: 7.5pt; color: #333; margin-top: 2px;">Para sa paglipat sa designated housing community:</div>
+                                    <div style="margin-top: 4px; padding-left: 12px;">
+                                        <div>&#9744; Akap Village Housing Project</div>
+                                        <div>&#9744; San Lorenzo NHA Housing</div>
+                                    </div>
+                                </div>
+                                <div style="flex: 1.2;">
+                                    <div style="font-weight: bold; color: #004d40;">&#9744; IN-SITE HOUSING (Sariling Lote)</div>
+                                    <div style="font-size: 7.5pt; color: #333; margin-top: 2px;">Para sa pagpapatayo sa sarili o pinapahintulutang lupa sa Palayan City (Walang relocation na kailangan).</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
-            } else if (type === 'burial') {
-                html = `
-                    <div style="border: 2px solid #000; padding: 30px; font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #000; background: #fff;">
-                        <h3 style="text-align: center; margin: 0;">BURIAL ASSISTANCE FORM</h3>
-                        <h4 style="text-align: center; margin-top: 5px; color: #555;">CSWDO Palayan City</h4>
-                        <hr style="border-top: 2px solid #000; margin-top: 15px;">
 
-                        <div style="margin-top: 30px; line-height: 2;">
-                            <p><strong>Name:</strong> ${userInfo.first_name} ${userInfo.last_name}</p>
-                            <p><strong>Address:</strong> ${userInfo.address || 'Palayan City, Nueva Ecija'}</p>
-                            <p><strong>Contact Number:</strong> ${userInfo.contact_number || 'N/A'}</p>
-                            <p><strong>Date of Application:</strong> ${new Date().toLocaleDateString()}</p>
+                        <!-- CLIENT IDENTIFYING INFO -->
+                        <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 12px;">
+                            <tr style="background: #e0e0e0;">
+                                <td colspan="4" style="padding: 4px 8px; border: 1px solid #000; font-weight: bold;">II. APPLICANT INFORMATION</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 8px; border: 1px solid #000; width: 18%; font-weight: bold;">Full Name:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000; width: 32%;">${userInfo.first_name} ${userInfo.last_name}</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000; width: 18%; font-weight: bold;">Contact No:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000; width: 32%;">${userInfo.contact_number || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 8px; border: 1px solid #000; font-weight: bold;">Current Address:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000;" colspan="3">${userInfo.address || 'Palayan City, Nueva Ecija'}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 8px; border: 1px solid #000; font-weight: bold;">Email Address:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000;">${userInfo.email || 'N/A'}</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000; font-weight: bold;">Monthly Income:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000;">&#8369; _____________________</td>
+                            </tr>
+                        </table>
+
+                        <!-- IN-SITE PROPERTY PARTICULARS -->
+                        <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 12px;">
+                            <tr style="background: #e0e0e0;">
+                                <td colspan="2" style="padding: 4px 8px; border: 1px solid #000; font-weight: bold;">III. IN-SITE HOUSING PROPERTY DETAILS (Kung In-Site Housing ang Aplikasyon)</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 8px; border: 1px solid #000; width: 28%; font-weight: bold;">Land Ownership / Tenure:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000;">
+                                    &#9744; Titled Landowner (TCT/OCT) &nbsp;&nbsp;
+                                    &#9744; Real Property Tax Declaration &nbsp;&nbsp;
+                                    &#9744; Inherited / Family Lot &nbsp;&nbsp;
+                                    &#9744; With Notarized Landowner Consent
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 8px; border: 1px solid #000; font-weight: bold;">Proposed Site Address:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000;">Street / Purok / Barangay, Palayan City: __________________________________________________</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 8px; border: 1px solid #000; font-weight: bold;">Lot Area / Scope:</td>
+                                <td style="padding: 5px 8px; border: 1px solid #000;">
+                                    Lot Area: __________ sq.m. &nbsp;&nbsp;|&nbsp;&nbsp;
+                                    Scope: &#9744; New Core House &nbsp;&nbsp; &#9744; Full Reconstruction &nbsp;&nbsp; &#9744; Shelter Repair
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- CERTIFICATION -->
+                        <div style="font-size: 8pt; line-height: 1.5; margin: 12px 0;">
+                            <p style="margin: 0;">Ako ay nagpapatunay na ang lahat ng impormasyong nakasulat sa itaas ay totoo at tama sa abot ng aking kaalaman. Nauunawaan ko na ang anumang maling pahayag ay maaaring maging sanhi ng pagkakansela ng aking aplikasyon para sa programang pabahay ng Lungsod ng Palayan.</p>
                         </div>
 
-                        <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Applicant's Signature</p>
+                        <!-- SIGNATURES -->
+                        <div style="margin-top: 35px; display: flex; justify-content: space-between; font-size: 8.5pt;">
+                            <div style="text-align: center;">
+                                <div style="border-top: 1px solid #000; width: 220px; padding-top: 4px; font-weight: bold;">Lagda ng Aplikante / Beneficiary</div>
+                                <div style="font-size: 7.5pt; color: #555;">Pangalan at Lagda</div>
                             </div>
-                            <div>
-                                <p style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 8px;">Date</p>
+                            <div style="text-align: center;">
+                                <div style="border-top: 1px solid #000; width: 140px; padding-top: 4px; font-weight: bold;">Petsa (Date)</div>
+                                <div style="font-size: 7.5pt; color: #555;">${new Date().toLocaleDateString()}</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="border-top: 1px solid #000; width: 220px; padding-top: 4px; font-weight: bold;">CSWDO Intake Officer / Social Worker</div>
+                                <div style="font-size: 7.5pt; color: #555;">Pagsusuri at Balidasyon</div>
                             </div>
                         </div>
                     </div>
@@ -1094,43 +1541,58 @@ $greeting_emoji = $hour < 12 ? '🌅' : ($hour < 18 ? '☀️' : '🌙');
         }
 
         function closePrintModal() {
-            document.getElementById('printModal').style.display = 'none';
+            const modal = document.getElementById('printModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
             document.body.style.overflow = '';
         }
 
+        window.openPrintModal = openPrintModal;
+        window.closePrintModal = closePrintModal;
+
         // Close modal on outside click
-        document.getElementById('printModal').addEventListener('click', function (e) {
-            if (e.target === this) {
-                closePrintModal();
-            }
-        });
+        const modalEl = document.getElementById('printModal');
+        if (modalEl) {
+            modalEl.addEventListener('click', function (e) {
+                if (e.target === this) {
+                    closePrintModal();
+                }
+            });
+        }
 
         // ========== KEYBOARD SHORTCUTS ==========
         document.addEventListener('keydown', function (e) {
-            // Escape to close sidebar or modal
+            // Escape to close modal
             if (e.key === 'Escape') {
-                closeSidebar();
                 const modal = document.getElementById('printModal');
-                if (modal.style.display === 'block') {
+                if (modal && modal.style.display === 'block') {
                     closePrintModal();
                 }
             }
             // Ctrl + P to print (when modal is open)
             if (e.ctrlKey && e.key === 'p') {
                 const modal = document.getElementById('printModal');
-                if (modal.style.display === 'block') {
+                if (modal && modal.style.display === 'block') {
                     e.preventDefault();
                     window.print();
                 }
             }
         });
 
+        // ========== AUTO-OPEN VIA URL PARAMETER ==========
+        const urlParams = new URLSearchParams(window.location.search);
+        const formParam = urlParams.get('form');
+        if (formParam && ['intake', 'gis_ciu', 'pwd', 'senior', 'housing'].includes(formParam)) {
+            openPrintModal(formParam);
+        }
+
         // ========== CONSOLE WELCOME ==========
-        console.log('📄 One Palayan-Kalinga Hub - Printable Forms');
-        console.log('💡 Keyboard shortcuts: ESC (Close Modal/Menu), Ctrl+P (Print when modal open)');
-        console.log('📱 Mobile navigation: Click the hamburger menu (☰) to open sidebar');
-        console.log('🌓 Toggle dark/light mode using the sun/moon button!');
+        console.log('📄 One Palayan-Kalinga Hub - Printable Forms ready');
     </script>
+
+    <!-- Search Modal (Req 7) -->
+    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 
 </html>

@@ -68,12 +68,21 @@ $status_filter = isset($_GET['status']) ? sanitize($_GET['status']) : 'all';
 $type_filter = isset($_GET['type']) ? sanitize($_GET['type']) : 'all';
 $date_from = isset($_GET['date_from']) ? sanitize($_GET['date_from']) : '';
 $date_to = isset($_GET['date_to']) ? sanitize($_GET['date_to']) : '';
+$search = isset($_GET['search']) ? trim(sanitize($_GET['search'])) : '';
 
 // Build query
 $query = "SELECT * FROM aics_requests 
           WHERE user_id = :user_id";
 
 $params = [':user_id' => $_SESSION['user_id']];
+
+if (!empty($search)) {
+    $clean_search = preg_replace('/[^0-9]/', '', $search);
+    $search_id = !empty($clean_search) ? intval($clean_search) : 0;
+    $query .= " AND (purpose LIKE :search OR request_type LIKE :search OR aics_id = :search_id)";
+    $params[':search'] = "%{$search}%";
+    $params[':search_id'] = $search_id;
+}
 
 if ($status_filter != 'all') {
     $query .= " AND status = :status";
@@ -149,7 +158,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>My AICS Requests - One Palayan-Kalinga Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="css/portal-layout.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
         /* ========== STATS GRID ========== */
         .stats-grid {
@@ -541,93 +550,51 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .stats-grid { grid-template-columns: repeat(3, 1fr); }
         }
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
-            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
             .summary-cards { grid-template-columns: 1fr; }
         }
         @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .filter-form { flex-direction: column; }
-            .filter-group { width: 100%; min-width: unset; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .filter-form { flex-direction: column !important; }
+            .filter-group { width: 100% !important; min-width: unset; }
             .filter-actions { flex-direction: column; width: 100%; }
             .filter-actions button, .filter-actions a { width: 100%; justify-content: center; }
-            .table-container { padding: 12px 16px; }
-            .requests-table th, .requests-table td { padding: 8px 10px; font-size: 0.75rem; }
-            .action-buttons { flex-direction: column; align-items: center; }
-            .action-buttons .btn-view, .action-buttons .btn-cancel { width: 100%; justify-content: center; }
-            .modal-content { padding: 20px; }
+            .table-container { padding: 12px 14px; overflow-x: auto; }
+            .requests-table th, .requests-table td { padding: 10px 12px; font-size: 0.78rem; }
+            .action-buttons { flex-wrap: wrap; gap: 6px; }
+            .modal-content { padding: 20px 16px; width: calc(100vw - 28px); max-width: 440px; }
         }
         @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .stat-card { padding: 10px 12px; }
-            .stat-number { font-size: 1.1rem; }
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .stat-card { padding: 10px 8px; }
+            .stat-number { font-size: 1.15rem; }
+            .stat-label { font-size: 0.65rem; }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar Overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Integrated Service Portal</span>
-                </div>
-                <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="user-info-sidebar">
-                <div class="user-avatar-sidebar">
-                    <?php if(!empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile">
-                    <?php else: ?>
-                        <?php echo $initials; ?>
-                    <?php endif; ?>
-                </div>
-                <div>
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <span>Resident</span>
-                </div>
-            </div>
-            
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-            
-            <div class="sidebar-footer">
-                <a href="index.php"><i class="fas fa-home"></i> Back to Home</a>
-            </div>
-        </div>
+        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="top-bar-left">
-                    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle navigation">
-                        <i class="fas fa-bars"></i>
-                        <span>Menu</span>
-                    </button>
-                    <div class="page-title">
-                        <h1><i class="fas fa-list-alt" style="color: var(--maroon-light); margin-right: 10px;"></i> My AICS Requests</h1>
-                        <p>Track and manage all your Assistance to Individuals in Crisis Situation requests</p>
-                    </div>
-                </div>
-                <div class="top-bar-actions">
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="dashboard.php" class="top-icon"><i class="fas fa-tachometer-alt"></i></a>
-                </div>
-            </div>
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = "My AICS Assistance Requests";
+            $banner_subtitle = "Track and manage your Assistance to Individuals in Crisis Situations records";
+            $banner_icon = "fa-hand-holding-heart";
+            $banner_actions = [
+                ["label" => "New Request", "url" => "apply-aics.php", "icon" => "fa-plus-circle", "type" => "primary"],
+                ["label" => "AICS Services", "url" => "aics.php", "icon" => "fa-hands-holding", "type" => "secondary"]
+            ];
+            include __DIR__ . "/includes/portal-banner.php";
+            ?>
 
         <?php if(isset($success)): ?>
             <div class="alert alert-success">
@@ -660,7 +627,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
             <div class="stat-card rejected" onclick="window.location.href='aics-requests.php?status=rejected'">
                 <div class="stat-number"><?php echo $stats['rejected'] ?? 0; ?></div>
-                <div class="stat-label">Rejected</div>
+                <div class="stat-label">Disapproved</div>
             </div>
             <div class="stat-card released" onclick="window.location.href='aics-requests.php?status=released'">
                 <div class="stat-number"><?php echo $stats['released'] ?? 0; ?></div>
@@ -689,6 +656,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         <!-- Filter Bar -->
         <div class="filter-bar">
             <form method="GET" action="" class="filter-form">
+                <div class="filter-group" style="flex: 1.5; min-width: 180px;">
+                    <label><i class="fas fa-search"></i> Search</label>
+                    <input type="text" name="search" placeholder="Tracking # or keyword..." value="<?php echo htmlspecialchars($search); ?>">
+                </div>
                 <div class="filter-group">
                     <label><i class="fas fa-filter"></i> Status</label>
                     <select name="status">
@@ -696,7 +667,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <option value="submitted" <?php echo $status_filter == 'submitted' ? 'selected' : ''; ?>>Submitted</option>
                         <option value="reviewing" <?php echo $status_filter == 'reviewing' ? 'selected' : ''; ?>>Reviewing</option>
                         <option value="approved" <?php echo $status_filter == 'approved' ? 'selected' : ''; ?>>Approved</option>
-                        <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
+                        <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Disapproved</option>
                         <option value="released" <?php echo $status_filter == 'released' ? 'selected' : ''; ?>>Released</option>
                     </select>
                 </div>
@@ -723,7 +694,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 </div>
                 <div class="filter-actions">
                     <button type="submit" class="filter-btn"><i class="fas fa-search"></i> Apply</button>
-                    <?php if($status_filter != 'all' || $type_filter != 'all' || $date_from || $date_to): ?>
+                    <?php if($status_filter != 'all' || $type_filter != 'all' || $date_from || $date_to || !empty($search)): ?>
                     <a href="aics-requests.php" class="clear-btn"><i class="fas fa-times"></i> Clear</a>
                     <?php endif; ?>
                 </div>
@@ -764,7 +735,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         </td>
                         <td style="text-align: center;">
                             <div class="action-buttons" style="justify-content: center;">
-                                <a href="track-aics.php?tracking=AICS-<?php echo str_pad($request['aics_id'], 6, '0', STR_PAD_LEFT); ?>" class="btn-view">
+                                <a href="view-aics.php?id=<?php echo $request['aics_id']; ?>" class="btn-view">
                                     <i class="fas fa-search"></i> Track
                                 </a>
                                 <?php if($request['status'] == 'submitted' || $request['status'] == 'reviewing'): ?>
@@ -883,5 +854,8 @@ setTimeout(function() {
     });
 }, 5000);
 </script>
+
+<!-- Search Modal (Req 7) -->
+<?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

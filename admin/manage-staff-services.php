@@ -1,5 +1,5 @@
 <?php
-// admin/manage-staff-services.php
+// admin/manage-staff-services.php - Service Permissions & Staff Access Management
 require_once __DIR__ . '/../config/database.php';
 
 if (!isAdmin()) {
@@ -12,22 +12,44 @@ $db = $database->getConnection();
 $error = '';
 $success = '';
 
-// Get all staff for dropdown
-$staff_query = "SELECT s.id, s.first_name, s.last_name, s.staff_number, s.employee_id, u.email 
+// Enhanced Staff Query with real display names, staff numbers, roles, and assigned counts
+$staff_query = "SELECT s.id, s.first_name, s.last_name, s.staff_number, s.employee_id, s.position, s.department, s.profile_image, 
+                       u.email, u.profile_picture,
+                       COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name,''), ' ', COALESCE(s.last_name,''))), ''), 
+                                NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), 
+                                'Staff Member') AS display_name,
+                       COALESCE(NULLIF(s.staff_number, ''), NULLIF(s.employee_id, ''), CONCAT('STF-', LPAD(s.id, 4, '0'))) AS display_staff_number,
+                       COALESCE(NULLIF(s.position, ''), NULLIF(s.department, ''), 'Staff') AS display_role,
+                       COUNT(ssa.id) AS assigned_count
                 FROM staff s
                 JOIN users u ON s.user_id = u.user_id
+                LEFT JOIN staff_service_assignments ssa ON ssa.staff_id = s.id AND ssa.is_active = 1
                 WHERE u.role = 'staff' AND s.is_active = 1
-                ORDER BY s.first_name ASC";
+                GROUP BY s.id
+                ORDER BY display_name ASC";
 $staff_list = $db->query($staff_query)->fetchAll(PDO::FETCH_ASSOC);
 
+// Select first staff member by default if none specified
 $selected_staff_id = isset($_GET['staff_id']) ? intval($_GET['staff_id']) : (isset($_POST['staff_id']) ? intval($_POST['staff_id']) : 0);
+if ($selected_staff_id <= 0 && !empty($staff_list)) {
+    $selected_staff_id = intval($staff_list[0]['id']);
+}
+
 $current_staff = null;
 $assigned_services = [];
-$all_services = ['AICS', 'Housing', 'Senior Citizen', 'PWD'];
+$assigned_names = [];
 
 if ($selected_staff_id > 0) {
     // Get staff info
-    $staff_info_query = "SELECT s.*, u.email FROM staff s JOIN users u ON s.user_id = u.user_id WHERE s.id = :id";
+    $staff_info_query = "SELECT s.*, u.email, u.profile_picture AS user_pic,
+                                COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name,''), ' ', COALESCE(s.last_name,''))), ''), 
+                                         NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), 
+                                         'Staff Member') AS display_name,
+                                COALESCE(NULLIF(s.staff_number, ''), NULLIF(s.employee_id, ''), CONCAT('STF-', LPAD(s.id, 4, '0'))) AS display_staff_number,
+                                COALESCE(NULLIF(s.position, ''), NULLIF(s.department, ''), 'Staff') AS display_role
+                         FROM staff s 
+                         JOIN users u ON s.user_id = u.user_id 
+                         WHERE s.id = :id";
     $staff_info_stmt = $db->prepare($staff_info_query);
     $staff_info_stmt->bindParam(':id', $selected_staff_id);
     $staff_info_stmt->execute();
@@ -38,7 +60,7 @@ if ($selected_staff_id > 0) {
                        FROM staff_service_assignments ssa
                        JOIN service_categories sc ON ssa.category_id = sc.category_id
                        WHERE ssa.staff_id = :staff_id AND ssa.is_active = 1
-                       AND sc.category_name IN ('AICS', 'Housing', 'Senior Citizen', 'PWD')";
+                       AND sc.category_name IN ('AICS', 'Housing', 'Verification')";
     $assigned_stmt = $db->prepare($assigned_query);
     $assigned_stmt->bindParam(':staff_id', $selected_staff_id);
     $assigned_stmt->execute();
@@ -46,17 +68,50 @@ if ($selected_staff_id > 0) {
     $assigned_names = array_column($assigned_services, 'category_name');
 }
 
+// Service Metadata & Definitions
+$service_definitions = [
+    'AICS' => [
+        'code' => 'AICS',
+        'db_name' => 'AICS',
+        'title' => 'AICS Assistance',
+        'full_name' => 'Assistance to Individuals in Crisis Situation',
+        'desc' => 'Medical, burial, educational, transportation, food, and financial cash relief support.',
+        'icon' => 'fa-hand-holding-heart',
+        'color' => '#8B1A1A',
+        'bg_light' => 'rgba(139, 26, 26, 0.08)'
+    ],
+    'Housing' => [
+        'code' => 'HOUSING',
+        'db_name' => 'Housing',
+        'title' => 'Housing Services',
+        'full_name' => 'City Housing Programs & Relocation',
+        'desc' => 'Government shelter applications, site inspection, and beneficiary allocation.',
+        'icon' => 'fa-home',
+        'color' => '#0F414A',
+        'bg_light' => 'rgba(15, 65, 74, 0.08)'
+    ],
+    'Verification' => [
+        'code' => 'VERIFICATION',
+        'db_name' => 'Verification',
+        'title' => 'Residency Verification',
+        'full_name' => 'Resident Authentication & Identity Verification',
+        'desc' => 'Biometric face verification review, PhilSys & valid ID checking, and resident approval.',
+        'icon' => 'fa-user-check',
+        'color' => '#059669',
+        'bg_light' => 'rgba(5, 150, 105, 0.08)'
+    ]
+];
+
 // Handle service assignment
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_service'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['assign_service'])) {
     $staff_id = intval($_POST['staff_id']);
     $service_to_assign = $_POST['service_to_assign'] ?? '';
     
     if ($staff_id > 0 && !empty($service_to_assign)) {
         $service_mapping = [
             'AICS' => 'AICS',
-            'HOUSING' => 'Housing', 
-            'SENIOR' => 'Senior Citizen',
-            'PWD' => 'PWD'
+            'HOUSING' => 'Housing',
+            'VERIFICATION' => 'Verification'
         ];
         
         $db_category_name = isset($service_mapping[$service_to_assign]) ? $service_mapping[$service_to_assign] : $service_to_assign;
@@ -85,8 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_service'])) {
                 $insert_stmt->bindParam(':category_id', $category['category_id']);
                 
                 if ($insert_stmt->execute()) {
-                    $success = "Service assigned successfully!";
-                    header("Location: manage-staff-services.php?staff_id=" . $staff_id);
+                    header("Location: manage-staff-services.php?staff_id=" . $staff_id . "&msg=assigned");
                     exit();
                 } else {
                     $error = "Failed to assign service.";
@@ -110,8 +164,7 @@ if (isset($_GET['remove_service']) && isset($_GET['id'])) {
     $delete_stmt->bindParam(':id', $assignment_id);
     
     if ($delete_stmt->execute()) {
-        $success = "Service removed successfully!";
-        header("Location: manage-staff-services.php?staff_id=" . $staff_id);
+        header("Location: manage-staff-services.php?staff_id=" . $staff_id . "&msg=removed");
         exit();
     } else {
         $error = "Failed to remove service.";
@@ -125,6 +178,7 @@ if (isset($_GET['grant_all']) && isset($_GET['staff_id'])) {
     $service_mapping = [
         'AICS' => 'AICS',
         'HOUSING' => 'Housing',
+        'VERIFICATION' => 'Verification',
         'SENIOR' => 'Senior Citizen',
         'PWD' => 'PWD'
     ];
@@ -158,12 +212,7 @@ if (isset($_GET['grant_all']) && isset($_GET['staff_id'])) {
         }
     }
     
-    if ($granted > 0) {
-        $success = "All services granted successfully!";
-    } else {
-        $error = "No new services to grant.";
-    }
-    header("Location: manage-staff-services.php?staff_id=" . $staff_id);
+    header("Location: manage-staff-services.php?staff_id=" . $staff_id . "&msg=granted_all");
     exit();
 }
 
@@ -176,111 +225,116 @@ if (isset($_GET['reset_all']) && isset($_GET['staff_id'])) {
     $delete_stmt->bindParam(':staff_id', $staff_id);
     
     if ($delete_stmt->execute()) {
-        $success = "All services reset successfully!";
+        header("Location: manage-staff-services.php?staff_id=" . $staff_id . "&msg=reset_all");
+        exit();
     } else {
         $error = "Failed to reset services.";
     }
-    header("Location: manage-staff-services.php?staff_id=" . $staff_id);
-    exit();
 }
 
-$initials = '';
-$name_parts = explode(' ', $_SESSION['full_name']);
-foreach($name_parts as $part) {
-    $initials .= strtoupper(substr($part, 0, 1));
+// Flash messages from redirects
+if (isset($_GET['msg'])) {
+    switch($_GET['msg']) {
+        case 'assigned': $success = "Service permission assigned successfully!"; break;
+        case 'removed': $success = "Service permission removed successfully."; break;
+        case 'granted_all': $success = "All service permissions granted successfully!"; break;
+        case 'reset_all': $success = "All service permissions have been reset."; break;
+    }
 }
-$initials = substr($initials, 0, 2);
 
-// Check for dark mode preference
-$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+// Helpers for initials
+if (!function_exists('getInitials')) {
+    function getInitials($name) {
+        $parts = explode(' ', trim($name));
+        $initials = '';
+        foreach ($parts as $part) {
+            if (!empty($part)) {
+                $initials .= strtoupper(substr($part, 0, 1));
+            }
+        }
+        return substr($initials, 0, 2) ?: 'ST';
+    }
+}
+
+$page_title = 'Staff Services';
+$active_sidebar = 'staff-services';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Services - Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
+<style>
         :root {
-            --tan: #D8BA98;
             --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
+            --maroon-light: #9A1515;
+            --maroon-dark: #5A0202;
+            --gold: #D8BA98;
             --midnight: #0F414A;
-            --white: #FFFFFF;
             
-            --bg-primary: #E8ECF2;
-            --bg-secondary: #FFFFFF;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-card: #FFFFFF;
+            --bg-card-hover: #F8FAFC;
             --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
+            --bg-sidebar-hover: rgba(255, 255, 255, 0.12);
+            --bg-sidebar-active: rgba(255, 255, 255, 0.18);
+            
+            --text-primary: #1E293B;
+            --text-secondary: #475569;
+            --text-muted: #64748B;
+            --text-sidebar: rgba(255, 255, 255, 0.75);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #C8D0DC;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.10);
-            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.15);
+            --border-color: #E2E8F0;
+            --border-focus: #CBD5E1;
             
-            --search-bg: #FFFFFF;
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+            --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.08);
             
-            --radius-card: 20px;
-            --radius-element: 12px;
+            --radius-card: 16px;
+            --radius-element: 10px;
+            --radius-pill: 50px;
             
-            --color-aics: #7F0303;
-            --color-housing: #0F414A;
-            --color-senior: #2E7D32;
-            --color-pwd: #6A1B9A;
+            --status-assigned-bg: #ECFDF5;
+            --status-assigned-text: #059669;
+            --status-assigned-border: #A7F3D0;
+            
+            --status-unassigned-bg: #FEF2F2;
+            --status-unassigned-text: #DC2626;
+            --status-unassigned-border: #FECACA;
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
+            --bg-primary: var(--ref-canvas, #0C1417);
+            --bg-card: #141B28;
+            --bg-card-hover: #1A2334;
+            --bg-sidebar: #0F1626;
+            --bg-sidebar-hover: rgba(255, 255, 255, 0.08);
+            --bg-sidebar-active: rgba(255, 255, 255, 0.14);
+            
+            --text-primary: #F1F5F9;
+            --text-secondary: #CBD5E1;
+            --text-muted: #94A3B8;
+            --text-sidebar: rgba(255, 255, 255, 0.65);
             --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
             
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.25);
+            --border-color: #232E42;
+            --border-focus: #334155;
             
-            --search-bg: #1a2332;
-            --card-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
+            --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+            --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+            --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
             
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
+            --status-assigned-bg: rgba(16, 185, 129, 0.14);
+            --status-assigned-text: #34D399;
+            --status-assigned-border: rgba(16, 185, 129, 0.3);
             
-            --color-aics: #C62828;
-            --color-housing: #1565C0;
-            --color-senior: #2E7D32;
-            --color-pwd: #7B1FA2;
+            --status-unassigned-bg: rgba(239, 68, 68, 0.14);
+            --status-unassigned-text: #F87171;
+            --status-unassigned-border: rgba(239, 68, 68, 0.3);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-secondary);
             line-height: 1.5;
@@ -288,692 +342,865 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             transition: background 0.3s ease, color 0.3s ease;
         }
 
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            object-fit: contain;
-            background: rgba(255,255,255,0.10);
-            padding: 4px;
-            flex-shrink: 0;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-            flex-shrink: 0;
-        }
-        .logo-text {
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 16px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 12px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-        }
-        .sidebar-footer .avatar {
-            width: 38px;
-            height: 38px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.8rem;
-        }
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .sidebar-footer .user-details p {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.7rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
         .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 16px;
         }
         .page-title h1 {
-            font-size: 1.5rem;
+            font-size: 1.45rem;
             color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .page-title p {
             color: var(--text-muted);
-            font-size: 0.85rem;
+            font-size: 0.84rem;
             margin-top: 2px;
         }
+        
         .top-bar-actions {
             display: flex;
-            gap: 12px;
             align-items: center;
+            gap: 12px;
         }
-        .search-box {
+        
+        .header-staff-chip {
             display: flex;
             align-items: center;
-            background: var(--search-bg);
-            border-radius: 50px;
-            padding: 8px 16px;
-            border: 1px solid var(--border-color);
             gap: 10px;
-            transition: background 0.3s ease, border-color 0.3s ease;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px 6px 8px;
+            border-radius: 50px;
             box-shadow: var(--shadow-sm);
         }
-        .search-box input {
-            border: none;
-            outline: none;
-            font-size: 0.85rem;
-            background: transparent;
-            min-width: 180px;
+        .header-staff-chip .chip-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #FEE2E2;
+            color: var(--maroon);
+            font-size: 0.72rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header-staff-chip .chip-info {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+        .header-staff-chip .chip-name {
+            font-size: 0.8rem;
+            font-weight: 700;
             color: var(--text-primary);
         }
-        .search-box input::placeholder { color: var(--text-muted); }
-        .search-box i { color: var(--text-muted); }
+        .header-staff-chip .chip-sub {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
 
-        .theme-toggle {
+        .theme-toggle, .top-icon {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 38px;
+            height: 38px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
+            font-size: 0.95rem;
             box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
             text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
         }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
+        .theme-toggle:hover, .top-icon:hover {
+            color: var(--maroon);
+            border-color: var(--maroon);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
 
         /* ========== ALERTS ========== */
         .alert {
-            padding: 16px 20px;
+            padding: 14px 18px;
             border-radius: var(--radius-element);
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 12px;
+            font-size: 0.86rem;
             box-shadow: var(--shadow-sm);
-            border-left: 4px solid transparent;
+            animation: fadeInDown 0.3s ease;
         }
         .alert-success {
-            background: rgba(76, 175, 80, 0.12);
-            color: #4CAF50;
-            border-left-color: #4CAF50;
+            background: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
         }
         .alert-error {
-            background: rgba(244, 67, 54, 0.12);
-            color: #EF5350;
-            border-left-color: #EF5350;
+            background: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
         }
-        .alert i { font-size: 1.2rem; }
 
-        /* ========== STAFF SELECTOR ========== */
-        .staff-selector-card {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 24px 28px;
-            margin-bottom: 28px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease;
+        /* ========== TWO-COLUMN MANAGEMENT LAYOUT ========== */
+        .management-layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 24px;
+            align-items: start;
         }
-        .staff-selector-card .selector-header {
+
+        /* ========== LEFT PANEL: STAFF LIST ========== */
+        .staff-panel-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+        
+        .staff-panel-header {
+            padding: 20px 20px 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .staff-panel-title-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            gap: 12px;
+            margin-bottom: 14px;
         }
-        .staff-selector-card .selector-header h3 {
-            color: var(--text-primary);
-            font-size: 1rem;
+        .staff-panel-title-row h3 {
+            font-size: 0.95rem;
             font-weight: 700;
+            color: var(--text-primary);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
-        .staff-selector-card .selector-header h3 i {
-            color: var(--maroon-light);
-        }
-        .staff-selector-card .selector-header .count-badge {
-            background: var(--badge-bg);
-            padding: 4px 14px;
-            border-radius: 50px;
-            font-size: 0.75rem;
+        .staff-count-pill {
+            background: var(--bg-primary);
             color: var(--text-muted);
-            font-weight: 600;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 50px;
+            border: 1px solid var(--border-color);
         }
-        .staff-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 10px;
+
+        .staff-search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
         }
-        .staff-item {
-            padding: 10px 14px;
+        .staff-search-icon {
+            position: absolute;
+            left: 12px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+        .staff-search-input {
+            width: 100%;
+            padding: 9px 36px 9px 34px;
             border-radius: var(--radius-element);
-            border: 2px solid var(--border-color);
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.82rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .staff-search-input:focus {
+            background: var(--bg-card);
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.08);
+        }
+        .staff-search-clear {
+            position: absolute;
+            right: 10px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
             cursor: pointer;
-            transition: all 0.3s;
+            font-size: 0.8rem;
+            display: none;
+        }
+
+        .staff-list-container {
+            padding: 12px;
+            max-height: calc(100vh - 290px);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .staff-list-container::-webkit-scrollbar { width: 4px; }
+        .staff-list-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+
+        .staff-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
             text-decoration: none;
             color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--bg-primary);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
         }
-        .staff-item:hover {
-            border-color: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
+        .staff-row:hover {
+            border-color: #CBD5E1;
+            background: var(--bg-card-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
         }
-        .staff-item.active {
-            border-color: var(--maroon);
-            background: rgba(127, 3, 3, 0.06);
-            box-shadow: var(--shadow-sm);
+        
+        /* Selected State - Subtle Red Border & Tint */
+        .staff-row.active {
+            border: 1.5px solid rgba(127, 3, 3, 0.38);
+            background: rgba(127, 3, 3, 0.04);
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.06);
         }
-        .staff-item .staff-avatar {
-            width: 32px;
-            height: 32px;
+        [data-theme="dark"] .staff-row.active {
+            border-color: rgba(220, 38, 38, 0.45);
+            background: rgba(127, 3, 3, 0.16);
+        }
+
+        .staff-avatar-circle {
+            width: 38px;
+            height: 38px;
             border-radius: 50%;
-            background: var(--maroon-light);
-            color: white;
+            background: #F1F5F9;
+            color: #475569;
+            font-weight: 700;
+            font-size: 0.75rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.65rem;
-            font-weight: 700;
             flex-shrink: 0;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
         }
-        .staff-item .staff-name {
+        .staff-avatar-circle img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .staff-row.active .staff-avatar-circle {
+            background: #FEE2E2;
+            color: var(--maroon);
+            border-color: rgba(127, 3, 3, 0.25);
+        }
+
+        .staff-row-info {
+            flex: 1;
+            min-width: 0;
+            margin-left: 11px;
+            margin-right: 8px;
+        }
+        .staff-row-name {
+            font-size: 0.84rem;
             font-weight: 600;
-            font-size: 0.82rem;
             color: var(--text-primary);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .staff-item .staff-id {
-            font-size: 0.65rem;
-            color: var(--text-muted);
+        .staff-row.active .staff-row-name {
+            color: var(--maroon);
         }
-        .staff-item .check-mark {
-            margin-left: auto;
-            color: var(--maroon-light);
-            font-size: 0.9rem;
+        [data-theme="dark"] .staff-row.active .staff-row-name {
+            color: #F87171;
         }
 
-        /* ========== PERMISSIONS CARD ========== */
-        .permissions-card {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 24px 28px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease;
-        }
-        .permissions-card .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border-color);
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .permissions-card .card-header h3 {
-            color: var(--text-primary);
-            font-size: 1.1rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .permissions-card .card-header h3 i {
-            color: var(--maroon-light);
-        }
-        .permissions-card .card-header .staff-badge {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--badge-bg);
-            padding: 6px 16px;
-            border-radius: 50px;
-        }
-        .permissions-card .card-header .staff-badge .big-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: var(--maroon-light);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 0.75rem;
-        }
-        .permissions-card .card-header .staff-badge .info .name {
-            font-weight: 600;
-            color: var(--text-primary);
-            font-size: 0.85rem;
-        }
-        .permissions-card .card-header .staff-badge .info .email {
+        .staff-row-sub {
             font-size: 0.7rem;
             color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
         }
 
-        .permissions-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        .permission-group {
-            background: var(--bg-primary);
-            border-radius: var(--radius-element);
-            padding: 16px 20px;
-            border: 1px solid var(--border-color);
-            transition: all 0.3s;
-        }
-        .permission-group:hover {
-            border-color: var(--maroon-light);
-        }
-        .permission-group .group-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-        .permission-group .group-header .group-name {
-            font-weight: 600;
-            color: var(--text-primary);
-            font-size: 0.9rem;
+        .staff-row-actions {
             display: flex;
             align-items: center;
-            gap: 8px;
-        }
-        .permission-group .group-header .group-name .icon {
-            font-size: 1.1rem;
-        }
-        .permission-group .group-header .status-badge {
-            font-size: 0.6rem;
-            padding: 2px 10px;
-            border-radius: 50px;
-            font-weight: 600;
-        }
-        .permission-group .group-header .status-badge.assigned {
-            background: rgba(76, 175, 80, 0.15);
-            color: #4CAF50;
-        }
-        .permission-group .group-header .status-badge.unassigned {
-            background: rgba(244, 67, 54, 0.15);
-            color: #EF5350;
+            gap: 6px;
+            flex-shrink: 0;
         }
 
-        .permission-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-        }
-        .perm-btn {
-            padding: 4px 14px;
-            border-radius: 50px;
-            border: none;
+        /* Role/Badge Pill - Inspired by Reference */
+        .staff-role-pill {
             font-size: 0.65rem;
             font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
+            padding: 3px 9px;
+            border-radius: 50px;
+            white-space: nowrap;
             display: inline-flex;
             align-items: center;
             gap: 4px;
+            background: #F1F5F9;
+            color: #475569;
+            border: 1px solid #E2E8F0;
         }
-        .perm-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-sm);
-        }
-        .perm-btn.read { background: rgba(33, 150, 243, 0.12); color: #2196F3; }
-        .perm-btn.read:hover { background: #2196F3; color: white; }
-        .perm-btn.create { background: rgba(76, 175, 80, 0.12); color: #4CAF50; }
-        .perm-btn.create:hover { background: #4CAF50; color: white; }
-        .perm-btn.update { background: rgba(255, 152, 0, 0.12); color: #FF9800; }
-        .perm-btn.update:hover { background: #FF9800; color: white; }
-        .perm-btn.delete { background: rgba(244, 67, 54, 0.12); color: #EF5350; }
-        .perm-btn.delete:hover { background: #EF5350; color: white; }
-        .perm-btn.all { background: rgba(156, 39, 176, 0.12); color: #9C27B0; }
-        .perm-btn.all:hover { background: #9C27B0; color: white; }
-        .perm-btn.none { background: rgba(96, 125, 139, 0.12); color: #607D8B; }
-        .perm-btn.none:hover { background: #607D8B; color: white; }
+        .staff-role-pill.admin { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
+        .staff-role-pill.social { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+        .staff-role-pill.housing { background: #F0FDF4; color: #15803D; border-color: #BBF7D0; }
+        .staff-role-pill.purple { background: #FAF5FF; color: #7E22CE; border-color: #E9D5FF; }
 
-        .permission-group .perm-badge {
-            font-size: 0.7rem;
+        .staff-selected-icon {
+            color: var(--maroon);
+            font-size: 0.85rem;
+        }
+        [data-theme="dark"] .staff-selected-icon {
+            color: #F87171;
+        }
+
+        .staff-chevron-icon {
             color: var(--text-muted);
-            display: block;
-            margin-top: 6px;
+            font-size: 0.72rem;
+            transition: transform 0.2s ease;
+        }
+        .staff-row:hover .staff-chevron-icon {
+            transform: translateX(2px);
+            color: var(--text-primary);
         }
 
-        /* Bulk Actions */
-        .bulk-actions {
-            margin-top: 24px;
+        .staff-empty-message {
+            text-align: center;
+            padding: 30px 16px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            display: none;
+        }
+        .staff-empty-message i {
+            font-size: 1.8rem;
+            opacity: 0.3;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        /* ========== RIGHT PANEL: SERVICE PERMISSIONS ========== */
+        .permissions-panel-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            padding: 28px 32px;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .panel-heading-row {
+            margin-bottom: 20px;
+        }
+        .panel-heading-row h2 {
+            font-size: 1.22rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .panel-heading-row p {
+            font-size: 0.84rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Selected Staff Profile Card */
+        .selected-staff-profile-card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .profile-card-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .profile-card-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #FEE2E2;
+            color: var(--maroon);
+            font-size: 1rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid white;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .profile-card-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .profile-card-info h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .profile-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+            font-size: 0.76rem;
+            color: var(--text-muted);
+        }
+        .profile-meta-row a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .profile-meta-row a:hover {
+            color: var(--maroon);
+        }
+
+        .profile-stats-chip {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        .assigned-summary-pill {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 5px 14px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .assigned-summary-pill i {
+            color: #059669;
+        }
+
+        /* Permission Cards Stack - Inspired by Reference */
+        .service-cards-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .service-perm-card {
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            padding: 16px 20px;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            transition: all 0.25s ease;
+        }
+        .service-perm-card:hover {
+            border-color: #CBD5E1;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+        }
+        
+        /* Subtle green tint when assigned */
+        .service-perm-card.assigned {
+            border-color: rgba(16, 185, 129, 0.35);
+            background: rgba(16, 185, 129, 0.02);
+        }
+        [data-theme="dark"] .service-perm-card.assigned {
+            background: rgba(16, 185, 129, 0.05);
+            border-color: rgba(16, 185, 129, 0.25);
+        }
+
+        .service-perm-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex: 1;
+            min-width: 0;
+        }
+        .service-perm-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+        }
+        
+        .service-perm-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .service-perm-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .service-perm-title {
+            font-size: 0.94rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .service-perm-title small {
+            font-size: 0.74rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-left: 4px;
+        }
+
+        .service-status-pill {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 50px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .service-status-pill.status-assigned {
+            background: var(--status-assigned-bg);
+            color: var(--status-assigned-text);
+            border: 1px solid var(--status-assigned-border);
+        }
+        .service-status-pill.status-unassigned {
+            background: var(--status-unassigned-bg);
+            color: var(--status-unassigned-text);
+            border: 1px solid var(--status-unassigned-border);
+        }
+
+        .service-perm-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            line-height: 1.35;
+        }
+
+        /* Permission Action Buttons */
+        .service-perm-action {
+            flex-shrink: 0;
+        }
+        .btn-perm-action {
+            padding: 8px 18px;
+            border-radius: var(--radius-element);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            border: 1px solid transparent;
+        }
+        
+        .btn-perm-assign {
+            background: var(--maroon);
+            color: white;
+            border-color: var(--maroon);
+        }
+        .btn-perm-assign:hover {
+            background: var(--maroon-light);
+            box-shadow: 0 3px 10px rgba(127, 3, 3, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .btn-perm-remove {
+            background: #FEF2F2;
+            color: #DC2626;
+            border-color: #FECACA;
+        }
+        .btn-perm-remove:hover {
+            background: #DC2626;
+            color: white;
+            border-color: #DC2626;
+            box-shadow: 0 3px 10px rgba(220, 38, 38, 0.2);
+            transform: translateY(-1px);
+        }
+        [data-theme="dark"] .btn-perm-remove {
+            background: rgba(220, 38, 38, 0.12);
+            color: #F87171;
+            border-color: rgba(220, 38, 38, 0.3);
+        }
+        [data-theme="dark"] .btn-perm-remove:hover {
+            background: #DC2626;
+            color: white;
+        }
+
+        /* Bulk Actions Toolbar */
+        .bulk-actions-toolbar {
             padding-top: 20px;
             border-top: 1px solid var(--border-color);
             display: flex;
-            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
             flex-wrap: wrap;
-            justify-content: flex-end;
+            gap: 16px;
         }
-        .btn-bulk {
-            padding: 10px 24px;
-            border-radius: 50px;
-            border: none;
+        .toolbar-info {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .toolbar-buttons {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-toolbar {
+            padding: 9px 20px;
+            border-radius: var(--radius-element);
+            font-size: 0.82rem;
             font-weight: 600;
-            font-size: 0.85rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 7px;
             text-decoration: none;
+            border: 1px solid transparent;
         }
-        .btn-bulk:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-        .btn-bulk.grant-all {
+        .btn-grant-all {
             background: var(--maroon);
             color: white;
         }
-        .btn-bulk.grant-all:hover {
+        .btn-grant-all:hover {
             background: var(--maroon-light);
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.25);
+            transform: translateY(-1px);
         }
-        .btn-bulk.reset-all {
-            background: rgba(244, 67, 54, 0.12);
-            color: #EF5350;
+        
+        .btn-reset-all {
+            background: transparent;
+            color: #DC2626;
+            border-color: #FECACA;
         }
-        .btn-bulk.reset-all:hover {
-            background: #EF5350;
-            color: white;
+        .btn-reset-all:hover {
+            background: #FEF2F2;
+            border-color: #DC2626;
+            transform: translateY(-1px);
         }
-        .btn-bulk.save {
-            background: #4CAF50;
-            color: white;
+        [data-theme="dark"] .btn-reset-all {
+            border-color: rgba(220, 38, 38, 0.3);
+            color: #F87171;
         }
-        .btn-bulk.save:hover {
-            background: #388E3C;
+        [data-theme="dark"] .btn-reset-all:hover {
+            background: rgba(220, 38, 38, 0.15);
         }
 
-        .no-staff-selected {
+        .btn-save-changes {
+            background: #059669;
+            color: white;
+            border-color: #059669;
+        }
+        .btn-save-changes:hover {
+            background: #047857;
+            box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+            transform: translateY(-1px);
+        }
+
+        /* Empty / No Staff Selected State */
+        .empty-selection-state {
             text-align: center;
-            padding: 60px 20px;
-        }
-        .no-staff-selected i {
-            font-size: 48px;
+            padding: 80px 20px;
             color: var(--text-muted);
-            opacity: 0.3;
-            display: block;
+        }
+        .empty-selection-state i {
+            font-size: 3.5rem;
+            opacity: 0.25;
+            color: var(--maroon);
             margin-bottom: 16px;
+            display: block;
         }
-        .no-staff-selected p {
-            color: var(--text-muted);
+        .empty-selection-state h3 {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .empty-selection-state p {
+            font-size: 0.85rem;
+            max-width: 380px;
+            margin: 0 auto;
         }
 
-        /* Responsive */
+        /* Popover Toast Notification */
+        .action-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1E293B;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            z-index: 9999;
+            border-left: 4px solid #059669;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+        .action-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== RESPONSIVE DESIGN ========== */
+        @media (max-width: 1100px) {
+            .management-layout {
+                grid-template-columns: 320px 1fr;
+                gap: 18px;
+            }
+            .permissions-panel-card {
+                padding: 22px 24px;
+            }
+        }
+
         @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
-            .permissions-grid { grid-template-columns: 1fr; }
-            .staff-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+                padding: 20px 18px;
+            }
+            .management-layout {
+                grid-template-columns: 1fr;
+            }
+            .staff-list-container {
+                max-height: 280px;
+            }
         }
-        @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
-            .search-box { flex: 1; }
-            .search-box input { min-width: 120px; }
-            .staff-selector-card { padding: 16px; }
-            .permissions-card { padding: 16px; }
-            .staff-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-            .bulk-actions { justify-content: center; }
-            .permission-group { padding: 12px 14px; }
-        }
-        @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .staff-grid { grid-template-columns: 1fr 1fr; }
-            .staff-item { padding: 8px 10px; font-size: 0.75rem; }
-            .permission-actions { gap: 4px; }
-            .perm-btn { font-size: 0.55rem; padding: 3px 8px; }
+
+        @media (max-width: 640px) {
+            .top-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .top-bar-actions {
+                justify-content: space-between;
+            }
+            .service-perm-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .service-perm-action {
+                text-align: right;
+                margin-top: 8px;
+            }
+            .service-perm-action .btn-perm-action {
+                width: 100%;
+                justify-content: center;
+            }
+            .bulk-actions-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .toolbar-buttons {
+                flex-direction: column;
+            }
+            .btn-toolbar {
+                width: 100%;
+                justify-content: center;
+            }
         }
     </style>
-</head>
-<body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <!-- LOGO IMAGE - Using the corrected path ../images/logo.png -->
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li><a href="announcements.php"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-            <li><a href="calendar.php"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php" class="active`><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <p>Administrator</p>
-                </div>
-            </div>
-        </div>
-    </div>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-user-tag" style="color: var(--maroon-light); margin-right: 10px;"></i> Staff Services</h1>
-                <p>Manage service permissions for staff members</p>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-user-tag"></i> Manage Staff Services</h1>
+        <p>Assign department services and module permissions to city staff officers</p>
+    </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <?php if($current_staff): 
+            $curr_initials = getInitials($current_staff['display_name']);
+        ?>
+        <div class="header-staff-chip" title="Currently editing permissions for <?php echo htmlspecialchars($current_staff['display_name']); ?>" style="display:flex;align-items:center;gap:10px;background:var(--dash-card-bg);padding:6px 14px;border-radius:50px;border:1px solid var(--dash-border);">
+            <div class="chip-avatar" style="width:34px;height:34px;border-radius:50%;background:rgba(127,3,3,0.1);color:var(--dash-maroon);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.75rem;overflow:hidden;">
+                <?php 
+                $chip_pic = !empty($current_staff['profile_image']) ? $current_staff['profile_image'] : (!empty($current_staff['user_pic']) ? $current_staff['user_pic'] : '');
+                if (!empty($chip_pic) && file_exists('../' . $chip_pic)): ?>
+                    <img src="../<?php echo htmlspecialchars($chip_pic); ?>" alt="Avatar" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+                <?php else: ?>
+                    <?php echo $curr_initials; ?>
+                <?php endif; ?>
             </div>
-            <div class="top-bar-actions">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search staff..." id="globalSearch">
-                </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="audit-logs.php" class="top-icon"><i class="fas fa-bell"></i></a>
-                <a href="settings.php" class="top-icon"><i class="fas fa-cog"></i></a>
+            <div class="chip-info" style="line-height:1.2;">
+                <div style="font-weight:700;font-size:0.82rem;color:var(--dash-text-heading);"><?php echo htmlspecialchars($current_staff['display_name']); ?></div>
+                <div style="font-size:0.72rem;color:var(--dash-text-muted);"><?php echo htmlspecialchars($current_staff['display_staff_number']); ?> • <?php echo count($assigned_services); ?>/4 Services</div>
             </div>
         </div>
-        
+        <?php endif; ?>
+    </div>
+</div>
+
+        <!-- Flash Feedback Alerts -->
         <?php if($error): ?>
             <div class="alert alert-error">
                 <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($error); ?>
@@ -984,171 +1211,318 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($success); ?>
             </div>
         <?php endif; ?>
-        
-        <!-- Staff Selector -->
-        <div class="staff-selector-card">
-            <div class="selector-header">
-                <h3><i class="fas fa-users"></i> Select Staff Member</h3>
-                <span class="count-badge"><?php echo count($staff_list); ?> staff members</span>
-            </div>
-            <div class="staff-grid" id="staffGrid">
-                <?php foreach($staff_list as $staff): 
-                    $staff_initials = strtoupper(substr($staff['first_name'], 0, 1) . substr($staff['last_name'], 0, 1));
-                    $is_active = $selected_staff_id == $staff['id'];
-                ?>
-                <a href="?staff_id=<?php echo $staff['id']; ?>" class="staff-item <?php echo $is_active ? 'active' : ''; ?>">
-                    <div class="staff-avatar"><?php echo $staff_initials; ?></div>
-                    <div>
-                        <div class="staff-name"><?php echo htmlspecialchars($staff['first_name'] . ' ' . $staff['last_name']); ?></div>
-                        <div class="staff-id"><?php echo htmlspecialchars($staff['staff_number']); ?></div>
+
+        <!-- Two-Column Management Layout -->
+        <div class="management-layout">
+            
+            <!-- LEFT PANEL: Staff Selection List -->
+            <div class="staff-panel-card">
+                <div class="staff-panel-header">
+                    <div class="staff-panel-title-row">
+                        <h3><i class="fas fa-users" style="color: var(--maroon);"></i> Staff Members</h3>
+                        <span class="staff-count-pill" id="staffCountBadge"><?php echo count($staff_list); ?> Total</span>
                     </div>
-                    <?php if($is_active): ?>
-                        <div class="check-mark"><i class="fas fa-check-circle"></i></div>
-                    <?php endif; ?>
-                </a>
-                <?php endforeach; ?>
-            </div>
-        </div>
-        
-        <!-- Permissions -->
-        <?php if($current_staff): 
-            $staff_initials = strtoupper(substr($current_staff['first_name'], 0, 1) . substr($current_staff['last_name'], 0, 1));
-            $service_icons = [
-                'AICS' => '??',
-                'Housing' => '??',
-                'Senior Citizen' => '??',
-                'PWD' => '?'
-            ];
-            $service_colors = [
-                'AICS' => 'var(--color-aics)',
-                'Housing' => 'var(--color-housing)',
-                'Senior Citizen' => 'var(--color-senior)',
-                'PWD' => 'var(--color-pwd)'
-            ];
-        ?>
-        <div class="permissions-card">
-            <div class="card-header">
-                <h3><i class="fas fa-lock"></i> Service Permissions</h3>
-                <div class="staff-badge">
-                    <div class="big-avatar"><?php echo $staff_initials; ?></div>
-                    <div class="info">
-                        <div class="name"><?php echo htmlspecialchars($current_staff['first_name'] . ' ' . $current_staff['last_name']); ?></div>
-                        <div class="email"><?php echo htmlspecialchars($current_staff['email']); ?></div>
+                    <div class="staff-search-wrapper">
+                        <i class="fas fa-search staff-search-icon"></i>
+                        <input type="text" id="staffSearchInput" class="staff-search-input" placeholder="Search staff by name, ID, or role..." autocomplete="off">
+                        <button type="button" id="clearSearchBtn" class="staff-search-clear"><i class="fas fa-times"></i></button>
                     </div>
                 </div>
-            </div>
-            
-            <div class="permissions-grid">
-                <?php foreach($all_services as $service): 
-                    $is_assigned = in_array($service, $assigned_names);
-                    $icon = $service_icons[$service] ?? '??';
-                    $color = $service_colors[$service] ?? 'var(--text-muted)';
-                ?>
-                <div class="permission-group">
-                    <div class="group-header">
-                        <div class="group-name">
-                            <span class="icon"><?php echo $icon; ?></span>
-                            <?php echo htmlspecialchars($service); ?>
+
+                <div class="staff-list-container" id="staffListContainer">
+                    <?php foreach($staff_list as $staff): 
+                        $s_initials = getInitials($staff['display_name']);
+                        $is_active = ($selected_staff_id == $staff['id']);
+                        $avatar_file = !empty($staff['profile_image']) ? $staff['profile_image'] : (!empty($staff['profile_picture']) ? $staff['profile_picture'] : '');
+                        
+                        // Badge color styling based on role
+                        $role_lower = strtolower($staff['display_role']);
+                        $role_badge_class = 'staff-role-pill';
+                        if (strpos($role_lower, 'admin') !== false) {
+                            $role_badge_class .= ' admin';
+                        } elseif (strpos($role_lower, 'social') !== false || strpos($role_lower, 'worker') !== false) {
+                            $role_badge_class .= ' social';
+                        } elseif (strpos($role_lower, 'housing') !== false) {
+                            $role_badge_class .= ' housing';
+                        } else {
+                            $role_badge_class .= ' purple';
+                        }
+                    ?>
+                    <a href="?staff_id=<?php echo $staff['id']; ?>" 
+                       class="staff-row <?php echo $is_active ? 'active' : ''; ?>"
+                       data-name="<?php echo strtolower(htmlspecialchars($staff['display_name'])); ?>"
+                       data-number="<?php echo strtolower(htmlspecialchars($staff['display_staff_number'])); ?>"
+                       data-role="<?php echo strtolower(htmlspecialchars($staff['display_role'])); ?>"
+                       data-email="<?php echo strtolower(htmlspecialchars($staff['email'])); ?>">
+                        
+                        <div class="staff-avatar-circle">
+                            <?php if (!empty($avatar_file) && file_exists('../' . $avatar_file)): ?>
+                                <img src="../<?php echo htmlspecialchars($avatar_file); ?>" alt="Avatar">
+                            <?php else: ?>
+                                <?php echo $s_initials; ?>
+                            <?php endif; ?>
                         </div>
-                        <span class="status-badge <?php echo $is_assigned ? 'assigned' : 'unassigned'; ?>">
-                            <?php echo $is_assigned ? '? Assigned' : '? Unassigned'; ?>
-                        </span>
+
+                        <div class="staff-row-info">
+                            <div class="staff-row-name">
+                                <span><?php echo htmlspecialchars($staff['display_name']); ?></span>
+                                <?php if($is_active): ?>
+                                    <i class="fas fa-check-circle staff-selected-icon" title="Currently Selected"></i>
+                                <?php endif; ?>
+                            </div>
+                            <div class="staff-row-sub">
+                                <?php echo htmlspecialchars($staff['display_staff_number']); ?>
+                            </div>
+                        </div>
+
+                        <div class="staff-row-actions">
+                            <span class="<?php echo $role_badge_class; ?>" title="<?php echo htmlspecialchars($staff['display_role']); ?>">
+                                <?php 
+                                    // Shorten if overly long for clean layout
+                                    $short_role = strlen($staff['display_role']) > 15 ? substr($staff['display_role'], 0, 13) . '..' : $staff['display_role'];
+                                    echo htmlspecialchars($short_role);
+                                ?>
+                            </span>
+                            <i class="fas fa-chevron-right staff-chevron-icon"></i>
+                        </div>
+                    </a>
+                    <?php endforeach; ?>
+
+                    <div class="staff-empty-message" id="staffEmptyMessage">
+                        <i class="fas fa-user-slash"></i>
+                        No staff members matching your search
                     </div>
-                    <div class="permission-actions">
-                        <?php if($is_assigned): ?>
-                            <span class="perm-badge">All permissions granted</span>
-                        <?php else: ?>
-                            <span class="perm-badge">No permissions</span>
-                        <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: Detailed Service Permission Controls -->
+            <div class="permissions-panel-card">
+                <?php if($current_staff): 
+                    $curr_initials = getInitials($current_staff['display_name']);
+                    $assigned_count = count($assigned_services);
+                    $avatar_file = !empty($current_staff['profile_image']) ? $current_staff['profile_image'] : (!empty($current_staff['user_pic']) ? $current_staff['user_pic'] : '');
+                ?>
+                    <div class="panel-heading-row">
+                        <h2><i class="fas fa-lock" style="color: var(--maroon);"></i> Service Permissions</h2>
+                        <p>Determine which welfare and assistance programs this staff member is authorized to manage, review, and process.</p>
                     </div>
-                    <div class="permission-actions" style="margin-top: 8px;">
-                        <?php if($is_assigned): ?>
-                            <a href="?remove_service=<?php echo $assigned_services[array_search($service, $assigned_names)]['id'] ?? ''; ?>&staff_id=<?php echo $selected_staff_id; ?>" 
-                               class="perm-btn delete" onclick="return confirm('Remove this service from staff member?')">
-                                <i class="fas fa-times"></i> Remove
+
+                    <!-- Selected Staff Profile Banner -->
+                    <div class="selected-staff-profile-card">
+                        <div class="profile-card-left">
+                            <div class="profile-card-avatar">
+                                <?php if (!empty($avatar_file) && file_exists('../' . $avatar_file)): ?>
+                                    <img src="../<?php echo htmlspecialchars($avatar_file); ?>" alt="Avatar">
+                                <?php else: ?>
+                                    <?php echo $curr_initials; ?>
+                                <?php endif; ?>
+                            </div>
+                            <div class="profile-card-info">
+                                <h3>
+                                    <?php echo htmlspecialchars($current_staff['display_name']); ?>
+                                    <span class="staff-role-pill admin" style="font-size:0.65rem;">
+                                        <?php echo htmlspecialchars($current_staff['display_role']); ?>
+                                    </span>
+                                </h3>
+                                <div class="profile-meta-row">
+                                    <span><i class="fas fa-id-badge"></i> <?php echo htmlspecialchars($current_staff['display_staff_number']); ?></span>
+                                    <span><i class="fas fa-envelope"></i> <a href="mailto:<?php echo htmlspecialchars($current_staff['email']); ?>"><?php echo htmlspecialchars($current_staff['email']); ?></a></span>
+                                    <span><i class="fas fa-check-circle" style="color:#059669;"></i> Active Staff</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="profile-stats-chip">
+                            <div class="assigned-summary-pill">
+                                <i class="fas fa-shield-alt"></i>
+                                <span><?php echo $assigned_count; ?> of <?php echo count($service_definitions); ?> Services Authorized</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Compact Permission Cards Stack (AICS, Housing, Senior Citizen, PWD) -->
+                    <div class="service-cards-stack">
+                        <?php foreach($service_definitions as $key => $srv): 
+                            $is_assigned = in_array($srv['db_name'], $assigned_names);
+                            
+                            // Find assignment ID for deletion
+                            $assignment_id = 0;
+                            if ($is_assigned) {
+                                foreach($assigned_services as $asgn) {
+                                    if ($asgn['category_name'] === $srv['db_name']) {
+                                        $assignment_id = $asgn['id'];
+                                        break;
+                                    }
+                                }
+                            }
+                        ?>
+                        <div class="service-perm-card <?php echo $is_assigned ? 'assigned' : 'unassigned'; ?>">
+                            <div class="service-perm-left">
+                                <div class="service-perm-icon" style="background: <?php echo $srv['bg_light']; ?>; color: <?php echo $srv['color']; ?>;">
+                                    <i class="fas <?php echo $srv['icon']; ?>"></i>
+                                </div>
+                                <div class="service-perm-info">
+                                    <div class="service-perm-title-row">
+                                        <h4 class="service-perm-title">
+                                            <?php echo htmlspecialchars($srv['title']); ?>
+                                            <small>(<?php echo htmlspecialchars($srv['full_name']); ?>)</small>
+                                        </h4>
+                                        <span class="service-status-pill <?php echo $is_assigned ? 'status-assigned' : 'status-unassigned'; ?>">
+                                            <?php if($is_assigned): ?>
+                                                <i class="fas fa-check-circle"></i> Assigned
+                                            <?php else: ?>
+                                                <i class="far fa-circle"></i> Unassigned
+                                            <?php endif; ?>
+                                        </span>
+                                    </div>
+                                    <p class="service-perm-desc">
+                                        <?php if($is_assigned): ?>
+                                            <strong>All permissions granted.</strong> Authorized to review documents, approve applications, and manage service queues.
+                                        <?php else: ?>
+                                            <strong>No permissions.</strong> Staff member cannot view, process, or alter applications for this service.
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="service-perm-action">
+                                <?php if($is_assigned): ?>
+                                    <a href="?remove_service=<?php echo $assignment_id; ?>&staff_id=<?php echo $selected_staff_id; ?>&id=<?php echo $assignment_id; ?>" 
+                                       class="btn-perm-action btn-perm-remove" 
+                                       onclick="return confirm('Remove <?php echo addslashes($srv['title']); ?> permission from <?php echo addslashes($current_staff['display_name']); ?>?');">
+                                        <i class="fas fa-times"></i> Remove
+                                    </a>
+                                <?php else: ?>
+                                    <form method="POST" style="display:inline; margin:0;">
+                                        <input type="hidden" name="staff_id" value="<?php echo $selected_staff_id; ?>">
+                                        <input type="hidden" name="service_to_assign" value="<?php echo $srv['code']; ?>">
+                                        <button type="submit" name="assign_service" class="btn-perm-action btn-perm-assign">
+                                            <i class="fas fa-plus"></i> Assign
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <!-- Bottom Bulk Actions Toolbar -->
+                    <div class="bulk-actions-toolbar">
+                        <div class="toolbar-info">
+                            <i class="fas fa-info-circle"></i> Changes to service permissions take effect immediately.
+                        </div>
+                        <div class="toolbar-buttons">
+                            <a href="?grant_all=1&staff_id=<?php echo $selected_staff_id; ?>" 
+                               class="btn-toolbar btn-grant-all" 
+                               onclick="return confirm('Grant all 4 services to <?php echo addslashes($current_staff['display_name']); ?>?');">
+                                <i class="fas fa-check-double"></i> Grant All
                             </a>
-                        <?php else: ?>
-                            <form method="POST" style="display: inline;">
-                                <input type="hidden" name="staff_id" value="<?php echo $selected_staff_id; ?>">
-                                <input type="hidden" name="service_to_assign" value="<?php echo $service; ?>">
-                                <button type="submit" name="assign_service" class="perm-btn create">
-                                    <i class="fas fa-plus"></i> Assign
-                                </button>
-                            </form>
-                        <?php endif; ?>
+                            <a href="?reset_all=1&staff_id=<?php echo $selected_staff_id; ?>" 
+                               class="btn-toolbar btn-reset-all" 
+                               onclick="return confirm('Reset and remove all services from <?php echo addslashes($current_staff['display_name']); ?>?');">
+                                <i class="fas fa-undo"></i> Reset All
+                            </a>
+                            <button type="button" class="btn-toolbar btn-save-changes" id="saveFeedbackBtn">
+                                <i class="fas fa-save"></i> Save Changes
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <?php endforeach; ?>
+
+                <?php elseif($selected_staff_id > 0 && empty($current_staff)): ?>
+                    <div class="alert alert-error">
+                        <i class="fas fa-exclamation-circle"></i> Selected staff member could not be found.
+                    </div>
+                <?php else: ?>
+                    <div class="empty-selection-state">
+                        <i class="fas fa-user-tag"></i>
+                        <h3>Select a Staff Member</h3>
+                        <p>Choose a staff member from the list on the left to configure their service authorizations and permissions.</p>
+                    </div>
+                <?php endif; ?>
             </div>
-            
-            <div class="bulk-actions">
-                <a href="?grant_all=1&staff_id=<?php echo $selected_staff_id; ?>" class="btn-bulk grant-all" onclick="return confirm('Grant all services to this staff member?')">
-                    <i class="fas fa-check-double"></i> Grant All
-                </a>
-                <a href="?reset_all=1&staff_id=<?php echo $selected_staff_id; ?>" class="btn-bulk reset-all" onclick="return confirm('Remove all services from this staff member?')">
-                    <i class="fas fa-undo"></i> Reset All
-                </a>
-                <button class="btn-bulk save" onclick="alert('Changes saved successfully!')">
-                    <i class="fas fa-save"></i> Save Changes
-                </button>
-            </div>
+
         </div>
-        <?php elseif($selected_staff_id > 0 && empty($current_staff)): ?>
-            <div class="alert alert-error">
-                <i class="fas fa-exclamation-circle"></i> Staff member not found.
-            </div>
-        <?php else: ?>
-            <div class="permissions-card">
-                <div class="no-staff-selected">
-                    <i class="fas fa-user-tag"></i>
-                    <p>Select a staff member from above to manage their service permissions</p>
-                </div>
-            </div>
-        <?php endif; ?>
-    </div>
+
+<!-- Floating Toast Feedback -->
+<div id="actionToast" class="action-toast">
+    <i class="fas fa-check-circle" style="color: #34D399; font-size: 1.1rem;"></i>
+    <span id="toastMessage">Service permissions synchronized successfully.</span>
 </div>
 
 <script>
-// ========== THEME TOGGLE ==========
-const themeToggle = document.getElementById('themeToggle');
-const html = document.documentElement;
+// ========== LIVE STAFF SEARCH FILTERING ==========
+const searchInput = document.getElementById('staffSearchInput');
+const clearSearchBtn = document.getElementById('clearSearchBtn');
+const staffRows = document.querySelectorAll('.staff-row');
+const countBadge = document.getElementById('staffCountBadge');
+const emptyMessage = document.getElementById('staffEmptyMessage');
+const totalStaffCount = staffRows.length;
 
-const currentTheme = localStorage.getItem('theme') || 
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+if (searchInput) {
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        let visibleCount = 0;
 
-function setTheme(theme) {
-    html.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-}
+        if (clearSearchBtn) {
+            clearSearchBtn.style.display = query.length > 0 ? 'block' : 'none';
+        }
 
-setTheme(currentTheme);
+        staffRows.forEach(row => {
+            const name = row.getAttribute('data-name') || '';
+            const number = row.getAttribute('data-number') || '';
+            const role = row.getAttribute('data-role') || '';
+            const email = row.getAttribute('data-email') || '';
 
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
+            if (!query || name.includes(query) || number.includes(query) || role.includes(query) || email.includes(query)) {
+                row.style.display = 'flex';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
 
-// ========== SEARCH ==========
-document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
-    const query = this.value.toLowerCase();
-    const items = document.querySelectorAll('.staff-item');
-    let visibleCount = 0;
-    items.forEach(item => {
-        const text = item.textContent.toLowerCase();
-        if (text.includes(query)) {
-            item.style.display = 'flex';
-            visibleCount++;
-        } else {
-            item.style.display = 'none';
+        if (countBadge) {
+            countBadge.textContent = query ? `${visibleCount} of ${totalStaffCount}` : `${totalStaffCount} Total`;
+        }
+
+        if (emptyMessage) {
+            emptyMessage.style.display = (visibleCount === 0 && query.length > 0) ? 'block' : 'none';
         }
     });
-});
+
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input'));
+            searchInput.focus();
+        });
+    }
+}
+
+// ========== TOAST FEEDBACK ==========
+function showToast(message) {
+    if (window.showProcessToast) {
+        window.showProcessToast(message, false, 'Process Completed');
+        return;
+    }
+
+    const toast = document.getElementById('actionToast');
+    const toastMsg = document.getElementById('toastMessage');
+    if (!toast) return;
+
+    if (toastMsg && message) toastMsg.textContent = message;
+    toast.classList.add('show');
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3500);
+}
+
+const saveFeedbackBtn = document.getElementById('saveFeedbackBtn');
+if (saveFeedbackBtn) {
+    saveFeedbackBtn.addEventListener('click', function() {
+        showToast('All service permissions are saved and synchronized.');
+    });
+}
 </script>
-</body>
-</html>
-
-
-
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>

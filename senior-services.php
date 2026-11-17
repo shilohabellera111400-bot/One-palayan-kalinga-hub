@@ -2,8 +2,13 @@
 // senior-services.php
 require_once __DIR__ . '/config/database.php';
 
+if (!isPwdSeniorScopeActive()) {
+    $_SESSION['info'] = "Senior Citizen online services are temporarily inactive in the current system scope.";
+    redirect('services.php');
+}
+
 if (!isLoggedIn()) {
-    redirect('login.php');
+    redirect('services.php?service=senior-id');
 }
 
 // Staff and Admin should not access this page
@@ -25,14 +30,37 @@ if (!$user_verify || $user_verify['verification_status'] != 'verified') {
     redirect('verify-resident.php');
 }
 
-// Check if user is senior
-$check_res = $db->prepare("SELECT senior_citizen FROM residents WHERE user_id = :id");
+// Check if user is senior (Auto-detect via age >= 60 or database flag)
+$check_res = $db->prepare("SELECT id, birth_date, senior_citizen FROM residents WHERE user_id = :id");
 $check_res->bindParam(':id', $_SESSION['user_id']);
 $check_res->execute();
 $res_info = $check_res->fetch(PDO::FETCH_ASSOC);
 
-if (($res_info['senior_citizen'] ?? 0) != 1) {
-    redirect('dashboard.php');
+$is_senior = false;
+$user_age = null;
+
+if (!empty($res_info['birth_date']) && $res_info['birth_date'] !== '0000-00-00') {
+    $birth = new DateTime($res_info['birth_date']);
+    $today = new DateTime();
+    $user_age = $today->diff($birth)->y;
+    if ($user_age >= 60) {
+        $is_senior = true;
+        // Auto-sync senior_citizen flag in database if not yet set
+        if (($res_info['senior_citizen'] ?? 0) != 1) {
+            $db->prepare("UPDATE residents SET senior_citizen = 1 WHERE user_id = :id")->execute([':id' => $_SESSION['user_id']]);
+            $res_info['senior_citizen'] = 1;
+        }
+    } else {
+        $is_senior = false;
+        if (($res_info['senior_citizen'] ?? 0) == 1) {
+            $db->prepare("UPDATE residents SET senior_citizen = 0 WHERE user_id = :id")->execute([':id' => $_SESSION['user_id']]);
+            $res_info['senior_citizen'] = 0;
+        }
+    }
+}
+
+if (!$is_senior) {
+    redirect('senior.php');
 }
 
 // Get initials for sidebar avatar
@@ -67,7 +95,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
     <title>Senior Citizen Services - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/portal-layout.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
         .hero-section {
             background: linear-gradient(135deg, #0288d1, #005662);
@@ -231,45 +259,16 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 </head>
 <body>
 <div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-hand-holding-heart"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Integrated Service Portal</span>
-            </div>
-            <button class="sidebar-close" id="sidebarClose" aria-label="Close sidebar">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <?php include 'includes/usersidenav.php'; ?>
-    </div>
-
-    <!-- Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
 
     <!-- Main Content -->
     <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <button class="hamburger-btn" id="hamburgerBtn"><i class="fas fa-bars"></i></button>
-            <div class="page-title">
-                <h1>Senior Citizen Services</h1>
+        <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+        <div class="portal-page-subheader">
+            <div class="portal-page-subheader-title">
+                <h2><i class="fas fa-blind" style="color: #0288D1; margin-right: 8px;"></i> Senior Citizen Services</h2>
                 <p>Citizen's Charter information for OSCA benefits & applications</p>
-            </div>
-            <div class="top-bar-actions">
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <div class="user-profile">
-                    <?php if (!empty($avatar_url)): ?>
-                        <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile" class="user-avatar">
-                    <?php else: ?>
-                        <div class="avatar-placeholder"><?php echo $initials; ?></div>
-                    <?php endif; ?>
-                    <span class="user-name"><?php echo htmlspecialchars($_SESSION['full_name']); ?></span>
-                </div>
             </div>
         </div>
 
@@ -419,5 +418,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         });
     }
 </script>
+<?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

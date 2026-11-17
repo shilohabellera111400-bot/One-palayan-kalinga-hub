@@ -1,0 +1,82 @@
+<body>
+    <?php if ($verification_status === 'verified' && !isStaff() && !isAdmin()): ?>
+    <!-- OFFICIALLY VERIFIED RESIDENT WELCOME CELEBRATION & PROFILE COMPLETION GUIDE MODAL -->
+    <div class="welcome-modal-backdrop" id="welcomeModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
+        <div class="welcome-modal-card" style="max-width: 580px;">
+            <div class="welcome-modal-glow"></div>
+            <div class="welcome-modal-header">
+                <div class="welcome-badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; border-color: rgba(16, 185, 129, 0.3);">
+                    <i class="fas fa-certificate"></i> Officially Verified Resident
+                </div>
+                <button type="button" class="welcome-modal-close" id="welcomeCloseBtn" aria-label="Close modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="welcome-modal-icon-wrap">
+                <div class="welcome-icon-ring" style="background: linear-gradient(135deg, #10B981 0%, #047857 100%);">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <span class="welcome-sparkle-dot dot-1"></span>
+                <span class="welcome-sparkle-dot dot-2"></span>
+            </div>
+            <div class="welcome-modal-body">
+                <h2 id="welcomeModalTitle" style="font-size: 1.4rem; font-weight: 800; margin-bottom: 8px;">
+                    Welcome to Palayan Kalinga Hub! 🎉
+                </h2>
+                <p style="font-size: 0.88rem; color: var(--ref-muted, #64748B); line-height: 1.5; margin-bottom: 18px;">
+                    Congratulations, <strong><?php echo htmlspecialchars($user['first_name'] ?? 'Resident'); ?></strong>! Your residency has been officially validated and approved by the <strong>City Social Welfare and Development Office (CSWDO)</strong>.
+                </p>
+
+                <!-- Interactive Guide to Complete Profile (Visual 3-Step Milestone Roadmap) -->
+                <div class="welcome-guide-steps">
+                    <!-- Step 1: Verified (Completed) -->
+                    <div class="guide-step-card step-done">
+                        <div class="step-num-badge"><i class="fas fa-check"></i></div>
+                        <div class="step-details">
+                            <div class="step-head">
+                                <strong>1. Residency Verification</strong>
+                                <span class="step-tag-done"><i class="fas fa-shield-alt"></i> Officially Verified</span>
+                            </div>
+                            <p>Government ID and residence records validated &amp; approved by CSWDO.</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Complete Profile (Active / Action Needed) -->
+                    <div class="guide-step-card step-active">
+                        <div class="step-num-badge step-pulse">2</div>
+                        <div class="step-details">
+                            <div class="step-head">
+                                <strong>2. Complete Resident Profile</strong>
+                                <span class="step-tag-action"><i class="fas fa-edit"></i> Action Required</span>
+                            </div>
+                            <p>Add birthdate, civil status, occupation, and emergency contact for 1-click requests.</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Access All Services -->
+                    <div class="guide-step-card step-locked">
+                        <div class="step-num-badge">3</div>
+                        <div class="step-details">
+                            <div class="step-head">
+                                <strong>3. 1-Click Assistance &amp; Benefits</strong>
+                                <span class="step-tag-lock"><i class="fas fa-unlock"></i> Unlocks Services</span>
+                            </div>
+                            <p>Fast-track financial grants, medical support, housing, and priority consultations.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="welcome-modal-actions">
+                <a href="update-profile-info.php?guided=1" id="welcomeCompleteProfileBtn" class="btn-welcome-primary">
+                    <span><i class="fas fa-user-edit"></i> Complete My Profile Now</span>
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+                <button type="button" id="welcomeMaybeLaterBtn" class="btn-welcome-subtle">
+                    I'll complete this later &bull; Explore Dashboard
+                </button>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($show_profile_completed_modal): ?>

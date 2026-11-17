@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $contact_email = sanitize($_POST['contact_email']);
         $contact_phone = sanitize($_POST['contact_phone']);
         $address = sanitize($_POST['address']);
+        $max_slots_per_timeslot = max(1, (int)($_POST['max_slots_per_timeslot'] ?? 5));
         
         // Update settings in database
         $update_query = "UPDATE system_settings SET 
@@ -39,11 +40,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $update_stmt->bindParam(':address', $address);
         
         if ($update_stmt->execute()) {
+            // Also update max_slots_per_timeslot
+            $slot_update = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('max_slots_per_timeslot', :val) ON DUPLICATE KEY UPDATE setting_value = :val2");
+            $slot_str = (string)$max_slots_per_timeslot;
+            $slot_update->bindParam(':val',  $slot_str);
+            $slot_update->bindParam(':val2', $slot_str);
+            $slot_update->execute();
             $success = "General settings updated successfully!";
         } else {
             $error = "Failed to update general settings.";
         }
     }
+
     
     if (isset($_POST['update_maintenance'])) {
         $maintenance_mode = isset($_POST['maintenance_mode']) ? 1 : 0;
@@ -62,6 +70,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt2->execute();
         
         $success = "Maintenance settings updated successfully!";
+    }
+
+    if (isset($_POST['update_openai_settings'])) {
+        $openai_key = trim($_POST['openai_api_key'] ?? '');
+        $openai_model = trim($_POST['openai_model'] ?? 'gpt-4o-mini');
+        $openai_enabled = isset($_POST['openai_helpdesk_enabled']) ? '1' : '0';
+        $openai_prompt = trim($_POST['openai_system_prompt'] ?? '');
+
+        $keys_to_update = [
+            'openai_api_key' => $openai_key,
+            'openai_model' => $openai_model,
+            'openai_helpdesk_enabled' => $openai_enabled,
+            'openai_system_prompt' => $openai_prompt
+        ];
+
+        foreach ($keys_to_update as $k => $v) {
+            $stmt = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (:k, :v) ON DUPLICATE KEY UPDATE setting_value = :v2");
+            $stmt->execute([':k' => $k, ':v' => $v, ':v2' => $v]);
+        }
+        $success = "OpenAI Helpdesk AI configuration saved successfully!";
     }
 }
 
@@ -124,17 +152,11 @@ foreach($name_parts as $part) {
 $initials = substr($initials, 0, 2);
 
 // Check for dark mode preference
-$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'System Settings';
+$active_sidebar = 'backup';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Settings - Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
+<style>
         /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
             --tan: #D8BA98;
@@ -144,7 +166,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --midnight: #0F414A;
             --white: #FFFFFF;
             
-            --bg-primary: #F8F9FC;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -177,7 +199,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: var(--ref-canvas, #0C1417);
             --bg-secondary: #111827;
             --bg-card: #1a2332;
             --bg-sidebar: #0f1629;
@@ -218,174 +240,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             line-height: 1.5;
             min-height: 100vh;
             transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            object-fit: contain;
-            background: rgba(255,255,255,0.10);
-            padding: 4px;
-            flex-shrink: 0;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-            flex-shrink: 0;
-        }
-        .logo-text {
-            flex: 1;
-            min-width: 0;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 16px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 1rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 12px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-        }
-        .sidebar-footer .avatar {
-            width: 38px;
-            height: 38px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.8rem;
-        }
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .sidebar-footer .user-details p {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.7rem;
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
         }
 
         /* ========== TOP BAR ========== */
@@ -594,7 +448,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             color: var(--maroon-light);
             margin-right: 6px;
         }
-        .form-group input,
+        .form-group input:not([type="checkbox"]):not([type="radio"]),
         .form-group select,
         .form-group textarea {
             width: 100%;
@@ -607,14 +461,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             background: var(--input-bg);
             color: var(--text-primary);
         }
-        .form-group input:focus,
+        .form-group input:not([type="checkbox"]):not([type="radio"]):focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
             border-color: var(--maroon-light);
             box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
         }
-        .form-group input:disabled,
+        .form-group input:not([type="checkbox"]):not([type="radio"]):disabled,
         .form-group select:disabled,
         .form-group textarea:disabled {
             opacity: 0.6;
@@ -627,21 +481,41 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-size: 0.7rem;
         }
         .checkbox-group {
-            display: flex;
+            display: inline-flex !important;
             align-items: center;
             gap: 12px;
-            padding: 8px 0;
+            padding: 10px 16px;
+            background: rgba(127, 3, 3, 0.03);
+            border: 1.5px solid rgba(127, 3, 3, 0.15);
+            border-radius: 12px;
+            width: fit-content !important;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: all 0.2s ease;
+        }
+        .checkbox-group:hover {
+            background: rgba(127, 3, 3, 0.06);
+            border-color: var(--maroon);
         }
         .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
+            width: 20px !important;
+            height: 20px !important;
+            min-width: 20px;
+            max-width: 20px;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
             accent-color: var(--maroon);
             cursor: pointer;
+            flex-shrink: 0;
         }
         .checkbox-group label {
-            margin-bottom: 0;
+            margin: 0 !important;
             cursor: pointer;
-            font-weight: 500;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            white-space: nowrap;
         }
 
         .btn-primary {
@@ -739,71 +613,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .settings-card { padding: 14px 16px; }
         }
     </style>
-</head>
-<body>
-<div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-wrapper">
-                <!-- LOGO IMAGE - Using the corrected path ../images/logo.png -->
-                <img src="../images/logo.png" alt="Palayan City Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="logo-icon" style="display: none;"><i class="fas fa-crown"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li class="menu-divider">User Management</li>
-            <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-            <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-            <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-            <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-            <li class="menu-divider">System</li>
-            <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-            <li><a href="settings.php" class="active"><i class="fas fa-cog"></i> System Settings</a></li>
-            <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div class="user-details">
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <p>Administrator</p>
-                </div>
-            </div>
-        </div>
-    </div>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-cog" style="color: var(--maroon-light); margin-right: 10px;"></i> System Settings</h1>
-                <p>Configure system-wide settings and preferences</p>
-            </div>
-            <div class="top-bar-actions">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search settings..." id="globalSearch">
-                </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="audit-logs.php" class="top-icon"><i class="fas fa-bell"></i></a>
-                <a href="backup.php" class="top-icon"><i class="fas fa-database"></i></a>
-            </div>
-        </div>
-        
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-cog"></i> System Settings</h1>
+        <p>Configure system-wide settings, platform preferences, and database controls</p>
+    </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <span class="badge" style="background:rgba(127,3,3,0.1);color:var(--dash-maroon);font-weight:700;padding:6px 14px;border-radius:50px;border:1px solid rgba(127,3,3,0.2);">
+            <i class="fas fa-database"></i> <?php echo $size_mb; ?> MB DB Size
+        </span>
+    </div>
+</div>
+
         <?php if($success): ?>
             <div class="alert alert-success">
                 <i class="fas fa-check-circle"></i> <?php echo $success; ?>
@@ -816,34 +645,34 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         <?php endif; ?>
         
-        <!-- Stats Row -->
-        <div class="stats-row">
-            <div class="stat-item">
-                <div class="icon db"><i class="fas fa-server"></i></div>
-                <div class="info">
-                    <h3><?php echo htmlspecialchars($dbname['dbname']); ?></h3>
-                    <p>Database Name</p>
+        <!-- Compact Stats Grid -->
+        <div class="compact-stats-grid" style="margin-bottom: 24px;">
+            <div class="stat-pill-card">
+                <div class="stat-pill-icon sapphire"><i class="fas fa-server"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val" style="font-size:0.95rem;"><?php echo htmlspecialchars($dbname['dbname']); ?></span>
+                    <span class="stat-pill-lbl">Database Name</span>
                 </div>
             </div>
-            <div class="stat-item">
-                <div class="icon tables"><i class="fas fa-table"></i></div>
-                <div class="info">
-                    <h3><?php echo $table_count; ?></h3>
-                    <p>Tables</p>
+            <div class="stat-pill-card">
+                <div class="stat-pill-icon emerald"><i class="fas fa-table"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $table_count; ?></span>
+                    <span class="stat-pill-lbl">Tables</span>
                 </div>
             </div>
-            <div class="stat-item">
-                <div class="icon users"><i class="fas fa-users"></i></div>
-                <div class="info">
-                    <h3><?php echo $user_count; ?></h3>
-                    <p>Users</p>
+            <div class="stat-pill-card">
+                <div class="stat-pill-icon maroon"><i class="fas fa-users"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $user_count; ?></span>
+                    <span class="stat-pill-lbl">Total Users</span>
                 </div>
             </div>
-            <div class="stat-item">
-                <div class="icon size"><i class="fas fa-weight-hanging"></i></div>
-                <div class="info">
-                    <h3><?php echo $size_mb; ?> MB</h3>
-                    <p>Database Size</p>
+            <div class="stat-pill-card">
+                <div class="stat-pill-icon amber"><i class="fas fa-database"></i></div>
+                <div class="stat-pill-data">
+                    <span class="stat-pill-val"><?php echo $size_mb; ?> MB</span>
+                    <span class="stat-pill-lbl">Database Size</span>
                 </div>
             </div>
         </div>
@@ -886,6 +715,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         <label><i class="fas fa-calendar-check"></i> Max Appointments Per Day</label>
                         <input type="number" name="max_appointments_per_day" value="<?php echo intval($settings['max_appointments_per_day'] ?? 15); ?>" min="1" required>
                     </div>
+
+                    <div class="form-group">
+                        <label><i class="fas fa-clock"></i> Max Slots Per Time Slot</label>
+                        <input type="number" name="max_slots_per_timeslot" value="<?php echo intval($settings['max_slots_per_timeslot'] ?? 5); ?>" min="1" max="50" required>
+                        <small style="color:var(--text-muted);font-size:.8rem;margin-top:4px;display:block;">How many residents can book the same time slot (e.g., 9:00 AM) on the same day. Default: 5</small>
+                    </div>
                     
                     <button type="submit" name="update_general" class="btn-primary">
                         <i class="fas fa-save"></i> Save General Settings
@@ -918,6 +753,72 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 
                 <div class="info-box">
                     <p><i class="fas fa-info-circle"></i> <strong>Note:</strong> When maintenance mode is enabled, only administrators can access the system. Regular users will see the maintenance message.</p>
+                </div>
+            </div>
+            
+            <!-- OpenAI Helpdesk AI Settings -->
+            <div class="settings-card" style="grid-column: 1 / -1;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-robot" style="color: var(--ref-gold);"></i>
+                        <h2>OpenAI Helpdesk AI Integration</h2>
+                    </div>
+                    <span style="font-size: 0.75rem; background: rgba(16,185,129,0.12); color: #059669; padding: 4px 10px; border-radius: 50px; font-weight: 700;">
+                        Lingkod Kalinga AI Assistant
+                    </span>
+                </div>
+                <form method="POST">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-bottom: 16px;">
+                        <div class="form-group checkbox-group" style="margin-bottom: 0; align-items: center;">
+                            <input type="checkbox" name="openai_helpdesk_enabled" id="openai_helpdesk_enabled" value="1" <?php echo ($settings['openai_helpdesk_enabled'] ?? '1') == '1' ? 'checked' : ''; ?>>
+                            <label for="openai_helpdesk_enabled" style="font-weight: 700; color: var(--ref-text);">
+                                Enable Automated AI Initial Guidance on Helpdesk
+                            </label>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label><i class="fas fa-microchip"></i> OpenAI Model</label>
+                            <select name="openai_model" id="openai_model" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-card); color: var(--text-color);">
+                                <option value="gpt-4o-mini" <?php echo ($settings['openai_model'] ?? 'gpt-4o-mini') === 'gpt-4o-mini' ? 'selected' : ''; ?>>gpt-4o-mini (Recommended - Fast & Cost Efficient)</option>
+                                <option value="gpt-4o" <?php echo ($settings['openai_model'] ?? '') === 'gpt-4o' ? 'selected' : ''; ?>>gpt-4o (High Intelligence Flagship)</option>
+                                <option value="gpt-3.5-turbo" <?php echo ($settings['openai_model'] ?? '') === 'gpt-3.5-turbo' ? 'selected' : ''; ?>>gpt-3.5-turbo (Legacy Fast)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label><i class="fas fa-key"></i> OpenAI API Secret Key</label>
+                        <div style="position: relative;">
+                            <input type="password" name="openai_api_key" id="openai_api_key" value="<?php echo htmlspecialchars($settings['openai_api_key'] ?? ''); ?>" placeholder="sk-proj-..." style="padding-right: 90px; width: 100%;">
+                            <button type="button" onclick="toggleApiKeyVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--ref-muted); cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+                                <i class="fas fa-eye" id="toggleKeyIcon"></i> Show
+                            </button>
+                        </div>
+                        <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; display: block;">
+                            Enter your platform secret key from OpenAI. If left empty or during offline periods, the Helpdesk automatically uses the municipal CSWDO Knowledge Engine fallback with 100% uptime.
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label><i class="fas fa-brain"></i> Custom AI System Prompt / Guidance Persona</label>
+                        <textarea name="openai_system_prompt" rows="3" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-family: inherit; font-size: 0.85rem;"><?php echo htmlspecialchars($settings['openai_system_prompt'] ?? ''); ?></textarea>
+                        <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; display: block;">
+                            Directs the tone, municipal context, and language guidelines (English/Tagalog/Taglish) for Lingkod Kalinga AI.
+                        </small>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center; margin-top: 20px; flex-wrap: wrap;">
+                        <button type="submit" name="update_openai_settings" class="btn-primary">
+                            <i class="fas fa-save"></i> Save AI Helpdesk Settings
+                        </button>
+                        <button type="button" class="btn-secondary" onclick="testOpenAiConnection()" id="btnTestOpenAi">
+                            <i class="fas fa-plug"></i> Test API Connection
+                        </button>
+                        <span id="testApiResult" style="font-size: 0.82rem; font-weight: 700; display: none;"></span>
+                    </div>
+                </form>
+
+                <div class="info-box" style="margin-top: 18px;">
+                    <p><i class="fas fa-shield-alt"></i> <strong>Important Compliance Rule:</strong> AI responses provide immediate preliminary guidance and document preparation steps to assist residents right away. Formal casework verification, fund disbursements, card issuance, and binding official actions remain strictly governed by licensed CSWDO Staff Officers.</p>
                 </div>
             </div>
             
@@ -1003,32 +904,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
 <script>
-// ========== THEME TOGGLE ==========
-const themeToggle = document.getElementById('themeToggle');
-const html = document.documentElement;
-
-const currentTheme = localStorage.getItem('theme') || 
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-function setTheme(theme) {
-    html.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-}
-
-setTheme(currentTheme);
-
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
-
 // ========== MAINTENANCE MODE TOGGLE ==========
 const maintenanceCheckbox = document.getElementById('maintenance_mode');
 const maintenanceMessage = document.getElementById('maintenance_message');
@@ -1063,7 +940,6 @@ document.getElementById('globalSearch')?.addEventListener('keyup', function(e) {
     }
 });
 </script>
-</body>
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>
 
 

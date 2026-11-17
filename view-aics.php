@@ -1,625 +1,1154 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+// view-aics.php - Resident-facing AICS application details view
+require_once __DIR__ . '/config/database.php';
 
-if (!isStaff()) {
-    redirect('../login.php');
+if (!isLoggedIn()) {
+    redirect('login.php');
+}
+
+// Redirect staff/admin to their dedicated canonical staff controller
+if (isStaff() || isAdmin()) {
+    $id = isset($_GET['id']) ? sanitize($_GET['id']) : '';
+    redirect('staff/view-aics.php' . ($id ? '?id=' . $id : ''));
 }
 
 $database = new Database();
 $db = $database->getConnection();
 
-// Get AICS ID from URL
 $aics_id = isset($_GET['id']) ? sanitize($_GET['id']) : 0;
-
 if (!$aics_id) {
-    redirect('manage-aics.php');
+    redirect('my-aics.php');
 }
 
-// Fetch main AICS request details
+// Check what columns exist in users table dynamically
+$check_columns = $db->query("SHOW COLUMNS FROM users");
+$user_columns = [];
+while($col = $check_columns->fetch(PDO::FETCH_ASSOC)) {
+    $user_columns[] = $col['Field'];
+}
+
+// Build user fields dynamically
+$user_fields = "u.first_name, u.last_name, u.email";
+if(in_array('contact_number', $user_columns)) {
+    $user_fields .= ", u.contact_number";
+} elseif(in_array('phone', $user_columns)) {
+    $user_fields .= ", u.phone as contact_number";
+}
+if(in_array('middle_name', $user_columns)) {
+    $user_fields .= ", u.middle_name";
+}
+if(in_array('street', $user_columns)) {
+    $user_fields .= ", u.street";
+}
+if(in_array('barangay', $user_columns)) {
+    $user_fields .= ", u.barangay";
+}
+if(in_array('city', $user_columns)) {
+    $user_fields .= ", u.city";
+}
+if(in_array('province', $user_columns)) {
+    $user_fields .= ", u.province";
+}
+if(in_array('postal_code', $user_columns)) {
+    $user_fields .= ", u.postal_code";
+}
+if(in_array('profile_picture', $user_columns)) {
+    $user_fields .= ", u.profile_picture";
+}
+
+// Fetch request details strictly verifying user_id ownership
 $query = "SELECT a.*, 
-          u.first_name, u.last_name, u.middle_name, u.email, u.contact_number, 
-          u.street, u.barangay, u.city, u.province, u.postal_code,
-          CONCAT(u.first_name, ' ', u.last_name) as full_name
+          $user_fields,
+          CONCAT(u.first_name, ' ', u.last_name) as full_name,
+          s.first_name as staff_first_name, s.last_name as staff_last_name, s.position as staff_position
           FROM aics_requests a
           JOIN users u ON a.user_id = u.user_id
-          WHERE a.aics_id = :id";
+          LEFT JOIN staff s ON a.approved_by = s.user_id
+          WHERE a.aics_id = :id AND a.user_id = :user_id";
 
 $stmt = $db->prepare($query);
 $stmt->bindParam(':id', $aics_id);
+$stmt->bindParam(':user_id', $_SESSION['user_id']);
 $stmt->execute();
 
 if ($stmt->rowCount() == 0) {
-    header('Location: manage-aics.php?error=Request not found');
-    exit;
+    redirect('my-aics.php?error=Application not found');
 }
 
 $request = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// Check which detail tables exist
+$tables_check = $db->query("SHOW TABLES");
+$existing_tables = [];
+while($row = $tables_check->fetch(PDO::FETCH_NUM)) {
+    $existing_tables[] = $row[0];
+}
+
 // Fetch specific details based on request type
 $specific_details = null;
-$detail_table = '';
-$detail_columns = [];
+$detail_title = '';
 
 switch($request['request_type']) {
-    case 'cash_relief':
-        $detail_query = "SELECT * FROM aics_cash_relief_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Cash Relief Details';
-        break;
-        
-    case 'educational':
-        $detail_query = "SELECT * FROM aics_educational_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Educational Assistance Details';
-        break;
-        
-    case 'food':
-        $detail_query = "SELECT * FROM aics_food_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Food Assistance Details';
-        break;
-        
-    case 'funeral':
-        $detail_query = "SELECT * FROM aics_funeral_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Funeral Assistance Details';
-        break;
-        
-    case 'material':
-        $detail_query = "SELECT * FROM aics_material_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Material Assistance Details';
-        break;
-        
     case 'medical':
-        $detail_query = "SELECT * FROM aics_medical_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Medical Assistance Details';
+        if(in_array('aics_medical_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_medical_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Medical Assistance Information';
+        }
         break;
-        
+
+    case 'funeral':
+    case 'burial':
+        if(in_array('aics_funeral_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_funeral_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Funeral / Burial Assistance Information';
+        }
+        break;
+
+    case 'educational':
+        if(in_array('aics_educational_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_educational_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Educational Assistance Information';
+        }
+        break;
+
     case 'transportation':
-        $detail_query = "SELECT * FROM aics_transportation_details WHERE aics_id = :id";
-        $detail_stmt = $db->prepare($detail_query);
-        $detail_stmt->bindParam(':id', $aics_id);
-        $detail_stmt->execute();
-        $specific_details = $detail_stmt->fetch(PDO::FETCH_ASSOC);
-        $detail_table = 'Transportation Assistance Details';
+        if(in_array('aics_transportation_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_transportation_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Transportation Assistance Information';
+        }
+        break;
+
+    case 'cash_relief':
+        if(in_array('aics_cash_relief_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_cash_relief_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Cash Relief Information';
+        }
+        break;
+
+    case 'food':
+        if(in_array('aics_food_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_food_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Food Assistance Information';
+        }
+        break;
+
+    case 'material':
+        if(in_array('aics_material_details', $existing_tables)) {
+            $det_stmt = $db->prepare("SELECT * FROM aics_material_details WHERE aics_id = :id");
+            $det_stmt->bindParam(':id', $aics_id);
+            $det_stmt->execute();
+            $specific_details = $det_stmt->fetch(PDO::FETCH_ASSOC);
+            $detail_title = 'Material Assistance Information';
+        }
         break;
 }
 
-// Fetch supporting documents
-$docs_query = "SELECT * FROM aics_documents WHERE aics_id = :id ORDER BY upload_date DESC";
-$docs_stmt = $db->prepare($docs_query);
-$docs_stmt->bindParam(':id', $aics_id);
-$docs_stmt->execute();
-$documents = $docs_stmt->fetchAll(PDO::FETCH_ASSOC);
+// Fetch documents specifically linked to this AICS request
+$documents = [];
+try {
+    $aics_doc_stmt = $db->prepare("SELECT * FROM aics_documents WHERE aics_id = :id ORDER BY aics_doc_id DESC");
+    $aics_doc_stmt->execute([':id' => $aics_id]);
+    $documents = $aics_doc_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
 
-// Get staff who processed this request
-$staff_info = [];
-if ($request['reviewed_by']) {
-    $staff_query = "SELECT s.first_name, s.last_name, s.position FROM staff s WHERE s.user_id = :user_id";
-    $staff_stmt = $db->prepare($staff_query);
-    $staff_stmt->bindParam(':user_id', $request['reviewed_by']);
-    $staff_stmt->execute();
-    $staff_info['reviewer'] = $staff_stmt->fetch(PDO::FETCH_ASSOC);
+if (empty($documents)) {
+    try {
+        $doc_query = "SELECT * FROM documents 
+                      WHERE user_id = :user_id AND reference_id = :ref_id 
+                      ORDER BY upload_date DESC";
+        $doc_stmt = $db->prepare($doc_query);
+        $doc_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        $doc_stmt->bindParam(':ref_id', $aics_id);
+        $doc_stmt->execute();
+        $documents = $doc_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {}
 }
 
-if ($request['approved_by']) {
-    $staff_query = "SELECT s.first_name, s.last_name, s.position FROM staff s WHERE s.user_id = :user_id";
-    $staff_stmt = $db->prepare($staff_query);
-    $staff_stmt->bindParam(':user_id', $request['approved_by']);
-    $staff_stmt->execute();
-    $staff_info['approver'] = $staff_stmt->fetch(PDO::FETCH_ASSOC);
+// Fallback for legacy documents
+if (empty($documents)) {
+    try {
+        $legacy_doc_query = "SELECT * FROM documents 
+                             WHERE user_id = :user_id 
+                             AND (reference_id IS NULL OR reference_id = 0)
+                             AND (document_path LIKE '%aics%' OR document_type LIKE '%Medical%' OR document_type LIKE '%Certificate%' OR document_type LIKE '%Hospital%')
+                             ORDER BY upload_date DESC";
+        $legacy_stmt = $db->prepare($legacy_doc_query);
+        $legacy_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        $legacy_stmt->execute();
+        $documents = $legacy_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {}
 }
 
-// Get status color and icon
-function getStatusInfo($status) {
+// Helper function to clean document path
+function cleanDocumentPath($path) {
+    if (empty($path)) return '';
+    $path = str_replace('\\', '/', trim($path));
+    if (strpos($path, 'uploads/') === 0) {
+        return $path;
+    }
+    if (strpos($path, '/uploads/') === 0) {
+        return ltrim($path, '/');
+    }
+    if (file_exists(__DIR__ . '/uploads/aics/' . basename($path))) {
+        return 'uploads/aics/' . basename($path);
+    }
+    return 'uploads/' . basename($path);
+}
+
+// Status styling info
+function getAicsStatusInfo($status) {
     $statuses = [
-        'submitted' => ['color' => '#ff9800', 'icon' => 'fa-clock', 'text' => 'Submitted', 'bg' => '#fff3e0'],
-        'reviewing' => ['color' => '#2196F3', 'icon' => 'fa-search', 'text' => 'Under Review', 'bg' => '#e3f2fd'],
-        'approved' => ['color' => '#4CAF50', 'icon' => 'fa-check-circle', 'text' => 'Approved', 'bg' => '#e8f5e9'],
-        'rejected' => ['color' => '#f44336', 'icon' => 'fa-times-circle', 'text' => 'Rejected', 'bg' => '#ffebee'],
-        'released' => ['color' => '#9C27B0', 'icon' => 'fa-gift', 'text' => 'Released', 'bg' => '#f3e5f5']
+        'pending' => ['color' => '#f39c12', 'icon' => 'fa-clock', 'text' => 'Pending Review', 'bg' => '#fff8e1'],
+        'under_review' => ['color' => '#1976d2', 'icon' => 'fa-search', 'text' => 'Under Review', 'bg' => '#e3f2fd'],
+        'approved' => ['color' => '#2e7d32', 'icon' => 'fa-check-circle', 'text' => 'Approved', 'bg' => '#e8f5e9'],
+        'rejected' => ['color' => '#c62828', 'icon' => 'fa-times-circle', 'text' => 'Disapproved', 'bg' => '#ffebee'],
+        'disbursed' => ['color' => '#6a1b9a', 'icon' => 'fa-hand-holding-dollar', 'text' => 'Assistance Disbursed', 'bg' => '#f3e5f5']
     ];
-    return $statuses[$status] ?? ['color' => '#999', 'icon' => 'fa-question-circle', 'text' => ucfirst($status), 'bg' => '#f5f5f5'];
+    return $statuses[$status] ?? ['color' => '#616161', 'icon' => 'fa-info-circle', 'text' => ucfirst(str_replace('_', ' ', $status)), 'bg' => '#f5f5f5'];
 }
 
-// Helper function to format field names for display
-function formatFieldName($field) {
-    $mapping = [
-        'emergency_type' => 'Type of Emergency',
-        'affected_members' => 'Affected Family Members',
-        'incident_date' => 'Incident Date',
-        'incident_report_no' => 'Incident Report Number',
-        'police_report_no' => 'Police Report Number',
-        'student_name' => 'Student Name',
-        'school_name' => 'School Name',
-        'grade_level' => 'Grade/Year Level',
-        'school_year' => 'School Year',
-        'tuition_fee' => 'Tuition Fee',
-        'enrollment_status' => 'Enrollment Status',
-        'household_size' => 'Household Size',
-        'monthly_income' => 'Monthly Income',
-        'special_needs' => 'Special Needs / Dietary Restrictions',
-        'assistance_type' => 'Assistance Type',
-        'deceased_name' => 'Name of Deceased',
-        'relationship' => 'Relationship to Deceased',
-        'funeral_home' => 'Funeral Home',
-        'death_certificate_no' => 'Death Certificate Number',
-        'funeral_contract_no' => 'Funeral Contract Number',
-        'transfer_permit_no' => 'Transfer Permit Number',
-        'client_type' => 'Client Type',
-        'group_name' => 'Group/Organization Name',
-        'number_of_members' => 'Number of Members',
-        'materials_requested' => 'Materials Requested',
-        'estimated_value' => 'Estimated Value',
-        'hospital_name' => 'Hospital Name',
-        'doctor_name' => 'Doctor Name',
-        'destination' => 'Destination',
-        'travel_date' => 'Travel Date',
-        'number_of_persons' => 'Number of Persons',
-        'estimated_fare' => 'Estimated Fare',
-        'reason_type' => 'Reason for Travel',
-        'purpose' => 'Purpose / Explanation'
-    ];
-    return $mapping[$field] ?? ucwords(str_replace('_', ' ', $field));
-}
+$statusInfo = getAicsStatusInfo($request['status']);
+$tracking_no = 'AICS-' . str_pad($request['aics_id'], 6, '0', STR_PAD_LEFT);
+$dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View AICS Request #<?php echo str_pad($aics_id, 6, '0', STR_PAD_LEFT); ?> - Staff</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>AICS Details - <?php echo $tracking_no; ?> - One Palayan-Kalinga Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: #f0f2f5; }
+        .breadcrumb {
+            margin-bottom: 20px;
+            color: var(--text-muted, #71818B);
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .breadcrumb a {
+            color: #7F0303;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
 
-        .navbar { background: #003366; color: white; padding: 1rem 0; position: sticky; top: 0; z-index: 1000; }
-        .navbar .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-        .nav-brand h1 { font-size: 1.5rem; margin-bottom: 5px; }
-        .nav-brand .subtitle { font-size: 0.8rem; opacity: 0.9; }
-        .nav-menu { list-style: none; display: flex; gap: 20px; }
-        .nav-menu a { color: white; text-decoration: none; display: flex; align-items: center; gap: 8px; }
-        .dropdown-menu { position: absolute; background: white; color: #333; min-width: 180px; border-radius: 5px; display: none; }
-        .dropdown:hover .dropdown-menu { display: block; }
+        .app-header {
+            background: var(--card-bg, #ffffff);
+            border-radius: var(--radius-card, 16px);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
+            border: 1px solid var(--border-color, #E2E8F0);
+        }
+        .app-title h1 {
+            color: var(--text-primary, #191D1E);
+            margin: 0 0 6px 0;
+            font-size: 1.45rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .tracking-chip {
+            background: #003366;
+            color: #ffffff;
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-family: monospace;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .category-chip {
+            background: rgba(127, 3, 3, 0.1);
+            color: #7F0303;
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .status-badge-large {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
 
-        .dashboard-container { display: flex; min-height: calc(100vh - 80px); }
-        .sidebar { width: 280px; background: #2c3e50; color: white; position: sticky; top: 80px; height: calc(100vh - 80px); overflow-y: auto; }
-        .user-profile { padding: 30px 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .sidebar-menu { list-style: none; padding: 20px 0; }
-        .sidebar-menu li a { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: #ecf0f1; text-decoration: none; transition: all 0.3s; }
-        .sidebar-menu li a:hover, .sidebar-menu li a.active { background: #34495e; border-left: 3px solid #ff9800; }
-        .sidebar-menu li a i { width: 20px; color: #ff9800; }
-        .menu-divider { border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0; padding-top: 10px; padding-left: 20px; font-size: 0.75rem; color: #7f8c8d; }
+        /* 4-Step Progress Tracker */
+        /* Enhanced Glowing Lifecycle Tracker */
+        .stepper-card {
+            background: var(--card-bg, #ffffff);
+            border-radius: 20px;
+            padding: 26px 30px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px -2px rgba(127, 3, 3, 0.08), 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid rgba(127, 3, 3, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+        .stepper-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #7F0303, #B91C1C, #EF4444, #7F0303);
+            background-size: 200% 100%;
+            animation: gradient-flow 4s ease infinite;
+        }
+        @keyframes gradient-flow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .stepper-header {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--text-primary, #191D1E);
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .stepper-header .header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .stepper-header .header-left i {
+            color: #7F0303;
+            font-size: 1.15rem;
+        }
+        .stepper-live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .pulse-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10B981;
+            box-shadow: 0 0 10px #10B981;
+            display: inline-block;
+            animation: pulse-dot 1.8s infinite;
+        }
+        @keyframes pulse-dot {
+            0% { transform: scale(0.9); opacity: 0.8; box-shadow: 0 0 4px #10B981; }
+            50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px #10B981; }
+            100% { transform: scale(0.9); opacity: 0.8; box-shadow: 0 0 4px #10B981; }
+        }
 
-        .main-content { flex: 1; padding: 30px; background: #f5f7fb; }
-        .breadcrumb { margin-bottom: 20px; color: #666; }
-        .breadcrumb a { color: #003366; text-decoration: none; }
+        .stepper-wrap {
+            position: relative;
+            margin: 15px 0 10px;
+        }
+        .stepper-track-bg {
+            position: absolute;
+            top: 24px;
+            left: 8%;
+            right: 8%;
+            height: 4px;
+            background: #E2E8F0;
+            border-radius: 10px;
+            z-index: 1;
+        }
+        .stepper-track-fill {
+            position: absolute;
+            top: 24px;
+            left: 8%;
+            height: 4px;
+            background: linear-gradient(90deg, #10B981, #7F0303);
+            border-radius: 10px;
+            z-index: 1;
+            box-shadow: 0 0 14px rgba(127, 3, 3, 0.5);
+            transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .stepper-track-fill.completed {
+            background: linear-gradient(90deg, #059669, #10B981);
+            box-shadow: 0 0 14px rgba(16, 185, 129, 0.55);
+        }
+        .stepper-track-fill.rejected {
+            background: linear-gradient(90deg, #DC2626, #991B1B);
+            box-shadow: 0 0 14px rgba(220, 38, 38, 0.55);
+        }
 
-        .request-header { background: white; border-radius: 16px; padding: 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .request-title h1 { color: #003366; margin-bottom: 8px; }
-        .tracking-number { color: #666; font-size: 0.9rem; }
-        .status-badge-large { display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px; border-radius: 50px; font-weight: 600; }
-
-        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px; }
-        .info-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .info-card h3 { color: #003366; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #ff9800; display: flex; align-items: center; gap: 10px; }
-        .info-row { display: flex; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
-        .info-label { width: 160px; font-weight: 600; color: #666; }
-        .info-value { flex: 1; color: #333; }
-
-        .documents-list { display: grid; gap: 12px; }
-        .document-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f8f9fa; border-radius: 8px; }
-        .document-name { display: flex; align-items: center; gap: 10px; }
-        .btn-download { background: #003366; color: white; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; }
-        .btn-download:hover { background: #002244; }
-
-        .action-buttons { display: flex; gap: 12px; margin-top: 24px; }
-        .btn-primary, .btn-secondary { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
-        .btn-primary { background: #003366; color: white; }
-        .btn-primary:hover { background: #002244; }
-        .btn-secondary { background: #6c757d; color: white; }
-        .btn-print { background: #17a2b8; }
-
-        .request-type-badge { display: inline-block; padding: 4px 12px; background: #e3f2fd; color: #003366; border-radius: 20px; font-size: 0.85rem; font-weight: 500; margin-left: 10px; }
-
-        @media print {
-            .sidebar, .navbar, .action-buttons, .breadcrumb { display: none; }
-            .main-content { padding: 0; margin: 0; }
-            .info-card { break-inside: avoid; }
+        .stepper {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+        }
+        .step {
+            position: relative;
+            text-align: center;
+            flex: 1;
+            padding: 0 10px;
+            transition: all 0.3s ease;
+        }
+        .step-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid #CBD5E1;
+            color: #64748B;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px auto;
+            font-size: 1.05rem;
+            font-weight: 800;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+        }
+        .step.active .step-circle {
+            background: linear-gradient(135deg, #7F0303 0%, #B91C1C 100%);
+            border-color: #ffffff;
+            color: #ffffff;
+            box-shadow: 0 0 0 4px rgba(127, 3, 3, 0.22), 0 0 25px rgba(220, 38, 38, 0.7);
+            transform: scale(1.08);
+            animation: pulse-node-glow 2s infinite ease-in-out;
+        }
+        @keyframes pulse-node-glow {
+            0%, 100% {
+                box-shadow: 0 0 0 4px rgba(127, 3, 3, 0.22), 0 0 18px rgba(185, 28, 28, 0.55);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(127, 3, 3, 0.1), 0 0 32px rgba(220, 38, 38, 0.85);
+            }
+        }
+        .step.completed .step-circle {
+            background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+            border-color: #ffffff;
+            color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25), 0 0 16px rgba(16, 185, 129, 0.45);
+        }
+        .step.rejected .step-circle {
+            background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%);
+            border-color: #ffffff;
+            color: #ffffff;
+            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.25), 0 0 18px rgba(220, 38, 38, 0.55);
+        }
+        .step-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-secondary, #4A5568);
+            margin-bottom: 5px;
+            transition: color 0.3s;
+        }
+        .step.active .step-title {
+            color: #7F0303;
+            font-weight: 800;
+        }
+        .step.completed .step-title {
+            color: #059669;
+        }
+        .step-info-badge {
+            display: inline-block;
+            font-size: 0.74rem;
+            line-height: 1.35;
+            color: var(--text-muted, #71818B);
+            padding: 5px 12px;
+            border-radius: 8px;
+            background: var(--card-subtle, #F8FAFC);
+            border: 1px solid var(--border-color, #E2E8F0);
+            transition: all 0.3s;
+            max-width: 95%;
+        }
+        .step.active .step-info-badge {
+            background: rgba(127, 3, 3, 0.08);
+            border-color: rgba(127, 3, 3, 0.25);
+            color: #7F0303;
+            font-weight: 700;
+            box-shadow: 0 0 12px rgba(127, 3, 3, 0.15);
+        }
+        .step.completed .step-info-badge {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.25);
+            color: #059669;
+            font-weight: 600;
         }
 
         @media (max-width: 768px) {
-            .dashboard-container { flex-direction: column; }
-            .sidebar { width: 100%; position: static; height: auto; }
+            .stepper-track-bg, .stepper-track-fill { display: none; }
+            .stepper { flex-direction: column; gap: 20px; align-items: flex-start; }
+            .step { display: flex; align-items: center; gap: 14px; text-align: left; padding: 0; width: 100%; }
+            .step-circle { margin: 0; flex-shrink: 0; }
+            .info-grid { grid-template-columns: 1fr !important; gap: 16px; }
+            .info-card { padding: 18px 16px; }
+            .info-row { flex-direction: column; gap: 2px; }
+            .info-label { width: 100%; }
+            .documents-section { padding: 18px 16px; }
+            .documents-list { grid-template-columns: 1fr; }
+        }
+
+        /* Detail Cards Grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .info-card {
+            background: var(--card-bg, #ffffff);
+            border-radius: var(--radius-card, 16px);
+            padding: 22px 26px;
+            box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
+            border: 1px solid var(--border-color, #E2E8F0);
+        }
+        .info-card h3 {
+            color: #7F0303;
+            margin: 0 0 16px 0;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color, #E2E8F0);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        .info-row {
+            display: flex;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+            font-size: 0.9rem;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            width: 160px;
+            font-weight: 600;
+            color: var(--text-muted, #71818B);
+            flex-shrink: 0;
+        }
+        .info-value {
+            color: var(--text-primary, #191D1E);
+            font-weight: 500;
+            flex-grow: 1;
+            word-break: break-word;
+        }
+
+        /* Documents Section */
+        .documents-section {
+            background: var(--card-bg, #ffffff);
+            border-radius: var(--radius-card, 16px);
+            padding: 22px 26px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
+            border: 1px solid var(--border-color, #E2E8F0);
+        }
+        .documents-section h3 {
+            color: #7F0303;
+            margin: 0 0 16px 0;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color, #E2E8F0);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        .documents-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+        .document-item {
+            background: var(--card-subtle, #F8FAFC);
+            border: 1px solid var(--border-color, #E2E8F0);
+            border-radius: 12px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+        .document-item:hover {
+            border-color: #7F0303;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .doc-icon {
+            font-size: 1.6rem;
+            color: #7F0303;
+            flex-shrink: 0;
+        }
+        .doc-info {
+            flex-grow: 1;
+            min-width: 0;
+        }
+        .doc-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary, #191D1E);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .doc-meta {
+            font-size: 0.72rem;
+            color: var(--text-muted, #71818B);
+            margin-top: 2px;
+        }
+        .doc-action {
+            color: #003366;
+            text-decoration: none;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: rgba(0, 51, 102, 0.08);
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .doc-action:hover {
+            background: rgba(0, 51, 102, 0.16);
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-primary-action {
+            background: #7F0303;
+            color: #ffffff;
+        }
+        .btn-primary-action:hover {
+            background: #600202;
+            transform: translateY(-1px);
+        }
+        .btn-secondary-action {
+            background: var(--card-bg, #ffffff);
+            color: var(--text-primary, #191D1E);
+            border: 1px solid var(--border-color, #E2E8F0);
+        }
+        .btn-secondary-action:hover {
+            background: #F8FAFC;
+        }
+
+        @media print {
+            .portal-sidebar, .portal-header, .breadcrumb, .action-buttons, .theme-toggle {
+                display: none !important;
+            }
+            .app-container, .main-content {
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+            .stepper-card, .info-card, .documents-section {
+                box-shadow: none !important;
+                border: 1px solid #ddd !important;
+            }
+        }
+
+        .btn-aics-dots,
+        .aics-dots-menu {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            .stepper { flex-direction: column; gap: 16px; align-items: flex-start; }
+            .stepper::before { display: none; }
+            .step { display: flex; align-items: center; gap: 14px; text-align: left; }
+            .step-circle { margin: 0; }
             .info-grid { grid-template-columns: 1fr; }
-            .info-row { flex-direction: column; }
-            .info-label { width: 100%; margin-bottom: 5px; }
+            .info-row { flex-direction: column; gap: 4px; }
+            .info-label { width: 100%; }
+
+            /* Action Buttons Mobile (3-Dots Collapse) */
+            .action-buttons {
+                position: relative;
+                justify-content: flex-start;
+                gap: 8px;
+            }
+            .btn-secondary-action {
+                display: none !important; /* Collapsed into 3 dots on mobile */
+            }
+            .btn-primary-action {
+                padding: 7px 16px !important;
+                font-size: 0.78rem !important;
+            }
+            .btn-aics-dots {
+                display: inline-flex !important;
+                width: 34px !important;
+                height: 34px !important;
+                border-radius: 50% !important;
+                border: 1.5px solid var(--border-color) !important;
+                background: var(--card-bg, #ffffff) !important;
+                color: var(--text-primary) !important;
+                align-items: center !important;
+                justify-content: center !important;
+                cursor: pointer !important;
+                font-size: 0.85rem !important;
+            }
+            .btn-aics-dots:hover {
+                border-color: #7F0303 !important;
+                color: #7F0303 !important;
+            }
+            .aics-dots-menu {
+                display: none;
+                position: absolute;
+                bottom: calc(100% + 8px);
+                left: 0;
+                background: var(--card-bg, #ffffff);
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+                padding: 6px;
+                min-width: 175px;
+                z-index: 105;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .aics-dots-menu.open {
+                display: flex !important;
+            }
+            .aics-menu-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                background: transparent;
+                border: none;
+                color: var(--text-primary);
+                font-size: 0.78rem;
+                font-weight: 600;
+                text-decoration: none;
+                cursor: pointer;
+                width: 100%;
+                text-align: left;
+            }
+            .aics-menu-item:hover {
+                background: rgba(127, 3, 3, 0.08);
+                color: #7F0303;
+            }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="container">
-            <div class="nav-brand">
-                <a href="../index.php" style="text-decoration: none; color: inherit;">
-                    <h1>ONE PALAYAN-KALINGA HUB</h1>
-                    <p class="subtitle">CSWDO Palayan City</p>
-                </a>
-            </div>
-            <ul class="nav-menu">
-                <li><a href="../index.php"><i class="fas fa-home"></i> Home</a></li>
-                <li><a href="../services.php">Services</a></li>
-                <li><a href="../appointments.php">Appointments</a></li>
-                <li><a href="../track-aics.php">Track AICS</a></li>
-                <li><a href="../housing.php">Housing Program</a></li>
-                <li class="dropdown">
-                    <a href="#"><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Staff'); ?> <i class="fas fa-caret-down"></i></a>
-                    <ul class="dropdown-menu">
-                        <li><a href="../staff-dashboard.php">Dashboard</a></li>
-                        <li><a href="../logout.php">Logout</a></li>
-                    </ul>
-                </li>
-            </ul>
-        </div>
-    </nav>
-    
-    <div class="dashboard-container">
-        <div class="sidebar">
-            <div class="user-profile">
-                <h3><?php echo htmlspecialchars($_SESSION['full_name']); ?></h3>
-                <p>Staff</p>
-            </div>
-            <ul class="sidebar-menu">
-                <li><a href="../staff-dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="manage-appointments.php"><i class="fas fa-calendar-check"></i> Appointments</a></li>
-                <li><a href="manage-aics.php" class="active"><i class="fas fa-hand-holding-heart"></i> AICS Requests</a></li>
-                <li><a href="manage-housing.php"><i class="fas fa-home"></i> Housing</a></li>
-                <li><a href="verify-documents.php"><i class="fas fa-file-alt"></i> Verify Documents</a></li>
-                <li><a href="reports.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-                <li class="menu-divider"></li>
-                <li><a href="../index.php"><i class="fas fa-globe"></i> View Main Site</a></li>
-                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
-        </div>
-        
+    <div class="app-container">
+        <!-- Unified Resident Portal Sidebar -->
+        <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+
+        <!-- Main Content Canvas -->
         <div class="main-content">
+            <!-- Unified Resident Header -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Breadcrumb Navigation -->
             <div class="breadcrumb">
-                <a href="../staff-dashboard.php">Dashboard</a> > 
-                <a href="manage-aics.php">AICS Requests</a> > 
-                View Request #<?php echo str_pad($aics_id, 6, '0', STR_PAD_LEFT); ?>
+                <a href="dashboard.php"><i class="fas fa-home"></i> Home</a>
+                <span>/</span>
+                <a href="my-aics.php">My AICS Applications</a>
+                <span>/</span>
+                <span><?php echo $tracking_no; ?></span>
             </div>
-            
-            <?php $statusInfo = getStatusInfo($request['status']); ?>
-            <div class="request-header">
-                <div class="request-title">
+
+            <!-- Application Header Card -->
+            <div class="app-header">
+                <div class="app-title">
                     <h1>
-                        <i class="fas fa-hand-holding-heart"></i> 
-                        <?php echo ucfirst(str_replace('_', ' ', $request['request_type'])); ?> Assistance
-                        <span class="request-type-badge">
-                            <i class="fas fa-tag"></i> <?php echo ucfirst($request['request_type']); ?>
-                        </span>
+                        <i class="fas fa-hand-holding-heart" style="color: #7F0303;"></i>
+                        <?php echo htmlspecialchars($request['full_name']); ?>
+                        <span class="tracking-chip"><?php echo $tracking_no; ?></span>
+                        <span class="category-chip"><?php echo htmlspecialchars($request['request_type']); ?></span>
                     </h1>
-                    <div class="tracking-number">
-                        <strong>Tracking Number:</strong> AICS-<?php echo str_pad($aics_id, 6, '0', STR_PAD_LEFT); ?>
+                    <div style="font-size: 0.85rem; color: var(--text-muted, #71818B); margin-top: 4px;">
+                        Date Filed: <strong><?php 
+                            $date_filed = $request['submission_date'] ?? $request['created_at'] ?? $request['application_date'] ?? null;
+                            echo $date_filed ? date('F d, Y', strtotime($date_filed)) : 'N/A';
+                        ?></strong>
                     </div>
                 </div>
                 <div>
-                    <span class="status-badge-large" style="background: <?php echo $statusInfo['bg']; ?>; color: <?php echo $statusInfo['color']; ?>; border: 1px solid <?php echo $statusInfo['color']; ?>">
+                    <span class="status-badge-large" style="background: <?php echo $statusInfo['bg']; ?>; color: <?php echo $statusInfo['color']; ?>; border: 1px solid <?php echo $statusInfo['color']; ?>40;">
                         <i class="fas <?php echo $statusInfo['icon']; ?>"></i>
                         <?php echo $statusInfo['text']; ?>
                     </span>
                 </div>
             </div>
-            
-            <div class="info-grid">
-                <!-- Applicant Information -->
-                <div class="info-card">
-                    <h3><i class="fas fa-user-circle"></i> Applicant Information</h3>
-                    <div class="info-row">
-                        <div class="info-label">Full Name:</div>
-                        <div class="info-value"><?php echo htmlspecialchars($request['full_name']); ?></div>
+
+            <!-- Progress Tracker (Enhanced Glowing 4-Stage Lifecycle Tracker) -->
+            <div class="stepper-card">
+                <div class="stepper-header">
+                    <div class="header-left">
+                        <i class="fas fa-route"></i>
+                        <span>Application Lifecycle Tracker</span>
                     </div>
-                    <?php if(!empty($request['middle_name'])): ?>
-                    <div class="info-row">
-                        <div class="info-label">Middle Name:</div>
-                        <div class="info-value"><?php echo htmlspecialchars($request['middle_name']); ?></div>
-                    </div>
-                    <?php endif; ?>
-                    <div class="info-row">
-                        <div class="info-label">Contact Number:</div>
-                        <div class="info-value"><?php echo htmlspecialchars($request['contact_number']); ?></div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Email:</div>
-                        <div class="info-value"><?php echo htmlspecialchars($request['email']); ?></div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Address:</div>
-                        <div class="info-value">
-                            <?php 
-                            $address = [];
-                            if(!empty($request['street'])) $address[] = $request['street'];
-                            if(!empty($request['barangay'])) $address[] = $request['barangay'];
-                            if(!empty($request['city'])) $address[] = $request['city'];
-                            if(!empty($request['province'])) $address[] = $request['province'];
-                            echo htmlspecialchars(implode(', ', $address));
-                            ?>
-                        </div>
-                    </div>
+                    <span class="stepper-live-pill">
+                        <span class="pulse-indicator"></span>
+                        Live Status: <?php echo htmlspecialchars($statusInfo['text']); ?>
+                    </span>
                 </div>
-                
-                <!-- Request Summary -->
-                <div class="info-card">
-                    <h3><i class="fas fa-file-alt"></i> Request Summary</h3>
-                    <div class="info-row">
-                        <div class="info-label">Request Type:</div>
-                        <div class="info-value"><?php echo ucfirst(str_replace('_', ' ', $request['request_type'])); ?></div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Amount Requested:</div>
-                        <div class="info-value"><strong>₱<?php echo number_format($request['amount_requested'], 2); ?></strong></div>
-                    </div>
-                    <?php if($request['amount_approved'] > 0): ?>
-                    <div class="info-row">
-                        <div class="info-label">Amount Approved:</div>
-                        <div class="info-value"><strong style="color: #4CAF50;">₱<?php echo number_format($request['amount_approved'], 2); ?></strong></div>
-                    </div>
-                    <?php endif; ?>
-                    <div class="info-row">
-                        <div class="info-label">Submission Date:</div>
-                        <div class="info-value"><?php echo date('F d, Y h:i A', strtotime($request['submission_date'])); ?></div>
-                    </div>
-                </div>
-                
-                <!-- Specific Details based on request type -->
-                <?php if($specific_details): ?>
-                <div class="info-card">
-                    <h3><i class="fas fa-info-circle"></i> <?php echo $detail_table; ?></h3>
-                    <?php foreach($specific_details as $key => $value): ?>
-                        <?php if($key != 'id' && $key != 'aics_id' && !empty($value)): ?>
-                        <div class="info-row">
-                            <div class="info-label"><?php echo formatFieldName($key); ?>:</div>
-                            <div class="info-value">
-                                <?php 
-                                if($key == 'amount_requested' || $key == 'estimated_value' || $key == 'tuition_fee' || $key == 'monthly_income' || $key == 'estimated_fare') {
-                                    echo '₱' . number_format($value, 2);
-                                } elseif($key == 'travel_date' || $key == 'incident_date') {
-                                    echo date('F d, Y', strtotime($value));
-                                } else {
-                                    echo nl2br(htmlspecialchars($value));
-                                }
-                                ?>
+
+                <?php
+                    $st = strtolower($request['status'] ?? 'pending');
+                    $is_rej = in_array($st, ['rejected', 'disapproved', 'declined']);
+                    
+                    // 4-Stage Lifecycle Tracker:
+                    // 1: Document Review
+                    // 2: Staff Interview ("Please proceed to office for staff interview")
+                    // 3: SCSR & Budget ("Submission to City Budget Office")
+                    // 4: Assistance Release ("Fund Disbursement")
+                    $c_step = 1;
+                    if (in_array($st, ['pending', 'submitted'])) $c_step = 1;
+                    if (in_array($st, ['under_review', 'reviewing', 'for_review', 'interview', 'qualified'])) $c_step = 2;
+                    if (in_array($st, ['approved', 'scheduled'])) $c_step = 3;
+                    if (in_array($st, ['disbursed', 'released', 'completed', 'awarded'])) $c_step = 4;
+                    if ($is_rej) $c_step = 1;
+
+                    // Progress percentage for track bar
+                    $line_pct = 12;
+                    if ($c_step === 2) $line_pct = 42;
+                    if ($c_step === 3) $line_pct = 74;
+                    if ($c_step >= 4) $line_pct = 100;
+                    if ($is_rej) $line_pct = 15;
+                ?>
+
+                <div class="stepper-wrap">
+                    <div class="stepper-track-bg"></div>
+                    <div class="stepper-track-fill <?php echo $is_rej ? 'rejected' : ($c_step >= 4 ? 'completed' : ''); ?>" style="width: <?php echo $line_pct; ?>%;"></div>
+
+                    <div class="stepper">
+                        <!-- Step 1: Document Review -->
+                        <div class="step <?php echo $is_rej ? 'rejected' : ($c_step >= 1 ? ($c_step === 1 ? 'active' : 'completed') : ''); ?>">
+                            <div class="step-circle">
+                                <?php if ($is_rej): ?>
+                                    <i class="fas fa-times"></i>
+                                <?php elseif ($c_step > 1): ?>
+                                    <i class="fas fa-check"></i>
+                                <?php else: ?>
+                                    1
+                                <?php endif; ?>
                             </div>
+                            <div class="step-title">1. Document Review</div>
+                            <span class="step-info-badge">Initial Document Screening</span>
                         </div>
-                        <?php endif; ?>
+
+                        <!-- Step 2: Staff Interview -->
+                        <div class="step <?php echo $c_step >= 2 ? ($c_step === 2 ? 'active' : 'completed') : ''; ?>">
+                            <div class="step-circle">
+                                <?php echo $c_step > 2 ? '<i class="fas fa-check"></i>' : '2'; ?>
+                            </div>
+                            <div class="step-title">2. Staff Interview</div>
+                            <span class="step-info-badge"><i class="fas fa-person-walking"></i> Please proceed to office for staff interview</span>
+                        </div>
+
+                        <!-- Step 3: SCSR & Budget -->
+                        <div class="step <?php echo $c_step >= 3 ? ($c_step === 3 ? 'active' : 'completed') : ''; ?>">
+                            <div class="step-circle">
+                                <?php echo $c_step > 3 ? '<i class="fas fa-check"></i>' : '3'; ?>
+                            </div>
+                            <div class="step-title">3. SCSR &amp; Budget</div>
+                            <span class="step-info-badge"><i class="fas fa-landmark"></i> Submission to City Budget Office</span>
+                        </div>
+
+                        <!-- Step 4: Assistance Release -->
+                        <div class="step <?php echo $c_step >= 4 ? 'completed' : ''; ?>">
+                            <div class="step-circle">
+                                <?php echo $c_step >= 4 ? '<i class="fas fa-check"></i>' : '4'; ?>
+                            </div>
+                            <div class="step-title">4. Assistance Release</div>
+                            <span class="step-info-badge"><i class="fas fa-hand-holding-dollar"></i> Fund Disbursement</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail Cards Grid -->
+            <div class="info-grid">
+                <!-- Beneficiary Information -->
+                <div class="info-card">
+                    <h3><i class="fas fa-user-circle"></i> Beneficiary Information</h3>
+                    <div class="info-row">
+                        <span class="info-label">Full Name</span>
+                        <span class="info-value"><?php echo htmlspecialchars($request['full_name']); ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Contact Number</span>
+                        <span class="info-value"><?php echo htmlspecialchars($request['contact_number'] ?? 'N/A'); ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Email Address</span>
+                        <span class="info-value"><?php echo htmlspecialchars($request['email'] ?? 'N/A'); ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Barangay</span>
+                        <span class="info-value"><?php echo htmlspecialchars($request['barangay'] ?? 'Palayan City'); ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Complete Address</span>
+                        <span class="info-value">
+                            <?php 
+                                $addr_parts = array_filter([$request['street'] ?? '', $request['barangay'] ?? '', $request['city'] ?? '', $request['province'] ?? '']);
+                                echo htmlspecialchars(implode(', ', $addr_parts) ?: 'Palayan City, Nueva Ecija');
+                            ?>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Assistance Request Overview -->
+                <div class="info-card">
+                    <h3><i class="fas fa-hand-holding-dollar"></i> Assistance Overview</h3>
+                    <div class="info-row">
+                        <span class="info-label">Tracking Number</span>
+                        <span class="info-value"><strong style="color:#003366;"><?php echo $tracking_no; ?></strong></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Assistance Type</span>
+                        <span class="info-value" style="text-transform: capitalize; font-weight:700; color:#7F0303;">
+                            <?php echo htmlspecialchars(str_replace('_', ' ', $request['request_type'])); ?>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Amount Requested</span>
+                        <span class="info-value">
+                            ₱<?php echo number_format($request['amount_requested'] ?? 0, 2); ?>
+                        </span>
+                    </div>
+                    <?php if (isset($request['amount_approved']) && $request['amount_approved'] > 0): ?>
+                    <div class="info-row">
+                        <span class="info-label">Amount Approved</span>
+                        <span class="info-value" style="color: #2e7d32; font-weight: 700;">
+                            ₱<?php echo number_format($request['amount_approved'], 2); ?>
+                        </span>
+                    </div>
+                    <?php endif; ?>
+                    <div class="info-row">
+                        <span class="info-label">Date Submitted</span>
+                        <span class="info-value"><?php 
+                            $date_sub = $request['submission_date'] ?? $request['created_at'] ?? null;
+                            echo $date_sub ? date('F d, Y h:i A', strtotime($date_sub)) : 'N/A';
+                        ?></span>
+                    </div>
+                    <?php 
+                    $disp_purpose = !empty($request['purpose']) ? $request['purpose'] : ($specific_details['purpose'] ?? '');
+                    if (!empty($disp_purpose)): 
+                    ?>
+                    <div class="info-row">
+                        <span class="info-label">Purpose / Need</span>
+                        <span class="info-value"><?php echo nl2br(htmlspecialchars($disp_purpose)); ?></span>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Category-Specific Information -->
+                <?php if ($specific_details): ?>
+                <div class="info-card">
+                    <h3><i class="fas fa-clipboard-list"></i> <?php echo htmlspecialchars($detail_title); ?></h3>
+                    <?php foreach ($specific_details as $col => $val): ?>
+                        <?php 
+                            if (in_array($col, ['id', 'aics_id', 'cash_relief_id', 'medical_id', 'funeral_id', 'educational_id', 'transportation_id', 'food_id', 'material_id', 'created_at', 'updated_at'])) continue;
+                            if ($val === '' || $val === null) continue;
+                            // If purpose is already shown above, skip repeating it here unless desired
+                            if ($col === 'purpose' && !empty($disp_purpose)) continue;
+                            $label = ucwords(str_replace(['_', 'id', 'no'], [' ', 'ID', 'No.'], $col));
+                        ?>
+                        <div class="info-row">
+                            <span class="info-label"><?php echo htmlspecialchars($label); ?></span>
+                            <span class="info-value">
+                                <?php 
+                                    if (strpos($col, 'amount') !== false || strpos($col, 'cost') !== false || strpos($col, 'fee') !== false || strpos($col, 'fare') !== false || strpos($col, 'value') !== false || strpos($col, 'income') !== false) {
+                                        echo '₱' . number_format((float)$val, 2);
+                                    } elseif (strpos($col, 'date') !== false) {
+                                        echo date('F d, Y', strtotime($val));
+                                    } else {
+                                        echo nl2br(htmlspecialchars(ucfirst(str_replace('_', ' ', $val))));
+                                    }
+                                ?>
+                            </span>
+                        </div>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
-                
-                <!-- Processing Information -->
+
+                <!-- Evaluation & Approval Status -->
                 <div class="info-card">
-                    <h3><i class="fas fa-clipboard-list"></i> Processing Information</h3>
+                    <h3><i class="fas fa-stamp"></i> CSWDO Assessment Status</h3>
                     <div class="info-row">
-                        <div class="info-label">Current Status:</div>
-                        <div class="info-value">
-                            <span class="status-badge-large" style="background: <?php echo $statusInfo['bg']; ?>; color: <?php echo $statusInfo['color']; ?>; padding: 4px 12px; font-size: 0.85rem;">
+                        <span class="info-label">Current Status</span>
+                        <span class="info-value">
+                            <span class="status-badge-large" style="background: <?php echo $statusInfo['bg']; ?>; color: <?php echo $statusInfo['color']; ?>; padding: 4px 12px; font-size: 0.8rem;">
+                                <i class="fas <?php echo $statusInfo['icon']; ?>"></i>
                                 <?php echo $statusInfo['text']; ?>
                             </span>
-                        </div>
+                        </span>
                     </div>
-                    
-                    <?php if($request['reviewed_by'] && isset($staff_info['reviewer'])): ?>
+                    <?php if (!empty($request['staff_first_name'])): ?>
                     <div class="info-row">
-                        <div class="info-label">Reviewed By:</div>
-                        <div class="info-value"><?php echo htmlspecialchars($staff_info['reviewer']['first_name'] . ' ' . $staff_info['reviewer']['last_name']); ?></div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Review Date:</div>
-                        <div class="info-value"><?php echo date('F d, Y h:i A', strtotime($request['review_date'])); ?></div>
+                        <span class="info-label">Assigned Caseworker</span>
+                        <span class="info-value"><?php echo htmlspecialchars($request['staff_first_name'] . ' ' . $request['staff_last_name']); ?> (<?php echo htmlspecialchars($request['staff_position'] ?? 'CSWDO Staff'); ?>)</span>
                     </div>
                     <?php endif; ?>
-                    
-                    <?php if($request['approved_by'] && isset($staff_info['approver'])): ?>
+                    <?php 
+                    $decision_date = $request['approval_date'] ?? $request['approved_at'] ?? $request['review_date'] ?? null;
+                    if (!empty($decision_date)): 
+                    ?>
                     <div class="info-row">
-                        <div class="info-label">Approved By:</div>
-                        <div class="info-value"><?php echo htmlspecialchars($staff_info['approver']['first_name'] . ' ' . $staff_info['approver']['last_name']); ?></div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Approval Date:</div>
-                        <div class="info-value"><?php echo date('F d, Y h:i A', strtotime($request['approval_date'])); ?></div>
+                        <span class="info-label">Decision Date</span>
+                        <span class="info-value"><?php echo date('F d, Y h:i A', strtotime($decision_date)); ?></span>
                     </div>
                     <?php endif; ?>
-                    
-                    <?php if($request['release_date']): ?>
+                    <?php if (!empty($request['remarks'])): ?>
                     <div class="info-row">
-                        <div class="info-label">Release Date:</div>
-                        <div class="info-value"><?php echo date('F d, Y h:i A', strtotime($request['release_date'])); ?></div>
+                        <span class="info-label">Caseworker Remarks</span>
+                        <span class="info-value" style="color: <?php echo $request['status'] === 'rejected' ? '#c62828' : 'inherit'; ?>;">
+                            <?php echo nl2br(htmlspecialchars($request['remarks'])); ?>
+                        </span>
                     </div>
-                    <?php endif; ?>
-                    
-                    <?php if($request['rejection_reason']): ?>
-                    <div class="info-row">
-                        <div class="info-label">Rejection Reason:</div>
-                        <div class="info-value" style="color: #f44336;"><?php echo nl2br(htmlspecialchars($request['rejection_reason'])); ?></div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                
-                <!-- Supporting Documents -->
-                <div class="info-card">
-                    <h3><i class="fas fa-paperclip"></i> Supporting Documents</h3>
-                    <?php if(count($documents) > 0): ?>
-                        <div class="documents-list">
-                            <?php foreach($documents as $doc): ?>
-                            <div class="document-item">
-                                <div class="document-name">
-                                    <i class="fas fa-file-<?php 
-                                        $ext = pathinfo($doc['document_path'] ?? $doc['file_name'] ?? '', PATHINFO_EXTENSION);
-                                        echo $ext == 'pdf' ? 'pdf' : ($ext == 'jpg' || $ext == 'jpeg' || $ext == 'png' ? 'image' : 'alt');
-                                    ?>"></i>
-                                    <?php echo htmlspecialchars($doc['document_type'] ?? $doc['document_name'] ?? 'Document'); ?>
-                                </div>
-                                <a href="../uploads/aics/<?php echo $doc['document_path'] ?? $doc['file_path']; ?>" class="btn-download" target="_blank">
-                                    <i class="fas fa-download"></i> View
-                                </a>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p style="color: #999; text-align: center; padding: 20px;">
-                            <i class="fas fa-folder-open"></i> No documents uploaded
-                        </p>
                     <?php endif; ?>
                 </div>
             </div>
-            
+
+            <!-- Uploaded Documents Section -->
+            <div class="documents-section">
+                <h3><i class="fas fa-folder-open"></i> Uploaded Supporting Documents</h3>
+                <?php if (!empty($documents)): ?>
+                <div class="documents-list">
+                    <?php foreach ($documents as $doc): ?>
+                    <?php 
+                        $doc_path = cleanDocumentPath($doc['document_path'] ?? '');
+                        $ext = strtolower(pathinfo($doc_path, PATHINFO_EXTENSION));
+                        $is_img = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
+                        $is_pdf = ($ext === 'pdf');
+                        $icon = $is_img ? 'fa-file-image' : ($is_pdf ? 'fa-file-pdf' : 'fa-file-lines');
+                        $doc_title = !empty($doc['document_name']) ? $doc['document_name'] : (!empty($doc['document_type']) ? ucwords(str_replace('_', ' ', $doc['document_type'])) : basename($doc_path));
+                    ?>
+                    <div class="document-item">
+                        <i class="fas <?php echo $icon; ?> doc-icon"></i>
+                        <div class="doc-info">
+                            <div class="doc-name"><?php echo htmlspecialchars($doc_title); ?></div>
+                            <div class="doc-meta">Uploaded: <?php echo !empty($doc['upload_date']) ? date('M d, Y h:i A', strtotime($doc['upload_date'])) : 'On File'; ?></div>
+                        </div>
+                        <?php if (!empty($doc_path) && file_exists(__DIR__ . '/' . $doc_path)): ?>
+                            <a href="<?php echo htmlspecialchars($doc_path); ?>" target="_blank" class="doc-action">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                        <?php else: ?>
+                            <span style="font-size: 0.72rem; color: #999;">On File</span>
+                        <?php endif; ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php else: ?>
+                <div style="padding: 20px; text-align: center; color: var(--text-muted, #71818B); font-size: 0.9rem;">
+                    <i class="fas fa-file-circle-question" style="font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                    No uploaded document attachments found for this request.
+                </div>
+                <?php endif; ?>
+            </div>
+
             <!-- Action Buttons -->
             <div class="action-buttons">
-                <a href="manage-aics.php" class="btn-secondary">
-                    <i class="fas fa-arrow-left"></i> Back to List
+                <a href="my-aics.php" class="btn-action btn-secondary-action">
+                    <i class="fas fa-arrow-left"></i> Back to My Applications
                 </a>
-                <?php if($request['status'] != 'released' && $request['status'] != 'rejected'): ?>
-                <button onclick="showUpdateModal()" class="btn-primary">
-                    <i class="fas fa-edit"></i> Update Status
-                </button>
-                <?php endif; ?>
-                <button onclick="window.print()" class="btn-primary btn-print">
+                <a href="track-aics.php?tracking=<?php echo urlencode($tracking_no); ?>" class="btn-action btn-secondary-action">
+                    <i class="fas fa-location-crosshairs"></i> Live Tracker
+                </a>
+                <button type="button" onclick="window.print()" class="btn-action btn-primary-action">
                     <i class="fas fa-print"></i> Print Details
                 </button>
+                <!-- 3-Dots for mobile -->
+                <button type="button" class="btn-aics-dots" id="aicsDotsBtn" onclick="toggleAicsMenu(event)" aria-label="More options">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div class="aics-dots-menu" id="aicsDotsMenu">
+                    <a href="track-aics.php?tracking=<?php echo urlencode($tracking_no); ?>" class="aics-menu-item">
+                        <i class="fas fa-location-crosshairs"></i> Live Tracker
+                    </a>
+                    <a href="my-aics.php" class="aics-menu-item">
+                        <i class="fas fa-arrow-left"></i> My Applications
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-    
-    <!-- Update Status Modal -->
-    <div id="updateModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center;">
-        <div style="background: white; border-radius: 20px; width: 90%; max-width: 550px; max-height: 90vh; overflow-y: auto; animation: slideIn 0.3s ease;">
-            <div style="padding: 20px 25px; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="color: #003366;"><i class="fas fa-edit"></i> Update Status</h2>
-                <button onclick="closeModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
-            </div>
-            
-            <form method="POST" action="manage-aics.php">
-                <div style="padding: 25px;">
-                    <input type="hidden" name="aics_id" value="<?php echo $aics_id; ?>">
-                    
-                    <div style="background: #f8f9fa; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #6c757d;">Applicant:</span>
-                            <span style="font-weight: 500;"><?php echo htmlspecialchars($request['full_name']); ?></span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #6c757d;">Tracking Number:</span>
-                            <span style="font-weight: 500;">AICS-<?php echo str_pad($aics_id, 6, '0', STR_PAD_LEFT); ?></span>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group" style="margin-bottom: 20px;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">New Status</label>
-                        <select name="new_status" id="modal_status" required onchange="toggleFields()" style="width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 10px;">
-                            <option value="reviewing">🔍 Under Review</option>
-                            <option value="approved">✅ Approve</option>
-                            <option value="rejected">❌ Reject</option>
-                            <option value="released">💰 Release Payment</option>
-                        </select>
-                    </div>
-                    
-                    <div id="amount_field" style="display: none; margin-bottom: 20px;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Approved Amount (₱)</label>
-                        <input type="number" name="amount_approved" id="amount_approved" min="0" step="100" placeholder="Enter approved amount" style="width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 10px;">
-                    </div>
-                    
-                    <div id="remarks_field" style="display: none; margin-bottom: 20px;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Rejection Reason</label>
-                        <textarea name="remarks" id="remarks" rows="3" placeholder="Enter reason for rejection" style="width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 10px;"></textarea>
-                    </div>
-                    
-                    <div id="emailPreview" style="display: none; background: #f8f9fa; padding: 15px; border-radius: 12px; margin-top: 15px;">
-                        <h4 style="margin-bottom: 10px;"><i class="fas fa-envelope"></i> Email Preview</h4>
-                        <p id="emailMessage" style="color: #6c757d; font-size: 13px;"></p>
-                    </div>
-                </div>
-                
-                <div style="padding: 15px 25px; border-top: 1px solid #e9ecef; display: flex; gap: 12px;">
-                    <button type="submit" name="update_status" class="btn-primary" style="padding: 10px 20px;">Update & Notify</button>
-                    <button type="button" onclick="closeModal()" class="btn-secondary" style="padding: 10px 20px;">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <style>
-        @keyframes slideIn {
-            from { transform: translateY(-30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-    </style>
-    
+
+    <!-- Search Modal -->
+    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
+    <script src="js/main.js"></script>
     <script>
-        function showUpdateModal() {
-            document.getElementById('updateModal').style.display = 'flex';
+    function toggleAicsMenu(e) {
+        if (e) e.stopPropagation();
+        const m = document.getElementById('aicsDotsMenu');
+        if (m) m.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+        const m = document.getElementById('aicsDotsMenu');
+        const b = document.getElementById('aicsDotsBtn');
+        if (m && b && !m.contains(e.target) && !b.contains(e.target)) {
+            m.classList.remove('open');
         }
-        
-        function closeModal() {
-            document.getElementById('updateModal').style.display = 'none';
-            document.getElementById('amount_field').style.display = 'none';
-            document.getElementById('remarks_field').style.display = 'none';
-            document.getElementById('emailPreview').style.display = 'none';
-        }
-        
-        function toggleFields() {
-            const status = document.getElementById('modal_status').value;
-            const amountField = document.getElementById('amount_field');
-            const remarksField = document.getElementById('remarks_field');
-            const emailPreview = document.getElementById('emailPreview');
-            const emailMessage = document.getElementById('emailMessage');
-            
-            amountField.style.display = 'none';
-            remarksField.style.display = 'none';
-            emailPreview.style.display = 'block';
-            
-            if (status === 'approved') {
-                amountField.style.display = 'block';
-                document.getElementById('amount_approved').required = true;
-                emailMessage.innerHTML = '✅ Email will be sent notifying the applicant of APPROVAL.';
-            } else if (status === 'rejected') {
-                remarksField.style.display = 'block';
-                document.getElementById('remarks').required = true;
-                emailMessage.innerHTML = '❌ Email will be sent notifying the applicant of REJECTION.';
-            } else if (status === 'reviewing') {
-                emailMessage.innerHTML = '🔍 Email will be sent notifying the applicant that their request is UNDER REVIEW.';
-            } else if (status === 'released') {
-                emailMessage.innerHTML = '💰 Email will be sent notifying the applicant that their payment has been RELEASED.';
-            }
-        }
-        
-        window.onclick = function(event) {
-            const modal = document.getElementById('updateModal');
-            if (event.target == modal) {
-                closeModal();
-            }
-        }
+    });
     </script>
 </body>
 </html>

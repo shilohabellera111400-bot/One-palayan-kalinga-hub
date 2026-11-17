@@ -1447,3 +1447,120 @@ body {
     padding: 50px 0;
   }
 }
+
+/* ==========================================================================
+   Universal Pagination System & Latest Entry Highlight
+   ========================================================================== */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border, #E2E8F0);
+    flex-wrap: wrap;
+}
+
+.pagination .page-info {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748B);
+}
+
+.pagination-links,
+.pagination .page-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pagination a,
+.pagination span.page-btn,
+.pagination span.disabled,
+.pagination span.ellipsis,
+.pagination .disabled {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.pagination a {
+    color: var(--text-primary, #1E293B);
+    background: var(--bg-card, #FFFFFF);
+    border: 1px solid var(--border, #E2E8F0);
+}
+
+.pagination a:hover {
+    background: rgba(127, 3, 3, 0.08);
+    border-color: #7F0303;
+    color: #7F0303;
+}
+
+.pagination a.active,
+.pagination .page-link.active,
+.pagination .active {
+    background: #7F0303 !important;
+    border-color: #7F0303 !important;
+    color: #FFFFFF !important;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(127, 3, 3, 0.3);
+}
+
+.pagination span.disabled,
+.pagination .disabled {
+    color: #CBD5E1;
+    background: var(--bg-surface, #F8FAFC);
+    border: 1px solid var(--border, #E2E8F0);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pagination span.ellipsis,
+.pagination .ellipsis {
+    border: none;
+    background: transparent;
+    color: var(--text-muted, #64748B);
+    font-weight: 700;
+    cursor: default;
+}
+
+.row-latest-entry,
+tr.row-latest-entry,
+tr.row-latest-entry td {
+    background-color: #FEF9ED !important;
+}
+
+tr.row-latest-entry td:first-child {
+    border-left: 4px solid #F59E0B !important;
+}
+
+tr.row-latest-entry:hover,
+tr.row-latest-entry:hover td {
+    background-color: #FEF3C7 !important;
+}
+
+.badge-latest-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #FEF3C7;
+    color: #92400E;
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+    border: 1px solid #FDE68A;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+}

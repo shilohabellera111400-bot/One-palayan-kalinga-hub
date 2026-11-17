@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/config/database.php';
 ?>
 <!DOCTYPE html>
@@ -23,7 +23,7 @@ require_once __DIR__ . '/config/database.php';
             --white: #FFFFFF;
             
             /* Light mode default tokens */
-            --bg-primary: #E8ECF2;
+            --bg-primary: #E4EFE7;
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --text-primary: #1F2937;
@@ -39,7 +39,7 @@ require_once __DIR__ . '/config/database.php';
 
         /* Dark mode overrides (automatically enabled via body.dark-mode or html[data-theme="dark"]) */
         body.dark-mode, [data-theme="dark"] body {
-            --bg-primary: #0D1117;
+            --bg-primary: #0C1417;
             --bg-secondary: #161B22;
             --bg-card: #161B22;
             --text-primary: #F0F6FC;
@@ -74,19 +74,16 @@ require_once __DIR__ . '/config/database.php';
             padding: 0 24px;
         }
 
-        /* Header Fix for Floating Navbar */
+        /* Header Fix for Floating Navbar - eliminated unnecessary gap */
         .header-spacer {
-            height: 90px;
-        }
-        @media (max-width: 768px) {
-            .header-spacer { height: 75px; }
+            display: none;
         }
 
         /* ========== About Hero Section ========== */
         .about-hero {
             background: linear-gradient(135deg, var(--midnight) 0%, #155d6a 50%, var(--maroon-dark) 100%);
             color: white;
-            padding: 90px 0;
+            padding: 105px 0 50px;
             text-align: center;
             position: relative;
             overflow: hidden;
@@ -323,84 +320,168 @@ require_once __DIR__ . '/config/database.php';
         }
 
         .org-container {
-            max-width: 1000px;
+            max-width: 1140px;
             margin: 0 auto;
         }
 
-        .dept-head {
-            text-align: center;
-            margin-bottom: 50px;
+        .dept-head-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 40px;
         }
 
         .head-card {
             background: linear-gradient(135deg, var(--midnight) 0%, #155d6a 100%);
             color: white;
-            padding: 40px 30px;
+            padding: 35px 30px;
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-lg);
             display: inline-block;
-            min-width: 380px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 360px;
+            max-width: 500px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.15);
             transition: transform 0.3s ease;
         }
 
         .head-card:hover {
-            transform: scale(1.03);
+            transform: scale(1.02);
+        }
+
+        .head-card.sub-head {
+            background: linear-gradient(135deg, var(--maroon) 0%, #a01515 100%);
+            padding: 26px 28px;
+            min-width: 320px;
+            max-width: 440px;
+        }
+
+        .head-badge {
+            display: inline-block;
+            padding: 4px 14px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 50px;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+            color: var(--tan);
+            margin-bottom: 12px;
         }
 
         .head-icon {
-            font-size: 2.8rem;
-            margin-bottom: 16px;
+            font-size: 2.4rem;
+            margin-bottom: 12px;
             color: var(--tan);
         }
 
         .head-name {
-            font-size: 1.55rem;
+            font-size: 1.35rem;
             font-weight: 800;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             letter-spacing: -0.01em;
         }
 
         .head-position {
-            font-size: 1.05rem;
-            opacity: 0.9;
+            font-size: 0.95rem;
+            opacity: 0.92;
             font-weight: 500;
+        }
+
+        .org-connector {
+            width: 2px;
+            height: 30px;
+            background: linear-gradient(to bottom, var(--midnight), var(--maroon));
+            margin: 10px auto;
+        }
+
+        .org-tier {
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            border-radius: var(--radius-card);
+            padding: 28px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .org-tier-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .org-tier-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+        }
+
+        .org-tier-title i {
+            color: var(--maroon);
+        }
+
+        .org-tier-pill {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            background: rgba(127, 3, 3, 0.08);
+            color: var(--maroon);
+            border-radius: 50px;
+            text-transform: uppercase;
         }
 
         .org-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 28px;
-            margin-top: 40px;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 18px;
         }
 
         .org-card {
-            background: var(--bg-card);
+            background: var(--bg-primary);
             border-radius: var(--radius-element);
-            padding: 30px 20px;
+            padding: 22px 16px;
             text-align: center;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
+            box-shadow: var(--shadow-xs);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         .org-card:hover {
-            transform: translateY(-6px);
+            transform: translateY(-4px);
             box-shadow: var(--shadow-md);
             border-color: var(--maroon);
         }
 
+        .org-card.highlight-card {
+            background: linear-gradient(135deg, rgba(127, 3, 3, 0.04) 0%, rgba(12, 51, 102, 0.04) 100%);
+            border: 1.5px dashed var(--maroon);
+        }
+
         .org-avatar {
-            width: 70px;
-            height: 70px;
+            width: 56px;
+            height: 56px;
             background: rgba(12, 51, 102, 0.08);
             color: var(--midnight);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 16px;
-            font-size: 1.8rem;
+            margin-bottom: 12px;
+            font-size: 1.4rem;
+            flex-shrink: 0;
         }
 
         body.dark-mode .org-avatar {
@@ -409,20 +490,75 @@ require_once __DIR__ . '/config/database.php';
         }
 
         .org-name {
-            font-size: 1.15rem;
-            font-weight: 700;
+            font-size: 0.92rem;
+            font-weight: 800;
             color: var(--text-primary);
-            margin-bottom: 6px;
+            margin-bottom: 4px;
+            line-height: 1.3;
         }
 
         .org-position {
             color: var(--maroon);
-            font-size: 0.88rem;
+            font-size: 0.78rem;
             font-weight: 600;
+            line-height: 1.35;
         }
 
         body.dark-mode .org-position {
-            color: #ff6b6b;
+            color: #ff8585;
+        }
+
+        .org-poster-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-card);
+            padding: 24px;
+            margin-top: 35px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .org-poster-info {
+            text-align: left;
+        }
+
+        .org-poster-info h4 {
+            margin: 0 0 4px 0;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            font-weight: 800;
+        }
+
+        .org-poster-info p {
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .btn-view-poster {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            background: var(--maroon);
+            color: #fff;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-view-poster:hover {
+            background: var(--maroon-light);
+            color: white;
+            transform: translateY(-2px);
         }
 
         /* ========== Core Values Section ========== */
@@ -566,35 +702,170 @@ require_once __DIR__ . '/config/database.php';
             </div>
 
             <div class="org-container">
-                <div class="dept-head">
+                <!-- Executive Head & Assistant Head -->
+                <div class="dept-head-wrap">
                     <div class="head-card">
+                        <span class="head-badge"><i class="fas fa-award"></i> Department Head</span>
                         <div class="head-icon"><i class="fas fa-user-tie"></i></div>
                         <div class="head-name">MARIA TERESA M. RAMOS, RSW</div>
                         <div class="head-position">City Social Welfare and Development Officer</div>
                     </div>
+
+                    <div class="org-connector"></div>
+
+                    <div class="head-card sub-head">
+                        <span class="head-badge"><i class="fas fa-shield-alt"></i> Executive Officer</span>
+                        <div class="head-icon"><i class="fas fa-user-shield"></i></div>
+                        <div class="head-name">JOCELYN M. AGULTO, RSW</div>
+                        <div class="head-position">City Social Welfare Officer IV</div>
+                    </div>
                 </div>
 
-                <div class="org-grid">
-                    <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user-shield"></i></div>
-                        <div class="org-name">JOCELYN M. AGULTO, RSW</div>
-                        <div class="org-position">City Social Welfare Officer IV</div>
+                <!-- TIER 1: Social Welfare & Casework Officers -->
+                <div class="org-tier">
+                    <div class="org-tier-header">
+                        <h3 class="org-tier-title">
+                            <i class="fas fa-hand-holding-heart"></i> Social Welfare &amp; Program Development Officers
+                        </h3>
+                        <span class="org-tier-pill">4 Officers</span>
                     </div>
-                    <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user-shield"></i></div>
-                        <div class="org-name">MA. VICTORIA A. VENTURA, RSW</div>
-                        <div class="org-position">Social Welfare Officer III</div>
+                    <div class="org-grid">
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-user-nurse"></i></div>
+                            <div class="org-name">PRISCILLA B. SIBLAG, RSW</div>
+                            <div class="org-position">City Social Welfare Officer III</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-project-diagram"></i></div>
+                            <div class="org-name">ROWENA D. RITUAL, RSW</div>
+                            <div class="org-position">Project Development Officer III</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-user-shield"></i></div>
+                            <div class="org-name">JOANNE P. RAMIREZ, RSW</div>
+                            <div class="org-position">City Social Welfare Officer II</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-user-nurse"></i></div>
+                            <div class="org-name">MARILOU B. GANTE, RSW</div>
+                            <div class="org-position">City Social Welfare Officer II</div>
+                        </div>
                     </div>
-                    <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-user-cog"></i></div>
-                        <div class="org-name">JONALYN C. CONCEPCION</div>
-                        <div class="org-position">Administrative Officer V</div>
+                </div>
+
+                <!-- TIER 2: Administrative & Operations Support Staff -->
+                <div class="org-tier">
+                    <div class="org-tier-header">
+                        <h3 class="org-tier-title">
+                            <i class="fas fa-briefcase"></i> Administrative &amp; Operations Support Staff
+                        </h3>
+                        <span class="org-tier-pill">6 Personnel</span>
                     </div>
-                    <div class="org-card">
-                        <div class="org-avatar"><i class="fas fa-tasks"></i></div>
-                        <div class="org-name">JOHN DEXTER A. VILLAMIN</div>
-                        <div class="org-position">Project Development Officer II</div>
+                    <div class="org-grid">
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-id-card-alt"></i></div>
+                            <div class="org-name">ROSSANA F. PASCUAL</div>
+                            <div class="org-position">Admin. Aide IV</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-hands-helping"></i></div>
+                            <div class="org-name">AMOR LEA P. UMALI</div>
+                            <div class="org-position">Welfare Aide</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-book"></i></div>
+                            <div class="org-name">KARIAN M. LOPEZ</div>
+                            <div class="org-position">Bookbinder III</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-user-cog"></i></div>
+                            <div class="org-name">JERWIN G. MANANGAN</div>
+                            <div class="org-position">Admin Aide II</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-tools"></i></div>
+                            <div class="org-name">EDDIE M. DELA CRUZ</div>
+                            <div class="org-position">Utility</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-user-check"></i></div>
+                            <div class="org-name">MERRY ROSE V. LOPEZ</div>
+                            <div class="org-position">Contract of Service (COS)</div>
+                        </div>
                     </div>
+                </div>
+
+                <!-- TIER 3: Early Childhood Care & Development (Day Care Workers) -->
+                <div class="org-tier">
+                    <div class="org-tier-header">
+                        <h3 class="org-tier-title">
+                            <i class="fas fa-child"></i> Early Childhood Care &amp; Development (Day Care Workers)
+                        </h3>
+                        <span class="org-tier-pill">Child Development Service</span>
+                    </div>
+                    <div class="org-grid">
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">RUTH M. PALASIGUE</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">JOCELYN V. RIMAS</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">LOIDA D. PASCUAL</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">MARY JEAN E. SAMONTE</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">ANGELINA COMBE</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">DOMINGA P. SINGIAN</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">IMELDA C. TUALLA</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">CRISTINA LLAMAS</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card">
+                            <div class="org-avatar"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <div class="org-name">AMIE BONDOC</div>
+                            <div class="org-position">Day Care Worker I</div>
+                        </div>
+                        <div class="org-card highlight-card">
+                            <div class="org-avatar" style="background:rgba(127,3,3,0.1); color:var(--maroon);"><i class="fas fa-school"></i></div>
+                            <div class="org-name">23 Day Care Centers</div>
+                            <div class="org-position">Day Care Workers Across Palayan City</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Official Poster Viewer Box -->
+                <div class="org-poster-box">
+                    <div class="org-poster-info">
+                        <h4><i class="fas fa-file-image" style="color:var(--maroon); margin-right:6px;"></i> Official CSWDO Organizational Board</h4>
+                        <p>View the official high-resolution City Social Welfare and Development Office organizational chart poster.</p>
+                    </div>
+                    <a href="images/cswdo-org-chart.jpg" target="_blank" class="btn-view-poster">
+                        <i class="fas fa-expand"></i> View Official Chart Poster
+                    </a>
                 </div>
             </div>
         </div>

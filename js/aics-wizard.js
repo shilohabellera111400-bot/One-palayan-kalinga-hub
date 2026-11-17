@@ -1,3 +1,9 @@
+// Palayan-Kalinga Hub - Prevent automatic scrolling or jumping on AICS pages
+if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+}
+window.scrollTo(0, 0);
+
 /**
  * AICS Multi-Step Form Wizard
  * Palayan-Kalinga Hub - CSWDO Palayan City
@@ -81,11 +87,7 @@ document.addEventListener('DOMContentLoaded', function () {
             buildSummary();
         }
 
-        // Smooth scroll to top of form panel
-        const formPanel = document.querySelector('.form-panel');
-        if (formPanel) {
-            formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+
     }
 
     function validateStep(stepNum) {

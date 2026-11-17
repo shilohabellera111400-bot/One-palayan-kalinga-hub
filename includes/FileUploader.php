@@ -2,14 +2,16 @@
 class FileUploader {
     private $upload_dir;
     private $allowed_types = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/jpg',
+        'image/jpeg', 'image/png', 'image/gif', 'image/jpg', 'image/webp', 'image/svg+xml',
+        'video/mp4', 'video/webm', 'video/quicktime',
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ];
-    private $max_size = 5242880; // 5MB
+    private $max_size = 10485760; // 10MB limit for all documents, IDs, and proofs
+    private $max_media_size = 104857600; // 100MB for media/videos
     
     public function __construct() {
         $this->upload_dir = __DIR__ . '/../uploads/';
@@ -45,9 +47,11 @@ class FileUploader {
                 throw new Exception($message);
             }
             
-            // Check file size
-            if ($file['size'] > $this->max_size) {
-                throw new Exception("File is too large. Maximum size is " . ($this->max_size / 1048576) . "MB");
+            // Check file size (Strict 10MB limit for IDs, proofs, documents; 100MB for media)
+            $limit = in_array($subfolder, ['videos', 'media']) ? $this->max_media_size : $this->max_size;
+            if ($file['size'] > $limit) {
+                $max_mb = round($limit / 1048576);
+                throw new Exception("File is too large. Maximum size for " . htmlspecialchars($subfolder) . " is " . $max_mb . "MB");
             }
             
             // Check file type

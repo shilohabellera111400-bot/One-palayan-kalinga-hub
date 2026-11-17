@@ -2,10 +2,28 @@
 // Include database configuration
 require_once __DIR__ . '/config/database.php';
 
+// Safe redirect parameter handling
+$raw_redirect = $_GET['redirect'] ?? $_POST['redirect'] ?? '';
+$redirect = '';
+if (!empty($raw_redirect)) {
+    $raw_redirect = trim(urldecode($raw_redirect));
+    if (preg_match('/^[a-zA-Z0-9_\-]+\.php(\?[a-zA-Z0-9_\-=&]*)?$/', $raw_redirect) && 
+        !str_contains($raw_redirect, 'login') && 
+        !str_contains($raw_redirect, 'register') && 
+        !str_contains($raw_redirect, 'logout')) {
+        $redirect = $raw_redirect;
+    }
+}
+
 if (isLoggedIn()) {
-    if (isAdmin() || isStaff()) {
+    if (isAdmin()) {
+        redirect('admin/dashboard.php');
+    } elseif (isStaff()) {
         redirect('staff-dashboard.php');
     } else {
+        if (!empty($redirect)) {
+            redirect($redirect);
+        }
         redirect('dashboard.php');
     }
 }
@@ -145,10 +163,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             $field_errors['username'] = true;
             $field_errors['email'] = true;
         } else {
-            // Create user
+            // Create user with Resident role (Role ID 3)
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $query = "INSERT INTO users (username, password, email, first_name, last_name, contact_number, address, role, created_at) 
-                      VALUES (:username, :password, :email, :first_name, :last_name, :contact_number, :address, 'resident', NOW())";
+            $query = "INSERT INTO users (username, password, email, first_name, last_name, contact_number, address, role, role_id, created_at) 
+                      VALUES (:username, :password, :email, :first_name, :last_name, :contact_number, :address, 'resident', 3, NOW())";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':username', $username);
             $stmt->bindParam(':password', $hashed_password);
@@ -161,10 +179,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             if ($stmt->execute()) {
                 $new_user_id = $db->lastInsertId();
                 
-                // Create resident profile with barangay
+                // Create resident profile with barangay and official resident number
                 if ($new_user_id) {
-                    $res_stmt = $db->prepare("INSERT INTO residents (user_id, first_name, last_name, contact_number, email, street, barangay, city, province, is_active) VALUES (:uid, :fn, :ln, :cn, :em, :st, :brgy, 'Palayan City', 'Nueva Ecija', 1)");
+                    $new_res_num = generateResidentNumber($db);
+                    $res_stmt = $db->prepare("INSERT INTO residents (user_id, resident_number, first_name, last_name, contact_number, email, street, barangay, city, province, is_active) VALUES (:uid, :res_num, :fn, :ln, :cn, :em, :st, :brgy, 'Palayan City', 'Nueva Ecija', 1)");
                     $res_stmt->bindParam(':uid', $new_user_id);
+                    $res_stmt->bindParam(':res_num', $new_res_num);
                     $res_stmt->bindParam(':fn', $first_name);
                     $res_stmt->bindParam(':ln', $last_name);
                     $res_stmt->bindParam(':cn', $contact_number);
@@ -172,6 +192,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
                     $res_stmt->bindParam(':st', $street);
                     $res_stmt->bindParam(':brgy', $barangay);
                     $res_stmt->execute();
+                }
+
+                // Send welcome SMS via TextBee Gateway
+                if (!empty($contact_number)) {
+                    try {
+                        require_once __DIR__ . '/includes/SMSGateway.php';
+                        $smsGateway = new SMSGateway();
+                        $smsGateway->sendAccountRegistrationWelcome($contact_number, trim($first_name . ' ' . $last_name), $username, (int)$new_user_id);
+                    } catch (\Throwable $smsErr) {
+                        error_log("Registration welcome SMS error: " . $smsErr->getMessage());
+                    }
                 }
 
                 unset($_SESSION[$register_key]);
@@ -208,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
     <style>
         * {
@@ -218,23 +249,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
         }
 
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             min-height: 100vh;
-            background: linear-gradient(135deg, #0A1628 0%, #1a2a4a 50%, #0F414A 100%);
+            background: linear-gradient(135deg, #051A16 0%, #092721 40%, #0F414A 80%, #3B0D12 100%);
             position: relative;
             overflow-x: hidden;
         }
 
+        /* Refined Deep Forest Green with Soft Green & Professional Maroon Accents - Exact match to login.php */
         .animated-bg {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #0F414A 0%, #761c1c 50%, #31aac0 100%);
-            background-size: 200% 200%;
-            animation: gradientShift 15s ease infinite;
+            background: linear-gradient(135deg, 
+                #051814 0%, 
+                #092620 18%, 
+                #3A0E13 36%, 
+                #0E3830 52%, 
+                #4E1218 70%, 
+                #0B2E26 86%, 
+                #0F414A 100%
+            );
+            background-size: 260% 260%;
+            animation: gradientShift 24s ease-in-out infinite;
             z-index: 0;
+        }
+
+        /* Subtle Ambient Lighting Overlay */
+        .ambient-lighting {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            background: 
+                radial-gradient(circle at 18% 22%, rgba(167, 215, 197, 0.12) 0%, transparent 48%),
+                radial-gradient(circle at 82% 78%, rgba(127, 3, 3, 0.16) 0%, transparent 45%),
+                radial-gradient(circle at 50% 50%, rgba(15, 65, 74, 0.22) 0%, transparent 65%);
         }
 
         @keyframes gradientShift {
@@ -251,6 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             }
         }
 
+        /* Dynamic Floating Circles - Expanded & Refined */
         .floating-shapes {
             position: fixed;
             top: 0;
@@ -264,55 +320,98 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
 
         .floating-shapes .shape {
             position: absolute;
-            background: rgba(255, 255, 255, 0.03);
+            background: radial-gradient(circle, rgba(147, 197, 253, 0.08) 0%, rgba(255, 255, 255, 0.02) 70%, transparent 100%);
             border-radius: 50%;
-            animation: float 20s infinite ease-in-out;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            animation: floatShape 20s infinite ease-in-out;
         }
 
         .floating-shapes .shape-1 {
-            width: 400px;
-            height: 400px;
-            top: -100px;
+            width: 420px;
+            height: 420px;
+            top: -120px;
             right: -100px;
-            animation-duration: 25s;
+            animation-duration: 26s;
         }
 
         .floating-shapes .shape-2 {
-            width: 250px;
-            height: 250px;
-            bottom: -50px;
-            left: -50px;
-            animation-duration: 20s;
+            width: 260px;
+            height: 260px;
+            bottom: -60px;
+            left: -60px;
+            animation-duration: 22s;
             animation-delay: 2s;
         }
 
         .floating-shapes .shape-3 {
-            width: 150px;
-            height: 150px;
-            top: 40%;
-            left: 20%;
+            width: 140px;
+            height: 140px;
+            top: 38%;
+            left: 14%;
             animation-duration: 18s;
             animation-delay: 5s;
         }
 
         .floating-shapes .shape-4 {
-            width: 200px;
-            height: 200px;
-            bottom: 20%;
-            right: 15%;
-            animation-duration: 22s;
+            width: 220px;
+            height: 220px;
+            bottom: 22%;
+            right: 12%;
+            animation-duration: 24s;
             animation-delay: 8s;
         }
 
-        @keyframes float {
+        .floating-shapes .shape-5 {
+            width: 90px;
+            height: 90px;
+            top: 18%;
+            right: 28%;
+            animation-duration: 16s;
+            animation-delay: 3s;
+        }
 
-            0%,
-            100% {
-                transform: translateY(0) rotate(0deg);
+        .floating-shapes .shape-6 {
+            width: 170px;
+            height: 170px;
+            bottom: 12%;
+            left: 24%;
+            animation-duration: 23s;
+            animation-delay: 6s;
+        }
+
+        .floating-shapes .shape-7 {
+            width: 110px;
+            height: 110px;
+            top: 62%;
+            right: 36%;
+            animation-duration: 20s;
+            animation-delay: 1s;
+        }
+
+        .floating-shapes .shape-8 {
+            width: 75px;
+            height: 75px;
+            top: 10%;
+            left: 42%;
+            animation-duration: 17s;
+            animation-delay: 7s;
+        }
+
+        .floating-shapes .shape-9 {
+            width: 300px;
+            height: 300px;
+            top: 50%;
+            left: 52%;
+            animation-duration: 28s;
+            animation-delay: 4s;
+        }
+
+        @keyframes floatShape {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg) scale(1);
             }
-
             50% {
-                transform: translateY(-30px) rotate(10deg);
+                transform: translateY(-30px) rotate(10deg) scale(1.04);
             }
         }
 
@@ -335,7 +434,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             border-radius: 32px;
             overflow: hidden;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-            transition: transform 0.3s, box-shadow 0.3s;
+            transition: transform 0.5s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.3s;
+            position: relative;
         }
 
         .auth-card:hover {
@@ -343,7 +443,59 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.45);
         }
 
+        .auth-brand, .auth-form {
+            transition: transform 0.5s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.45s ease;
+            will-change: transform, opacity;
+        }
+
+        /* Swapped Layout for Register: Form on Left, Brand Info on Right */
+        @media (min-width: 901px) {
+            .auth-card {
+                flex-direction: row-reverse;
+            }
+
+            .auth-card.card-switching-to-login .auth-brand {
+                transform: translateX(-100%);
+                opacity: 0.82;
+            }
+            .auth-card.card-switching-to-login .auth-form {
+                transform: translateX(100%);
+                opacity: 0.82;
+            }
+
+            .auth-card.entering-from-login .auth-brand {
+                animation: slideBrandInFromLeft 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+            .auth-card.entering-from-login .auth-form {
+                animation: slideFormInFromRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+
+            @keyframes slideBrandInFromLeft {
+                from { transform: translateX(-100%); opacity: 0.7; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideFormInFromRight {
+                from { transform: translateX(100%); opacity: 0.7; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        }
+
+        @media (max-width: 900px) {
+            .auth-card.card-switching-to-login {
+                opacity: 0;
+                transform: translateY(20px) scale(0.97);
+            }
+            .auth-card.entering-from-login {
+                animation: fadeInRegisterMobile 0.5s ease forwards;
+            }
+            @keyframes fadeInRegisterMobile {
+                from { opacity: 0; transform: translateY(-20px) scale(0.97); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+        }
+
         .auth-brand {
+            font-family: 'Poppins', sans-serif;
             flex: 1;
             background: linear-gradient(135deg, rgba(15, 65, 74, 0.85) 0%, rgba(127, 3, 3, 0.8) 100%), url('images/palayan-bg.png');
             background-size: cover;
@@ -398,6 +550,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             margin: 0 auto 15px;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
             transition: transform 0.3s;
+            overflow: hidden;
+            padding: 0;
         }
 
         .logo-circle:hover {
@@ -405,21 +559,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
         }
 
         .logo-circle img {
-            width: 110px;
-            height: auto;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .brand-logo h2 {
             color: white;
-            font-size: 1.3rem;
-            font-weight: 700;
-            letter-spacing: -0.3px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .brand-logo p {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.85);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 500;
             margin-top: 3px;
         }
 
@@ -432,17 +591,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
 
         .welcome-message h3 {
             color: white;
-            font-size: 2.3rem;
-            font-weight: 700;
+            font-family: 'Poppins', sans-serif;
+            font-size: 2.1rem;
+            font-weight: 800;
             margin-bottom: 15px;
             letter-spacing: -0.3px;
         }
 
         .welcome-message p {
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.88);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.82rem;
             line-height: 1.5;
             margin-bottom: 20px;
+            font-weight: 400;
         }
 
         .benefits-list {
@@ -470,8 +632,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
         }
 
         .benefit-item span {
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.88);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 500;
         }
 
         .brand-quote {
@@ -485,15 +649,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
 
         .brand-quote p {
             color: rgba(255, 255, 255, 0.9);
+            font-family: 'Poppins', sans-serif;
             font-style: italic;
-            font-size: 0.75rem;
+            font-size: 0.78rem;
+            font-weight: 400;
         }
 
         .brand-quote span {
             display: block;
             margin-top: 6px;
-            font-size: 0.6rem;
-            color: rgba(255, 255, 255, 0.6);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.65);
+            font-weight: 500;
         }
 
         .auth-form {
@@ -523,10 +691,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
         }
 
         .auth-header h2 {
-            font-size: 1.5rem;
+            font-family: 'Dancing Script', cursive;
+            font-size: 2.5rem;
             font-weight: 700;
             color: #0F414A;
             margin-bottom: 4px;
+            line-height: 1.2;
         }
 
         .auth-header p {
@@ -580,83 +750,274 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             box-shadow: 0 0 0 3px rgba(15, 65, 74, 0.1);
         }
 
-        /* Registration Success Modal */
+        /* Registration Success Modal & Interactive Guidance */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(10, 22, 40, 0.75);
-            backdrop-filter: blur(6px);
+            background: rgba(10, 22, 40, 0.82);
+            backdrop-filter: blur(8px);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 99999;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            padding: 20px;
         }
         .modal-overlay.active {
             opacity: 1;
             visibility: visible;
         }
         .modal-card {
-            background: white;
-            padding: 40px 30px;
+            background: #ffffff;
+            padding: 36px 32px 30px;
             border-radius: 28px;
-            max-width: 460px;
-            width: 90%;
+            max-width: 500px;
+            width: 100%;
             text-align: center;
-            box-shadow: 0 25px 60px rgba(0,0,0,0.3);
-            transform: translateY(20px) scale(0.95);
-            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 30px 70px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.2);
+            transform: translateY(30px) scale(0.92);
+            transition: all 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
         }
         .modal-overlay.active .modal-card {
             transform: translateY(0) scale(1);
         }
+
+        /* Animated Success Checkmark Ring */
+        .success-animation-wrap {
+            position: relative;
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pulse-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(16, 185, 129, 0.18);
+            animation: pulseRing 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        .pulse-ring-2 {
+            animation-delay: 0.6s;
+        }
+        @keyframes pulseRing {
+            0% { transform: scale(0.7); opacity: 0.8; }
+            50% { transform: scale(1.35); opacity: 0.3; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
         .success-icon-wrap {
-            width: 80px;
-            height: 80px;
-            background: rgba(16, 185, 129, 0.12);
-            color: #10B981;
+            position: relative;
+            width: 76px;
+            height: 76px;
+            background: linear-gradient(135deg, #10B981, #059669);
+            color: white;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2.8rem;
-            margin: 0 auto 20px;
+            font-size: 2.4rem;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+            animation: bounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
         }
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            60% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
         .modal-card h3 {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             font-weight: 800;
             color: #0F414A;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
         }
-        .modal-card p {
+        .modal-card .welcome-sub {
+            font-size: 0.92rem;
+            color: #4A5568;
+            line-height: 1.5;
+            margin-bottom: 22px;
+        }
+
+        /* Next Steps Roadmap */
+        .guidance-roadmap {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 18px;
+            padding: 16px 18px;
+            text-align: left;
+            margin-bottom: 24px;
+        }
+        .roadmap-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748B;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .roadmap-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .roadmap-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            position: relative;
+        }
+        .roadmap-step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 14px;
+            top: 28px;
+            width: 2px;
+            height: 18px;
+            background: #CBD5E1;
+        }
+        .step-badge {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            flex-shrink: 0;
+            z-index: 2;
+        }
+        .step-badge.done {
+            background: #D1FAE5;
+            color: #059669;
+        }
+        .step-badge.current {
+            background: linear-gradient(135deg, #7F0303, #A31212);
+            color: white;
+            box-shadow: 0 4px 10px rgba(127, 3, 3, 0.35);
+            animation: pulseCurrent 1.8s ease-in-out infinite;
+        }
+        @keyframes pulseCurrent {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+        .step-badge.locked {
+            background: #E2E8F0;
+            color: #94A3B8;
+        }
+        .step-text {
+            flex: 1;
+        }
+        .step-text h4 {
             font-size: 0.88rem;
-            color: #5C6B7A;
-            line-height: 1.6;
-            margin-bottom: 25px;
+            font-weight: 700;
+            color: #1E293B;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
+        .step-text p {
+            font-size: 0.78rem;
+            color: #64748B;
+            margin: 2px 0 0;
+            line-height: 1.35;
+        }
+
         .btn-modal-login {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
             width: 100%;
-            padding: 14px 24px;
-            background: linear-gradient(135deg, #7F0303, #9a1515);
+            padding: 15px 24px;
+            background: linear-gradient(135deg, #7F0303 0%, #a01010 100%);
             color: white;
             border-radius: 40px;
             font-weight: 700;
-            font-size: 0.95rem;
+            font-size: 1rem;
             text-decoration: none;
-            box-shadow: 0 8px 20px rgba(127, 3, 3, 0.3);
-            transition: all 0.3s;
+            box-shadow: 0 10px 25px rgba(127, 3, 3, 0.35);
+            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-modal-login::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+            transition: all 0.6s;
         }
         .btn-modal-login:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 25px rgba(127, 3, 3, 0.4);
-            background: linear-gradient(135deg, #9a1515, #b81c1c);
+            box-shadow: 0 14px 30px rgba(127, 3, 3, 0.45);
+            color: white;
+        }
+        .btn-modal-login:hover::before {
+            left: 100%;
+        }
+
+        /* Guided Glowing Button & Pointer Pill */
+        @keyframes guidedGlowPulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7), 0 8px 25px rgba(127, 3, 3, 0.35);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 0 0 12px rgba(16, 185, 129, 0), 0 12px 30px rgba(16, 185, 129, 0.45);
+                transform: scale(1.025);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0), 0 8px 25px rgba(127, 3, 3, 0.35);
+                transform: scale(1);
+            }
+        }
+        .guided-btn-glow {
+            animation: guidedGlowPulse 2s infinite ease-in-out !important;
+            position: relative;
+        }
+        .guided-pointer-pill {
+            position: absolute;
+            top: -12px;
+            right: 18px;
+            background: linear-gradient(135deg, #10B981, #059669);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+            animation: floatPointer 1.8s infinite ease-in-out;
+            pointer-events: none;
+            z-index: 5;
+        }
+        @keyframes floatPointer {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .canvas-confetti {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
         }
 
         .form-group input.error {
@@ -1069,12 +1430,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
 
 <body>
     <div class="animated-bg"></div>
+    <div class="ambient-lighting"></div>
 
     <div class="floating-shapes">
         <div class="shape shape-1"></div>
         <div class="shape shape-2"></div>
         <div class="shape shape-3"></div>
         <div class="shape shape-4"></div>
+        <div class="shape shape-5"></div>
+        <div class="shape shape-6"></div>
+        <div class="shape shape-7"></div>
+        <div class="shape shape-8"></div>
+        <div class="shape shape-9"></div>
     </div>
 
     <div class="toast-container" id="toastContainer"></div>
@@ -1084,17 +1451,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
             <div class="auth-brand">
                 <div class="brand-logo">
                     <div class="logo-circle">
-                        <img src="images/logo.png" alt="One Palayan-Kalinga Hub Logo"
+                        <img src="images/logo.png?v=<?php echo @filemtime(__DIR__ . '/images/logo.png') ?: time(); ?>" alt="One Palayan-Kalinga Hub Logo"
                             onerror="this.src='https://placehold.co/80x80?text=PKH'">
                     </div>
-                    <h2>One Palayan-Kalinga Hub</h2>
+                    <h2>ONE PALAYAN-KALINGA HUB</h2>
                     <p>CSWDO Palayan City</p>
                 </div>
 
                 <div class="welcome-message">
-                    <h3>Welcome to a Better Tomorrow!</h3>
-                    <p>Join thousands of Palayan City residents who already enjoy fast, transparent, and accessible
-                        social services.</p>
+                    <h3>Compassionate Care &amp; Dedicated Public Service</h3>
+                    <p>Your official digital gateway to fast, transparent, and compassionate social welfare assistance, priority appointments, and community support for every Palayan family.</p>
 
                     <div class="benefits-list">
                         <div class="benefit-item">
@@ -1124,7 +1490,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
 
             <div class="auth-form">
                 <div class="auth-header">
-                    <h2>Create an account</h2>
+                    <h2>Create an Account</h2>
                     <p>Join our community and access social services</p>
                 </div>
 
@@ -1235,7 +1601,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
                 </form>
 
                 <div class="auth-footer">
-                    <p>Already have an account? <a href="login.php">Sign in here</a></p>
+                    <p>Already have an account? <a href="login.php<?php echo !empty($redirect) ? '?redirect=' . urlencode($redirect) : ''; ?>" id="signInBtn">Sign in here</a></p>
                     <p><a href="index.php"><i class="fas fa-arrow-left"></i> Back to Home</a></p>
                 </div>
             </div>
@@ -1246,6 +1612,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
         // ========== TOAST NOTIFICATION SYSTEM ==========
         function showToast(type, title, message, duration = 5000) {
             const container = document.getElementById('toastContainer');
+            if (!container) return;
+
+            // STRICTLY ONE SLIDING CARD: Remove any existing toast so only one sliding animation remains
+            container.querySelectorAll('.toast').forEach(t => t.remove());
+
             const toast = document.createElement('div');
 
             const icons = {
@@ -1668,21 +2039,161 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$blocked) {
         });
     </script>
 
-    <!-- Registration Success Popup Modal -->
+    <!-- Registration Success Popup Modal with Confetti & Step Guidance -->
     <div class="modal-overlay <?php echo !empty($success) ? 'active' : ''; ?>" id="successModal">
+        <canvas class="canvas-confetti" id="regConfettiCanvas"></canvas>
         <div class="modal-card">
-            <div class="success-icon-wrap">
-                <i class="fas fa-check-circle"></i>
+            <!-- Animated Icon with Ripple Rings -->
+            <div class="success-animation-wrap">
+                <div class="pulse-ring"></div>
+                <div class="pulse-ring pulse-ring-2"></div>
+                <div class="success-icon-wrap">
+                    <i class="fas fa-check"></i>
+                </div>
             </div>
+
             <h3>Registration Successful! 🎉</h3>
-            <p>Welcome to <strong>One Palayan-Kalinga Hub</strong>. Your resident account has been created successfully. Click below to log in.</p>
+            <p class="welcome-sub">Welcome to <strong>One Palayan-Kalinga Hub</strong>! Your account is ready. Follow this quick 3-step journey to unlock all city services:</p>
+
+            <!-- Interactive 3-Step Visual Roadmap -->
+            <div class="guidance-roadmap">
+                <div class="roadmap-title">
+                    <i class="fas fa-map-signs"></i> Next Steps to Full Access
+                </div>
+                <div class="roadmap-steps">
+                    <div class="roadmap-step">
+                        <div class="step-badge done"><i class="fas fa-check"></i></div>
+                        <div class="step-text">
+                            <h4>Step 1: Account Created</h4>
+                            <p>Your resident credentials have been registered in the Palayan City portal.</p>
+                        </div>
+                    </div>
+                    <div class="roadmap-step">
+                        <div class="step-badge current"><i class="fas fa-sign-in-alt"></i></div>
+                        <div class="step-text">
+                            <h4>Step 2: Sign In to Portal</h4>
+                            <p>Log in using your new username and password.</p>
+                        </div>
+                    </div>
+                    <div class="roadmap-step">
+                        <div class="step-badge locked"><i class="fas fa-shield-alt"></i></div>
+                        <div class="step-text">
+                            <h4>Step 3: Residency Verification</h4>
+                            <p>Submit a valid government ID & selfie to activate AICS, Senior/PWD aid, and appointment booking.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="modal-actions">
-                <a href="login.php" class="btn-modal-login">
-                    Proceed to Sign In <i class="fas fa-arrow-right"></i>
+                <a href="login.php?registered=1<?php echo !empty($redirect) ? '&redirect=' . urlencode($redirect) : ''; ?>" class="btn-modal-login guided-btn-glow">
+                    <span class="guided-pointer-pill"><i class="fas fa-arrow-right"></i> Next: Sign In</span>
+                    Proceed to Sign In &amp; Verify <i class="fas fa-arrow-right"></i>
                 </a>
             </div>
         </div>
     </div>
+
+    <!-- Celebration Confetti JS -->
+    <script>
+        (function() {
+            const modal = document.getElementById('successModal');
+            const canvas = document.getElementById('regConfettiCanvas');
+            if (!modal || !canvas) return;
+
+            function runConfetti() {
+                const ctx = canvas.getContext('2d');
+                let width = canvas.width = window.innerWidth;
+                let height = canvas.height = window.innerHeight;
+
+                window.addEventListener('resize', () => {
+                    width = canvas.width = window.innerWidth;
+                    height = canvas.height = window.innerHeight;
+                });
+
+                const pieces = [];
+                const colors = ['#10B981', '#7F0303', '#D8BA98', '#F59E0B', '#3B82F6', '#EC4899'];
+
+                for (let i = 0; i < 90; i++) {
+                    pieces.push({
+                        x: width / 2 + (Math.random() - 0.5) * 60,
+                        y: height / 2 + (Math.random() - 0.5) * 40,
+                        w: Math.random() * 9 + 4,
+                        h: Math.random() * 5 + 3,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        vx: (Math.random() - 0.5) * 16,
+                        vy: (Math.random() * -14) - 4,
+                        gravity: 0.35 + Math.random() * 0.2,
+                        rotation: Math.random() * 360,
+                        rotationSpeed: (Math.random() - 0.5) * 12,
+                        opacity: 1
+                    });
+                }
+
+                let animationFrame;
+                let startTime = Date.now();
+
+                function render() {
+                    ctx.clearRect(0, 0, width, height);
+                    let alive = false;
+
+                    for (let p of pieces) {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.vy += p.gravity;
+                        p.vx *= 0.98;
+                        p.rotation += p.rotationSpeed;
+
+                        if (Date.now() - startTime > 1500) {
+                            p.opacity -= 0.015;
+                        }
+
+                        if (p.opacity > 0 && p.y < height + 50) {
+                            alive = true;
+                            ctx.save();
+                            ctx.translate(p.x, p.y);
+                            ctx.rotate((p.rotation * Math.PI) / 180);
+                            ctx.fillStyle = p.color;
+                            ctx.globalAlpha = Math.max(0, p.opacity);
+                            ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                            ctx.restore();
+                        }
+                    }
+
+                    if (alive) {
+                        animationFrame = requestAnimationFrame(render);
+                    }
+                }
+
+                render();
+            }
+
+            if (modal.classList.contains('active')) {
+                setTimeout(runConfetti, 150);
+            }
+        })();
+
+        // ========== PAGE SWITCHING ANIMATION ==========
+        document.addEventListener('DOMContentLoaded', function () {
+            const authCard = document.querySelector('.auth-card');
+            const signInBtn = document.getElementById('signInBtn');
+
+            if (signInBtn && authCard) {
+                signInBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    authCard.classList.add('card-switching-to-login');
+                    setTimeout(function () {
+                        window.location.href = 'login.php?from=register<?php echo !empty($redirect) ? '&redirect=' . urlencode($redirect) : ''; ?>';
+                    }, 450);
+                });
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('from') === 'login' && authCard) {
+                authCard.classList.add('entering-from-login');
+            }
+        });
+    </script>
 </body>
 
 </html>

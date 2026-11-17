@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - One Palayan-Kalinga Hub</title>
+    <meta name="theme-color" content="#7F0303">
+    <link rel="icon" type="image/png" href="images/pwa/icon-192x192.png">
+    <style>
+        :root {
+            --maroon: #7F0303;
+            --maroon-dark: #5a0202;
+            --bg-body: #F8FAFC;
+            --bg-card: #FFFFFF;
+            --text-primary: #0F172A;
+            --text-muted: #64748B;
+            --border-color: #E2E8F0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-body: #0F172A;
+                --bg-card: #1E293B;
+                --text-primary: #F8FAFC;
+                --text-muted: #94A3B8;
+                --border-color: #334155;
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg-body); color: var(--text-primary); min-height: 100vh; padding-bottom: 30px; }
+        .header { background: linear-gradient(135deg, var(--maroon) 0%, var(--maroon-dark) 100%); color: #fff; padding: 24px 20px; text-align: center; }
+        .header img { width: 68px; height: 68px; border-radius: 50%; background: #fff; padding: 3px; margin-bottom: 10px; }
+        .header h1 { font-size: 1.25rem; font-weight: 800; }
+        .header p { font-size: 0.8rem; opacity: 0.9; margin-top: 4px; }
+        .container { max-width: 600px; margin: 20px auto; padding: 0 16px; }
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+        .card h2 { font-size: 0.98rem; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .hotline-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
+        .hotline-row:last-child { border-bottom: none; }
+        .hotline-row a { background: #16A34A; color: #fff; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; }
+        .btn-reload { width: 100%; padding: 12px; background: var(--maroon); color: #fff; border: none; border-radius: 10px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="images/logo.png" alt="Palayan CSWDO">
+        <h1>ONE PALAYAN-KALINGA HUB</h1>
+        <p>Offline Access Mode &bull; Walang Koneksyon sa Internet</p>
+    </div>
+    <div class="container">
+        <div class="card">
+            <h2>⚡ Offline Support Active</h2>
+            <p style="font-size: 0.84rem; line-height: 1.5; color: var(--text-muted);">
+                You are currently offline. Downloaded appointment slips and claim stubs you previously viewed remain stored on your phone.
+            </p>
+        </div>
+        <div class="card">
+            <h2>📞 Emergency Hotlines</h2>
+            <div class="hotline-row">
+                <div><strong>CSWDO Public Help</strong><br><small style="color:var(--text-muted);">Office Trunkline</small></div>
+                <a href="tel:0441234567">Call (044) 123-4567</a>
+            </div>
+            <div class="hotline-row">
+                <div><strong>MDRRMO / Emergency</strong><br><small style="color:var(--text-muted);">Rescue Unit</small></div>
+                <a href="tel:911">Call 911</a>
+            </div>
+            <div class="hotline-row">
+                <div><strong>PNP Palayan Station</strong><br><small style="color:var(--text-muted);">Police Assistance</small></div>
+                <a href="tel:09985985406">0998-598-5406</a>
+            </div>
+        </div>
+        <div class="card">
+            <h2>📍 CSWDO Building Location</h2>
+            <p style="font-size: 0.84rem; line-height: 1.5; color: var(--text-muted);">
+                City Social Welfare Building (In front of Palayan City National High School), Nueva Ecija-Aurora Road, Palayan City.<br>
+                Hours: Mon &ndash; Fri &bull; 8:00 AM &ndash; 5:00 PM
+            </p>
+        </div>
+        <button onclick="window.location.reload();" class="btn-reload">🔄 Reload / Check Connection</button>
+    </div>
+    <script>
+        window.addEventListener('online', function() { window.location.reload(); });
+    </script>
+</body>
+</html>

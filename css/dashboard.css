@@ -16,7 +16,7 @@
     --alabaster: #EFE8DF;
 
     /* Light mode — stronger contrast so cards are clearly visible */
-    --bg-primary: #E8ECF2;
+    --bg-primary: #E4EFE7;
     --bg-card: #FFFFFF;
     --text-primary: #263238;
     --text-secondary: #3A4A5A;
@@ -42,7 +42,7 @@
 }
 
 [data-theme="dark"] {
-    --bg-primary: #0a0e17;
+    --bg-primary: #0C1417;
     --bg-card: #1a2332;
     --text-primary: #E8EDF5;
     --text-secondary: #B0C4DE;
@@ -649,7 +649,7 @@
     color: var(--text-muted);
 }
 
-.empty-state i {
+.empty-state > i {
     font-size: 3rem;
     margin-bottom: 12px;
     opacity: 0.3;

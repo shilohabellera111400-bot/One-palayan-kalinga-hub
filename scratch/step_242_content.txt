@@ -1,0 +1,311 @@
+with open('calendar.php', 'r', encoding='utf-8') as f:
+    code = f.read()
+
+# 1. Update layout wrapping (Sidebar & Header)
+old_wrap = """        <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>"""
+
+new_wrap = """        <!-- Sidebar based on role -->
+        <?php if ($is_staff_or_admin): ?>
+            <?php if (isStaff()): ?>
+                <?php include __DIR__ . '/staff/includes/staff-sidebar.php'; ?>
+            <?php else: ?>
+                <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+            <?php endif; ?>
+        <?php else: ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header based on role -->
+            <?php if (isStaff()): ?>
+                <?php include __DIR__ . '/staff/includes/staff-header.php'; ?>
+            <?php else: ?>
+                <?php include __DIR__ . '/includes/portal-header.php'; ?>
+            <?php endif; ?>
+
+            <?php if (!empty($cal_msg)): ?>
+                <div style="background: #D1FAE5; color: #065F46; padding: 12px 18px; border-radius: 12px; margin-bottom: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($cal_msg); ?>
+                </div>
+            <?php endif; ?>
+            <?php if (!empty($cal_err)): ?>
+                <div style="background: #FEE2E2; color: #991B1B; padding: 12px 18px; border-radius: 12px; margin-bottom: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($cal_err); ?>
+                </div>
+            <?php endif; ?>"""
+
+if old_wrap in code:
+    code = code.replace(old_wrap, new_wrap)
+    print('Wrap replaced successfully')
+else:
+    print('Wrap target not found')
+
+# 2. Update Banner Actions
+old_banner = """            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = "Events & Schedules Calendar";
+            $banner_subtitle = "View your scheduled intake appointments and upcoming city hall events";
+            $banner_icon = "fa-calendar-alt";
+            $banner_actions = [
+                ["label" => "Book Appointment", "url" => "appointments.php", "icon" => "fa-calendar-plus", "type" => "primary"],
+                ["label" => "Citizen Dashboard", "url" => "dashboard.php", "icon" => "fa-th-large", "type" => "secondary"]
+            ];
+            include __DIR__ . "/includes/portal-banner.php";
+            ?>"""
+
+new_banner = """            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = "Events & Schedules Calendar";
+            $banner_subtitle = $is_staff_or_admin 
+                ? "Manage official city schedules, temporary events, and monitor appointment traffic"
+                : "View your scheduled intake appointments, official city schedules, and announcements";
+            $banner_icon = "fa-calendar-alt";
+            if ($is_staff_or_admin) {
+                $banner_actions = [
+                    ["label" => "Add Temporary Event", "url" => "javascript:void(0);\" onclick=\"openAddEventModal()", "icon" => "fa-plus-circle", "type" => "primary"],
+                    ["label" => "Staff Dashboard", "url" => "staff-dashboard.php", "icon" => "fa-th-large", "type" => "secondary"]
+                ];
+            } else {
+                $banner_actions = [
+                    ["label" => "Book Appointment", "url" => "appointments.php", "icon" => "fa-calendar-plus", "type" => "primary"],
+                    ["label" => "Citizen Dashboard", "url" => "dashboard.php", "icon" => "fa-th-large", "type" => "secondary"]
+                ];
+            }
+            include __DIR__ . "/includes/portal-banner.php";
+            ?>"""
+
+if old_banner in code:
+    code = code.replace(old_banner, new_banner)
+    print('Banner replaced successfully')
+else:
+    print('Banner target not found')
+
+# 3. Update day cell event dot rendering
+old_dots = """                                // Check for general events
+                                if (isset($event_map[$current_date])) {
+                                    foreach ($event_map[$current_date] as $e) {
+                                        echo '<span class="event-dot event" title="Event: ' . htmlspecialchars($e['title']) . '">📢 ' . htmlspecialchars($e['title']) . '</span>';
+                                    }
+                                }"""
+
+new_dots = """                                // Check for general events
+                                if (isset($event_map[$current_date])) {
+                                    foreach ($event_map[$current_date] as $e) {
+                                        echo '<span class="event-dot event" title="Event: ' . htmlspecialchars($e['title']) . '">📅 ' . htmlspecialchars($e['title']) . '</span>';
+                                    }
+                                }
+                                // Check for announcements
+                                if (isset($ann_map[$current_date])) {
+                                    foreach ($ann_map[$current_date] as $an) {
+                                        echo '<span class="event-dot ann" style="background:#FEE2E2; color:#991B1B; border:1px solid #FCA5A5;" title="Announcement: ' . htmlspecialchars($an['title']) . '">📢 ' . htmlspecialchars($an['title']) . '</span>';
+                                    }
+                                }"""
+
+if old_dots in code:
+    code = code.replace(old_dots, new_dots)
+    print('Dots replaced successfully')
+else:
+    print('Dots target not found')
+
+# 4. Update Event Item list with edit & delete for staff/admin, plus Modals at the bottom
+old_event_loop = """                                <?php foreach ($events as $e): ?>
+                                    <div class="event-item">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <span class="event-type event">CSWDO Event</span>
+                                            <span class="event-date">
+                                                <?php echo date('M d', strtotime($e['event_date'])); ?>
+                                            </span>
+                                        </div>
+                                        <h4>
+                                            <?php echo htmlspecialchars($e['title']); ?>
+                                        </h4>
+                                        <?php if (!empty($e['description'])): ?>
+                                            <p>
+                                                <?php echo htmlspecialchars(substr($e['description'], 0, 60)) . (strlen($e['description']) > 60 ? '...' : ''); ?>
+                                            </p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>"""
+
+new_event_loop = """                                <?php foreach ($events as $e): ?>
+                                    <div class="event-item" style="position:relative;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <span class="event-type event">City Schedule / Event</span>
+                                            <span class="event-date">
+                                                <?php echo date('M d', strtotime($e['event_date'])); ?>
+                                                <?php if (!empty($e['start_time'])): ?> &bull; <?php echo date('h:i A', strtotime($e['start_time'])); ?><?php endif; ?>
+                                            </span>
+                                        </div>
+                                        <h4>
+                                            <?php echo htmlspecialchars($e['title']); ?>
+                                        </h4>
+                                        <?php if (!empty($e['description'])): ?>
+                                            <p>
+                                                <?php echo htmlspecialchars($e['description']); ?>
+                                            </p>
+                                        <?php endif; ?>
+                                        <?php if ($is_staff_or_admin): ?>
+                                            <div style="display: flex; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-color, #E2E8F0);">
+                                                <button type="button" class="btn-cal-action edit" onclick='openEditEventModal(<?php echo json_encode($e); ?>)' style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </button>
+                                                <a href="calendar.php?month=<?php echo $month; ?>&year=<?php echo $year; ?>&delete_event=<?php echo $e['event_id']; ?>" onclick="return confirm('Are you sure you want to delete this event?')" style="background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                                    <i class="fas fa-trash-alt"></i> Delete
+                                                </a>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+
+                                <?php foreach ($announcements as $an): ?>
+                                    <div class="event-item" style="border-left: 3px solid #EF4444;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <span class="event-type" style="background:#FEE2E2; color:#DC2626;">Announcement</span>
+                                            <span class="event-date">
+                                                <?php echo date('M d', strtotime($an['event_date'])); ?>
+                                            </span>
+                                        </div>
+                                        <h4>
+                                            <?php echo htmlspecialchars($an['title']); ?>
+                                        </h4>
+                                        <?php if (!empty($an['content'])): ?>
+                                            <p>
+                                                <?php echo htmlspecialchars(substr(strip_tags($an['content']), 0, 90)) . (strlen($an['content']) > 90 ? '...' : ''); ?>
+                                            </p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>"""
+
+if old_event_loop in code:
+    code = code.replace(old_event_loop, new_event_loop)
+    print('Event loop replaced successfully')
+else:
+    print('Event loop target not found')
+
+# 5. Add Modals for Add & Edit Event before </body>
+modal_html = """
+    <!-- Add Event Modal (Staff/Admin) -->
+    <div id="addEventModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: #FFFFFF; width: 100%; max-width: 520px; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.3); border: 1px solid var(--border-color, #E2E8F0);">
+            <div style="background: var(--maroon, #7F0303); color: #FFFFFF; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-calendar-plus"></i> Add Temporary Event / Schedule
+                </h3>
+                <button type="button" onclick="closeAddEventModal()" style="background: transparent; border: none; color: #FFFFFF; font-size: 1.2rem; cursor: pointer;">&times;</button>
+            </div>
+            <form method="POST" action="calendar.php?month=<?php echo $month; ?>&year=<?php echo $year; ?>" style="padding: 24px;">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="action" value="create_event">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Event Title *</label>
+                    <input type="text" name="title" required placeholder="e.g., Senior Pension Distribution / Town Meeting" style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.88rem; box-sizing: border-box;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Date *</label>
+                        <input type="date" name="event_date" required value="<?php echo date('Y-m-d'); ?>" style="width: 100%; padding: 10px 12px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.85rem; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Start Time</label>
+                        <input type="time" name="start_time" style="width: 100%; padding: 10px 12px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.85rem; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">End Time</label>
+                        <input type="time" name="end_time" style="width: 100%; padding: 10px 12px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.85rem; box-sizing: border-box;">
+                    </div>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Description / Instructions</label>
+                    <textarea name="description" rows="3" placeholder="Provide event instructions or details for citizens and staff..." style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.88rem; box-sizing: border-box; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" onclick="closeAddEventModal()" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #CBD5E1; background: #F8FAFC; color: #475569; font-weight: 700; cursor: pointer;">Cancel</button>
+                    <button type="submit" style="padding: 10px 22px; border-radius: 10px; border: none; background: var(--maroon, #7F0303); color: #FFFFFF; font-weight: 700; cursor: pointer;">Save Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Event Modal (Staff/Admin) -->
+    <div id="editEventModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: #FFFFFF; width: 100%; max-width: 520px; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.3); border: 1px solid var(--border-color, #E2E8F0);">
+            <div style="background: #1E293B; color: #FFFFFF; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-edit"></i> Edit Event / Schedule
+                </h3>
+                <button type="button" onclick="closeEditEventModal()" style="background: transparent; border: none; color: #FFFFFF; font-size: 1.2rem; cursor: pointer;">&times;</button>
+            </div>
+            <form method="POST" action="calendar.php?month=<?php echo $month; ?>&year=<?php echo $year; ?>" style="padding: 24px;">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="action" value="edit_event">
+                <input type="hidden" name="event_id" id="edit_event_id">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Event Title *</label>
+                    <input type="text" name="title" id="edit_title" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.88rem; box-sizing: border-box;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Date *</label>
+                        <input type="date" name="event_date" id="edit_event_date" required style="width: 100%; padding: 10px 12px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.85rem; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Start Time</label>
+                        <input type="time" name="start_time" id="edit_start_time" style="width: 100%; padding: 10px 12px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.85rem; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">End Time</label>
+                        <input type="time" name="end_time" id="edit_end_time" style="width: 100%; padding: 10px 12px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.85rem; box-sizing: border-box;">
+                    </div>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Description / Instructions</label>
+                    <textarea name="description" id="edit_description" rows="3" style="width: 100%; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 0.88rem; box-sizing: border-box; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" onclick="closeEditEventModal()" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #CBD5E1; background: #F8FAFC; color: #475569; font-weight: 700; cursor: pointer;">Cancel</button>
+                    <button type="submit" style="padding: 10px 22px; border-radius: 10px; border: none; background: #1E293B; color: #FFFFFF; font-weight: 700; cursor: pointer;">Update Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openAddEventModal() {
+            const m = document.getElementById('addEventModal');
+            if (m) m.style.display = 'flex';
+        }
+        function closeAddEventModal() {
+            const m = document.getElementById('addEventModal');
+            if (m) m.style.display = 'none';
+        }
+        function openEditEventModal(data) {
+            document.getElementById('edit_event_id').value = data.event_id || '';
+            document.getElementById('edit_title').value = data.title || '';
+            document.getElementById('edit_event_date').value = data.event_date || '';
+            document.getElementById('edit_start_time').value = data.start_time || '';
+            document.getElementById('edit_end_time').value = data.end_time || '';
+            document.getElementById('edit_description').value = data.description || '';
+            const m = document.getElementById('editEventModal');
+            if (m) m.style.display = 'flex';
+        }
+        function closeEditEventModal() {
+            const m = document.getElementById('editEventModal');
+            if (m) m.style.display = 'none';
+        }
+    </script>
+"""
+
+code = code.replace('</body>', modal_html + '\n</body>')
+
+with open('calendar.php', 'w', encoding='utf-8') as f:
+    f.write(code)
+print('Done calendar.php step 2')

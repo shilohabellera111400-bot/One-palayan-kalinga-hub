@@ -126,18 +126,14 @@ if (isset($_POST['save_notifications'])) {
     $status_updates = isset($_POST['status_updates']) ? 1 : 0;
     $newsletter = isset($_POST['newsletter']) ? 1 : 0;
     
-    // You would need a user_settings table for this
-    // For now, we'll just show a success message
     $notification_success = "Notification preferences saved!";
 }
 
 // Handle account deletion
 if (isset($_POST['delete_account']) && isset($_POST['confirm_delete']) && $_POST['confirm_delete'] === 'DELETE') {
-    // Start transaction
     $db->beginTransaction();
     
     try {
-        // Delete related records based on role
         if ($user['role'] == 'resident') {
             $delete_resident = "DELETE FROM residents WHERE user_id = :user_id";
             $stmt = $db->prepare($delete_resident);
@@ -150,19 +146,16 @@ if (isset($_POST['delete_account']) && isset($_POST['confirm_delete']) && $_POST
             $stmt->execute();
         }
         
-        // Delete notifications
         $delete_notif = "DELETE FROM notifications WHERE user_id = :user_id";
         $stmt = $db->prepare($delete_notif);
         $stmt->bindParam(':user_id', $_SESSION['user_id']);
         $stmt->execute();
         
-        // Delete documents (files will remain, but you might want to delete them too)
         $delete_docs = "DELETE FROM documents WHERE user_id = :user_id";
         $stmt = $db->prepare($delete_docs);
         $stmt->bindParam(':user_id', $_SESSION['user_id']);
         $stmt->execute();
         
-        // Finally delete user
         $delete_user = "DELETE FROM users WHERE user_id = :user_id";
         $stmt = $db->prepare($delete_user);
         $stmt->bindParam(':user_id', $_SESSION['user_id']);
@@ -170,7 +163,6 @@ if (isset($_POST['delete_account']) && isset($_POST['confirm_delete']) && $_POST
         
         $db->commit();
         
-        // Logout and redirect
         session_destroy();
         redirect('register.php?deleted=1');
         
@@ -180,9 +172,8 @@ if (isset($_POST['delete_account']) && isset($_POST['confirm_delete']) && $_POST
     }
 }
 
-// Handle logout (separate endpoint)
+// Handle logout
 if (isset($_GET['logout']) && $_GET['logout'] == 1) {
-    // Log logout action
     $log_query = "INSERT INTO audit_logs (user_id, action, ip_address) 
                   VALUES (:user_id, 'logout', :ip)";
     $log_stmt = $db->prepare($log_query);
@@ -199,133 +190,138 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - One Palayan-Kalinga Hub</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/dashboard.css">
-    <!-- Add Font Awesome for icons -->
+    <title>Account Settings - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo file_exists(__DIR__ . '/css/portal-layout.css') ? filemtime(__DIR__ . '/css/portal-layout.css') : time(); ?>">
+    <?php if (isStaff() || isAdmin()): ?>
+    <link rel="stylesheet" href="css/staff-portal.css?v=<?php echo file_exists(__DIR__ . '/css/staff-portal.css') ? filemtime(__DIR__ . '/css/staff-portal.css') : time(); ?>">
+    <?php endif; ?>
     <style>
-        .settings-container {
-            padding: 40px 0;
-            background: #f9f9f9;
-            min-height: calc(100vh - 80px);
-        }
-
-        .settings-header {
-            margin-bottom: 30px;
-        }
-
-        .settings-header h1 {
-            color: #003366;
-            font-size: 2.2rem;
-            margin-bottom: 10px;
-        }
-
-        .settings-header p {
-            color: #666;
-            font-size: 1.1rem;
-        }
-
         .settings-grid {
             display: grid;
             grid-template-columns: 280px 1fr;
-            gap: 30px;
+            gap: 24px;
+            align-items: flex-start;
         }
 
-        /* Settings Sidebar */
         .settings-sidebar {
-            background: white;
-            border-radius: 10px;
+            background: var(--ref-card, #FFFFFF);
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            height: fit-content;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+            border: 1px solid var(--ref-border, rgba(0, 0, 0, 0.08));
             position: sticky;
-            top: 100px;
+            top: 20px;
         }
 
         .user-info {
-            padding: 30px 20px;
+            padding: 26px 20px;
             text-align: center;
-            background: linear-gradient(135deg, #003366 0%, #004d99 100%);
+            background: linear-gradient(135deg, #7F0303 0%, #9A1515 100%);
             color: white;
         }
 
         .user-avatar {
-            width: 80px;
-            height: 80px;
-            background: #ff6600;
+            width: 76px;
+            height: 76px;
+            background: #FFFFFF;
+            color: #7F0303;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 15px;
-            font-size: 2.5rem;
-            color: white;
-            border: 3px solid white;
+            margin: 0 auto 14px;
+            font-size: 1.6rem;
+            font-weight: 800;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
         }
 
         .user-info h3 {
-            margin-bottom: 5px;
+            margin: 0 0 4px 0;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #FFFFFF;
         }
 
         .user-info p {
-            opacity: 0.9;
-            font-size: 0.9rem;
+            margin: 0;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.85);
+            font-weight: 600;
         }
 
         .settings-menu {
-            padding: 20px 0;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .settings-menu-item {
             display: flex;
             align-items: center;
-            gap: 15px;
-            padding: 15px 25px;
-            color: #333;
+            gap: 12px;
+            padding: 11px 16px;
+            color: var(--ref-text, #191D1E);
             text-decoration: none;
-            transition: all 0.3s;
-            border-left: 4px solid transparent;
-        }
-
-        .settings-menu-item:hover {
-            background: #f5f5f5;
-            border-left-color: #ff6600;
-        }
-
-        .settings-menu-item.active {
-            background: #f0f7ff;
-            border-left-color: #003366;
-            color: #003366;
+            border-radius: 12px;
+            font-size: 0.84rem;
             font-weight: 600;
+            transition: all 0.2s ease;
         }
 
         .settings-menu-item i {
             width: 20px;
-            color: #ff6600;
+            font-size: 0.95rem;
+            color: var(--ref-muted, #71818B);
+            transition: color 0.2s ease;
+        }
+
+        .settings-menu-item:hover {
+            background: rgba(127, 3, 3, 0.06);
+            color: #7F0303;
+        }
+
+        .settings-menu-item:hover i {
+            color: #7F0303;
+        }
+
+        .settings-menu-item.active {
+            background: #7F0303;
+            color: #FFFFFF;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.25);
         }
 
         .settings-menu-item.active i {
-            color: #003366;
+            color: #FFFFFF;
         }
 
         .logout-item {
-            margin-top: 20px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-            color: #f44336;
+            margin-top: 10px;
+            border-top: 1px solid var(--ref-border, rgba(0, 0, 0, 0.08));
+            padding-top: 12px;
+            color: #DC2626;
         }
 
         .logout-item i {
-            color: #f44336;
+            color: #DC2626;
+        }
+
+        .logout-item:hover {
+            background: #FEE2E2;
+            color: #991B1B;
         }
 
         /* Settings Content */
         .settings-content {
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: var(--ref-card, #FFFFFF);
+            border-radius: 20px;
+            padding: 32px 36px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+            border: 1px solid var(--ref-border, rgba(0, 0, 0, 0.08));
         }
 
         .settings-section {
@@ -337,18 +333,20 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
         }
 
         .section-title {
-            color: #003366;
-            font-size: 1.5rem;
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
+            color: var(--ref-text, #191D1E);
+            font-size: 1.3rem;
+            font-weight: 800;
+            margin-bottom: 24px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--ref-border, rgba(0, 0, 0, 0.08));
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
         .section-title i {
-            color: #ff6600;
+            color: #7F0303;
+            font-size: 1.25rem;
         }
 
         .form-group {
@@ -358,131 +356,132 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
+            font-weight: 700;
+            font-size: 0.84rem;
+            color: var(--ref-text, #191D1E);
         }
 
         .form-group label i {
-            color: #ff6600;
-            width: 20px;
-            margin-right: 5px;
+            color: #7F0303;
+            margin-right: 6px;
         }
 
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
+            padding: 11px 16px;
+            border: 1px solid var(--ref-border, rgba(0, 0, 0, 0.15));
+            border-radius: 10px;
+            font-size: 0.88rem;
+            background: var(--ref-card, #FFFFFF);
+            color: var(--ref-text, #191D1E);
+            transition: all 0.2s ease;
+            outline: none;
+            box-sizing: border-box;
         }
 
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
-            outline: none;
-            border-color: #003366;
-            box-shadow: 0 0 0 3px rgba(0,51,102,0.1);
+            border-color: #7F0303;
+            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
         }
 
-        .form-group input:disabled {
-            background: #f5f5f5;
+        .form-group input:disabled,
+        .form-group select:disabled {
+            background: rgba(0, 0, 0, 0.03);
+            color: var(--ref-muted, #71818B);
             cursor: not-allowed;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: var(--ref-muted, #71818B);
+            font-size: 0.76rem;
         }
 
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 18px;
         }
 
         .btn-save {
-            background: #003366;
+            background: linear-gradient(135deg, #7F0303 0%, #9A1515 100%);
             color: white;
-            padding: 12px 30px;
+            padding: 11px 28px;
             border: none;
-            border-radius: 5px;
-            font-size: 1rem;
-            font-weight: 600;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(127, 3, 3, 0.25);
         }
 
         .btn-save:hover {
-            background: #002244;
+            background: linear-gradient(135deg, #9A1515 0%, #B72222 100%);
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,51,102,0.3);
-        }
-
-        .btn-danger {
-            background: #f44336;
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 5px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .btn-danger:hover {
-            background: #d32f2f;
+            box-shadow: 0 6px 16px rgba(127, 3, 3, 0.35);
         }
 
         .alert {
-            padding: 15px;
-            border-radius: 5px;
+            padding: 14px 18px;
+            border-radius: 12px;
             margin-bottom: 20px;
+            font-size: 0.86rem;
+            font-weight: 600;
         }
 
         .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
         }
 
         .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
         }
 
-        /* Notification Toggles */
+        /* Notification Items */
         .notification-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 15px;
-            background: #f9f9f9;
-            border-radius: 5px;
-            margin-bottom: 10px;
+            padding: 14px 18px;
+            background: var(--ref-canvas, #E4EFE7);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--ref-border, rgba(0, 0, 0, 0.05));
         }
 
         .notification-info h4 {
-            color: #333;
-            margin-bottom: 5px;
+            margin: 0 0 4px 0;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--ref-text, #191D1E);
         }
 
         .notification-info p {
-            color: #666;
-            font-size: 0.9rem;
+            margin: 0;
+            color: var(--ref-muted, #71818B);
+            font-size: 0.78rem;
         }
 
-        /* Toggle Switch */
+        /* Switch */
         .switch {
             position: relative;
             display: inline-block;
-            width: 60px;
-            height: 34px;
+            width: 48px;
+            height: 26px;
+            flex-shrink: 0;
         }
 
         .switch input {
@@ -498,48 +497,75 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 34px;
+            background-color: #CBD5E1;
+            transition: .3s;
+            border-radius: 26px;
         }
 
         .slider:before {
             position: absolute;
             content: "";
-            height: 26px;
-            width: 26px;
-            left: 4px;
-            bottom: 4px;
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
             background-color: white;
-            transition: .4s;
+            transition: .3s;
             border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
         input:checked + .slider {
-            background-color: #003366;
+            background-color: #7F0303;
         }
 
         input:checked + .slider:before {
-            transform: translateX(26px);
+            transform: translateX(22px);
         }
 
         /* Danger Zone */
         .danger-zone {
-            margin-top: 40px;
-            padding: 20px;
-            background: #fff3f3;
-            border-radius: 5px;
-            border: 1px solid #fcc;
+            margin-top: 36px;
+            padding: 22px;
+            background: #FEF2F2;
+            border-radius: 14px;
+            border: 1px solid #FCA5A5;
         }
 
         .danger-zone h3 {
-            color: #f44336;
-            margin-bottom: 15px;
+            color: #DC2626;
+            margin: 0 0 8px 0;
+            font-size: 1.05rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .danger-zone p {
-            color: #666;
-            margin-bottom: 20px;
+            color: #7F1D1D;
+            font-size: 0.82rem;
+            margin: 0 0 16px 0;
+        }
+
+        .btn-danger {
+            background: #DC2626;
+            color: white;
+            padding: 10px 24px;
+            border-radius: 50px;
+            border: none;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-danger:hover {
+            background: #B91C1C;
+            transform: translateY(-2px);
         }
 
         /* Modal */
@@ -549,14 +575,15 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.55);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 2000;
+            z-index: 9999;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.3s;
+            transition: all 0.25s ease;
+            backdrop-filter: blur(4px);
         }
 
         .modal.show {
@@ -565,67 +592,102 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
         }
 
         .modal-content {
-            background: white;
+            background: var(--ref-card, #FFFFFF);
             padding: 30px;
-            border-radius: 10px;
-            max-width: 400px;
+            border-radius: 20px;
+            max-width: 440px;
             width: 90%;
             text-align: center;
-        }
-
-        .modal-content h3 {
-            color: #f44336;
-            margin-bottom: 15px;
-        }
-
-        .modal-content p {
-            color: #666;
-            margin-bottom: 20px;
-        }
-
-        .modal-content input {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border: 1px solid var(--ref-border, rgba(0,0,0,0.08));
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
         .modal-actions {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             justify-content: center;
+            margin-top: 18px;
         }
 
-        @media (max-width: 768px) {
+        .btn-secondary {
+            background: var(--ref-canvas, #E4EFE7);
+            color: var(--ref-text, #191D1E);
+            border: 1px solid var(--ref-border, rgba(0,0,0,0.1));
+            padding: 9px 22px;
+            border-radius: 50px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        /* Dark Mode Overrides */
+        [data-theme="dark"] .settings-sidebar,
+        [data-theme="dark"] .settings-content,
+        [data-theme="dark"] .modal-content {
+            background: #141E22 !important;
+            border-color: rgba(255, 255, 255, 0.08) !important;
+        }
+
+        [data-theme="dark"] .notification-item {
+            background: #0C1417 !important;
+            border-color: rgba(255, 255, 255, 0.06) !important;
+        }
+
+        [data-theme="dark"] .form-group input,
+        [data-theme="dark"] .form-group select,
+        [data-theme="dark"] .form-group textarea {
+            background: #0C1417 !important;
+            color: #E5EFF2 !important;
+            border-color: rgba(255, 255, 255, 0.12) !important;
+        }
+
+        [data-theme="dark"] .danger-zone {
+            background: rgba(220, 38, 38, 0.12) !important;
+            border-color: rgba(220, 38, 38, 0.3) !important;
+        }
+
+        [data-theme="dark"] .danger-zone p {
+            color: #FCA5A5 !important;
+        }
+
+        @media (max-width: 992px) {
             .settings-grid {
                 grid-template-columns: 1fr;
             }
-
             .settings-sidebar {
                 position: static;
             }
-
             .form-row {
                 grid-template-columns: 1fr;
-            }
-
-            .modal-actions {
-                flex-direction: column;
             }
         }
     </style>
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <div class="app-container">
+        <!-- Unified Minimalist Sidebar -->
+        <?php if (isStaff() || isAdmin()): ?>
+            <?php include __DIR__ . '/staff/includes/staff-sidebar.php'; ?>
+        <?php else: ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
-    <div class="settings-container">
-        <div class="container">
-            <!-- Page Header -->
-            <div class="settings-header">
-                <h1><i class="fas fa-cog"></i> Settings</h1>
-                <p>Manage your account settings, profile information, and preferences</p>
-            </div>
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Unified Resident/Staff Portal Header -->
+            <?php if (isStaff() || isAdmin()): ?>
+                <?php include __DIR__ . '/staff/includes/staff-header.php'; ?>
+            <?php else: ?>
+                <?php include __DIR__ . '/includes/portal-header.php'; ?>
+            <?php endif; ?>
+
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = 'Account Settings & Preferences';
+            $banner_subtitle = 'Manage your account security, personal profile information, and portal preferences';
+            $banner_icon = 'fa-cog';
+            include __DIR__ . '/includes/portal-banner.php';
+            ?>
 
             <!-- Settings Grid -->
             <div class="settings-grid">
@@ -633,10 +695,14 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                 <div class="settings-sidebar">
                     <div class="user-info">
                         <div class="user-avatar">
-                            <i class="fas fa-user"></i>
+                            <?php if (!empty($user['profile_picture']) && file_exists($user['profile_picture'])): ?>
+                                <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" alt="Profile" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                            <?php else: ?>
+                                <span><?php echo strtoupper(substr($user['first_name'] ?? 'U', 0, 1) . substr($user['last_name'] ?? '', 0, 1)); ?></span>
+                            <?php endif; ?>
                         </div>
                         <h3><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></h3>
-                        <p><?php echo ucfirst($user['role']); ?></p>
+                        <p><i class="fas fa-id-badge" style="color: #D8BA98; margin-right: 4px;"></i> <?php echo ucfirst($user['role']); ?></p>
                     </div>
 
                     <div class="settings-menu">
@@ -731,7 +797,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                             </div>
 
                             <div class="form-group">
-                                <label><i class="fas fa-badge"></i> Account Type</label>
+                                <label><i class="fas fa-id-card"></i> Account Role</label>
                                 <input type="text" value="<?php echo ucfirst($user['role']); ?>" disabled>
                             </div>
 
@@ -743,9 +809,9 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                         <!-- Additional resident fields if applicable -->
                         <?php if($user['role'] == 'resident' && $profile_data): ?>
                         <div style="margin-top: 40px;">
-                            <h3 class="section-title" style="font-size: 1.2rem;">
+                            <h3 class="section-title" style="font-size: 1.15rem;">
                                 <i class="fas fa-users"></i>
-                                Additional Information
+                                Additional Resident Details
                             </h3>
                             <div class="form-row">
                                 <div class="form-group">
@@ -802,10 +868,10 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                         </form>
 
                         <!-- Last Login Info -->
-                        <div style="margin-top: 40px; padding: 20px; background: #f5f5f5; border-radius: 5px;">
-                            <h4 style="color: #333; margin-bottom: 15px;">Recent Activity</h4>
-                            <p><i class="fas fa-clock"></i> Last login: <?php echo isset($user['last_login']) ? date('F d, Y h:i A', strtotime($user['last_login'])) : 'First login'; ?></p>
-                            <p><i class="fas fa-network-wired"></i> Current IP: <?php echo $_SERVER['REMOTE_ADDR']; ?></p>
+                        <div style="margin-top: 36px; padding: 18px 20px; background: var(--ref-canvas, #E4EFE7); border-radius: 12px; border: 1px solid var(--ref-border, rgba(0,0,0,0.06));">
+                            <h4 style="color: var(--ref-text, #191D1E); margin: 0 0 10px 0; font-size: 0.92rem; font-weight: 700;">Recent Security Log</h4>
+                            <p style="margin: 0 0 6px 0; font-size: 0.82rem; color: var(--ref-muted, #71818B);"><i class="fas fa-clock" style="color: #7F0303; margin-right: 6px;"></i> Last login: <?php echo isset($user['last_login']) ? date('F d, Y h:i A', strtotime($user['last_login'])) : 'First login'; ?></p>
+                            <p style="margin: 0; font-size: 0.82rem; color: var(--ref-muted, #71818B);"><i class="fas fa-network-wired" style="color: #7F0303; margin-right: 6px;"></i> Current IP: <?php echo htmlspecialchars($_SERVER['REMOTE_ADDR']); ?></p>
                         </div>
                     </div>
 
@@ -834,18 +900,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                                     <p>Receive text messages for important updates</p>
                                 </div>
                                 <label class="switch">
-                                    <input type="checkbox" name="sms_notifications">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-
-                            <div class="notification-item">
-                                <div class="notification-info">
-                                    <h4>Appointment Reminders</h4>
-                                    <p>Get reminded about upcoming appointments</p>
-                                </div>
-                                <label class="switch">
-                                    <input type="checkbox" name="appointment_reminders" checked>
+                                    <input type="checkbox" name="sms_notifications" checked>
                                     <span class="slider"></span>
                                 </label>
                             </div>
@@ -863,8 +918,8 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
 
                             <div class="notification-item">
                                 <div class="notification-info">
-                                    <h4>Newsletter</h4>
-                                    <p>Receive updates about new programs and services</p>
+                                    <h4>Newsletter & Program Bulletins</h4>
+                                    <p>Receive updates about new programs and community services</p>
                                 </div>
                                 <label class="switch">
                                     <input type="checkbox" name="newsletter">
@@ -872,8 +927,8 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                                 </label>
                             </div>
 
-                            <button type="submit" name="save_notifications" class="btn-save">
-                                <i class="fas fa-save"></i> Save Preferences
+                            <button type="submit" name="save_notifications" class="btn-save" style="margin-top: 14px;">
+                                <i class="fas fa-save"></i> Save Notification Preferences
                             </button>
                         </form>
                     </div>
@@ -889,18 +944,9 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                             <div class="form-group">
                                 <label><i class="fas fa-language"></i> Language</label>
                                 <select>
-                                    <option value="en">English</option>
+                                    <option value="en">English (Default)</option>
                                     <option value="fil">Filipino</option>
                                     <option value="ceb">Cebuano</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label><i class="fas fa-palette"></i> Theme</label>
-                                <select>
-                                    <option value="light">Light Mode</option>
-                                    <option value="dark">Dark Mode</option>
-                                    <option value="system">System Default</option>
                                 </select>
                             </div>
 
@@ -914,7 +960,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                             <div class="notification-item">
                                 <div class="notification-info">
                                     <h4>Compact View</h4>
-                                    <p>Show more items per page</p>
+                                    <p>Display denser items per table page</p>
                                 </div>
                                 <label class="switch">
                                     <input type="checkbox">
@@ -922,7 +968,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                                 </label>
                             </div>
 
-                            <button type="submit" class="btn-save">
+                            <button type="button" class="btn-save" onclick="alert('Preferences saved successfully!');" style="margin-top: 14px;">
                                 <i class="fas fa-save"></i> Save Preferences
                             </button>
                         </form>
@@ -939,7 +985,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                             <div class="notification-item">
                                 <div class="notification-info">
                                     <h4>Profile Visibility</h4>
-                                    <p>Allow others to see your profile</p>
+                                    <p>Allow authorized caseworkers to view your citizen profile</p>
                                 </div>
                                 <label class="switch">
                                     <input type="checkbox" checked>
@@ -950,34 +996,19 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
                             <div class="notification-item">
                                 <div class="notification-info">
                                     <h4>Activity Status</h4>
-                                    <p>Show when you're active</p>
+                                    <p>Show when you are currently active on the portal</p>
                                 </div>
                                 <label class="switch">
-                                    <input type="checkbox">
+                                    <input type="checkbox" checked>
                                     <span class="slider"></span>
                                 </label>
                             </div>
-
-                            <div class="notification-item">
-                                <div class="notification-info">
-                                    <h4>Data Sharing</h4>
-                                    <p>Allow anonymous usage data collection</p>
-                                </div>
-                                <label class="switch">
-                                    <input type="checkbox">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-
-                            <button type="submit" class="btn-save">
-                                <i class="fas fa-save"></i> Save Privacy Settings
-                            </button>
                         </form>
 
                         <!-- Danger Zone -->
                         <div class="danger-zone">
                             <h3><i class="fas fa-exclamation-triangle"></i> Danger Zone</h3>
-                            <p>Once you delete your account, there is no going back. Please be certain.</p>
+                            <p>Once you delete your account, there is no going back. All submitted applications and records will be deleted.</p>
                             <button type="button" class="btn-danger" onclick="showDeleteModal()">
                                 <i class="fas fa-trash"></i> Delete Account
                             </button>
@@ -991,11 +1022,11 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
     <!-- Delete Account Modal -->
     <div id="deleteModal" class="modal">
         <div class="modal-content">
-            <h3><i class="fas fa-exclamation-triangle"></i> Delete Account</h3>
-            <p>This action is permanent and cannot be undone. All your data will be permanently removed.</p>
-            <p>Type <strong>DELETE</strong> to confirm:</p>
+            <h3 style="color: #DC2626; margin: 0 0 12px 0; font-weight: 800;"><i class="fas fa-exclamation-triangle"></i> Delete Account</h3>
+            <p style="font-size: 0.84rem; color: var(--ref-muted, #71818B); margin: 0 0 16px 0;">This action is permanent and cannot be undone. All your personal data and documents will be permanently removed.</p>
+            <p style="font-size: 0.84rem; font-weight: 700; margin: 0 0 10px 0;">Type <strong>DELETE</strong> to confirm:</p>
             <form method="POST" id="deleteForm">
-                <input type="text" name="confirm_delete" placeholder="DELETE" required>
+                <input type="text" name="confirm_delete" placeholder="DELETE" required style="width: 100%; padding: 10px; border: 1px solid var(--ref-border); border-radius: 8px; text-align: center; font-weight: 700; margin-bottom: 16px; outline: none;">
                 <div class="modal-actions">
                     <button type="button" onclick="closeDeleteModal()" class="btn-secondary">Cancel</button>
                     <button type="submit" name="delete_account" class="btn-danger">Delete Account</button>
@@ -1010,20 +1041,17 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
             item.addEventListener('click', function(e) {
                 e.preventDefault();
                 
-                // Remove active class from all menu items and sections
                 document.querySelectorAll('.settings-menu-item').forEach(i => i.classList.remove('active'));
                 document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
                 
-                // Add active class to clicked item
                 this.classList.add('active');
                 
-                // Show corresponding section
                 const sectionId = this.getAttribute('data-section');
-                document.getElementById(sectionId + '-section').classList.add('active');
+                const targetSec = document.getElementById(sectionId + '-section');
+                if (targetSec) targetSec.classList.add('active');
             });
         });
 
-        // Delete modal functions
         function showDeleteModal() {
             document.getElementById('deleteModal').classList.add('show');
         }
@@ -1032,13 +1060,12 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
             document.getElementById('deleteModal').classList.remove('show');
         }
 
-        // Close modal when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('deleteModal');
             if (event.target == modal) {
                 closeDeleteModal();
             }
-        }
+        };
 
         // Auto-hide alerts after 5 seconds
         setTimeout(function() {
@@ -1051,7 +1078,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
 
         // Password match validation
         document.querySelector('form[action=""][method="POST"]')?.addEventListener('submit', function(e) {
-            if (e.submitter.name === 'change_password') {
+            if (e.submitter && e.submitter.name === 'change_password') {
                 const newPass = document.querySelector('input[name="new_password"]').value;
                 const confirmPass = document.querySelector('input[name="confirm_password"]').value;
                 
@@ -1063,7 +1090,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 1) {
         });
     </script>
 
-    <script src="js/main.js"></script>
-    <?php include 'includes/footer.php'; ?>
+    <!-- Portal Search Modal -->
+    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

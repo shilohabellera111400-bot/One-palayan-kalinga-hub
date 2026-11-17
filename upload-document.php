@@ -71,13 +71,26 @@ $docs_stmt->execute();
     <title>Upload Documents - One Palayan-Kalinga Hub</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
-    
     <div class="dashboard-container">
+        <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        
         <div class="main-content">
-            <h1>Document Upload</h1>
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = 'Upload Supporting Document';
+            $banner_subtitle = 'Upload verified documentary requirements for your city requests and casework';
+            $banner_icon = 'fa-cloud-arrow-up';
+            $banner_actions = [
+                ['label' => 'Documents Library', 'url' => 'documents.php', 'icon' => 'fa-folder-open', 'type' => 'primary'],
+                ['label' => 'Printable Forms', 'url' => 'print-forms.php', 'icon' => 'fa-print', 'type' => 'secondary']
+            ];
+            include __DIR__ . '/includes/portal-banner.php';
+            ?>
             
             <?php if($error): ?>
                 <div class="alert alert-error"><?php echo $error; ?></div>
@@ -159,5 +172,6 @@ $docs_stmt->execute();
     </div>
     
     <script src="js/main.js"></script>
+    <?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

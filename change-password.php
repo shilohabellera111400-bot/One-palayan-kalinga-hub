@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/config/database.php';
 
 if (!isLoggedIn()) {
@@ -97,6 +97,7 @@ $initials = substr($initials, 0, 2);
     <title>Change Password - One Palayan-Kalinga Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
     <style>
         /* ========== COLOR PALETTE ========== */
         :root {
@@ -107,7 +108,7 @@ $initials = substr($initials, 0, 2);
             --midnight: #0F414A;
             --maroon-light: #9a1515;
             --white: #FFFFFF;
-            --gray-50: #E8ECF2;
+            --gray-50: #E4EFE7;
             --gray-100: #F1F3F8;
             --gray-200: #E8ECF2;
             --gray-600: #6B7A8A;
@@ -121,153 +122,24 @@ $initials = substr($initials, 0, 2);
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--gray-50);
+            background: var(--ref-canvas, #E4EFE7) !important;
             color: var(--gray-700);
             line-height: 1.5;
         }
 
         /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; background: var(--gray-50); }
-
-        /* ========== SIDEBAR - MAROON THEME ========== */
-        .sidebar {
-            width: 280px;
-            background: var(--maroon);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
+        .app-container {
             display: flex;
-            flex-direction: column;
+            min-height: 100vh;
+            background: var(--ref-canvas, #E4EFE7) !important;
+            width: 100% !important;
         }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 32px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 16px;
-        }
-        .logo-icon {
-            width: 52px;
-            height: 52px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.6rem;
-        }
-        .logo-text h2 {
-            color: white;
-            font-size: 1.3rem;
-            font-weight: 800;
-            line-height: 1.3;
-            letter-spacing: -0.5px;
-        }
-        .logo-text p {
-            color: rgba(255,255,255,0.65);
-            font-size: 0.7rem;
-            margin-top: 4px;
-        }
-
-        .user-info-sidebar {
-            padding: 0 20px 24px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .user-avatar {
-            width: 48px;
-            height: 48px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            color: white;
-        }
-        .user-info-sidebar h4 {
-            color: white;
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-        .user-info-sidebar span {
-            color: rgba(255,255,255,0.6);
-            font-size: 0.7rem;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 0 16px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 8px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: rgba(255,255,255,0.8);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 22px; font-size: 1.1rem; color: rgba(255,255,255,0.7); }
-        .sidebar-menu li a:hover { background: rgba(255,255,255,0.12); color: white; }
-        .sidebar-menu li a.active {
-            background: var(--maroon-light);
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .menu-divider {
-            border-top: 1px solid rgba(255,255,255,0.1);
-            margin: 16px 0;
-            padding-top: 8px;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: rgba(255,255,255,0.5);
-            padding-left: 16px;
-        }
-
-        .sidebar-footer {
-            padding: 20px 16px 30px 16px;
-            margin-top: auto;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: rgba(255,255,255,0.8);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.08);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.18); color: white; }
 
         /* ========== MAIN CONTENT ========== */
         .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 32px 40px;
+            flex: 1 1 0% !important;
+            min-width: 0 !important;
+            padding: 24px 32px;
             min-height: 100vh;
         }
 
@@ -445,14 +317,9 @@ $initials = substr($initials, 0, 2);
             justify-content: center;
         }
 
-        @media (max-width: 1000px) {
-            .sidebar { width: 250px; }
-            .main-content { margin-left: 250px; padding: 20px; }
-        }
         @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; }
-            .change-password-card { padding: 24px; margin: 0 15px; }
+            .main-content { padding: 16px 12px; }
+            .change-password-card { padding: 24px; margin: 0 auto; width: 100%; }
             .action-buttons { flex-direction: column; }
             .btn-secondary { text-align: center; }
         }
@@ -460,47 +327,27 @@ $initials = substr($initials, 0, 2);
 </head>
 <body>
 <div class="app-container">
-    <!-- Sidebar - Maroon Theme -->
-    <div class="sidebar">
-        <div>
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-key"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <p>Integrated Service Portal</p>
-                </div>
-            </div>
-            
-            <div class="user-info-sidebar">
-                <div class="user-avatar">
-                    <?php echo $initials; ?>
-                </div>
-                <div>
-                    <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                    <span>
-                        <?php 
-                        if (isAdmin()) echo "Administrator";
-                        elseif (isStaff()) echo "Staff";
-                        else echo "Resident";
-                        ?>
-                    </span>
-                </div>
-            </div>
-            
-            <?php include __DIR__ . '/includes/usersidenav.php'; ?>
-        </div>
-        <div class="sidebar-footer">
-            <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-        </div>
-    </div>
+    <!-- Unified Minimalist Sidebar (Req 2 & 9) -->
+    <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+        <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+    <?php endif; ?>
 
     <!-- Main Content -->
     <div class="main-content">
-        <div class="breadcrumb">
-            <a href="dashboard.php">Dashboard</a> > 
-            <a href="profile.php">My Profile</a> > 
-            Change Password
-        </div>
+        <!-- Unified Resident Portal Header (Req 1, 4, 6, 10) -->
+        <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+        <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = 'Change Password & Security';
+            $banner_subtitle = 'Update your credentials and maintain high security for your portal profile';
+            $banner_icon = 'fa-key';
+            $banner_actions = [
+                ['label' => 'Account Settings', 'url' => 'settings.php', 'icon' => 'fa-cog', 'type' => 'primary'],
+                ['label' => 'My Profile', 'url' => 'profile.php', 'icon' => 'fa-user', 'type' => 'secondary']
+            ];
+            include __DIR__ . '/includes/portal-banner.php';
+            ?>
         
         <div class="change-password-card">
             <h2><i class="fas fa-key"></i> Change Password</h2>
@@ -698,5 +545,8 @@ document.getElementById('passwordForm').addEventListener('submit', function(e) {
     return true;
 });
 </script>
+
+<!-- Search Modal (Req 7) -->
+<?php include __DIR__ . '/includes/portal-search-modal.php'; ?>
 </body>
 </html>

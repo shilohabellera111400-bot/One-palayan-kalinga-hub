@@ -122,18 +122,10 @@ $initials = substr($initials, 0, 2);
 
 // Check if dark mode is enabled
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
+$page_title = 'Manage Announcements';
+$active_nav = 'announcements';
+require_once __DIR__ . '/includes/admin-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Announcements - Admin Panel</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
         :root {
@@ -148,7 +140,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             --gold: #C9A86C;
             --gold-light: #E8D5A8;
 
-            --bg-primary: #F8F9FC;
+            --bg-primary: var(--ref-canvas, #E4EFE7);
             --bg-secondary: #FFFFFF;
             --bg-card: #FFFFFF;
             --bg-sidebar: #7F0303;
@@ -181,7 +173,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0a0e17;
+            --bg-primary: var(--ref-canvas, #0C1417);
             --bg-secondary: #111827;
             --bg-card: #1a2332;
             --bg-sidebar: #0f1629;
@@ -307,213 +299,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
 
         .delay-3 {
             animation-delay: 0.3s;
-        }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.4s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .sidebar::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-        }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--gold);
-            font-size: 1.3rem;
-        }
-
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-
-        .logo-text span {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
-
-        .sidebar-menu li {
-            margin-bottom: 2px;
-        }
-
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.82rem;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-        }
-
-        .sidebar-menu li a i {
-            width: 20px;
-            font-size: 0.95rem;
-            color: rgba(255, 255, 255, 0.4);
-            transition: color 0.3s ease;
-        }
-
-        .sidebar-menu li a:hover {
-            background: var(--bg-sidebar-hover);
-            color: var(--text-sidebar-active);
-            transform: translateX(4px);
-        }
-
-        .sidebar-menu li a:hover i {
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-
-        .sidebar-menu li a.active i {
-            color: var(--text-sidebar-active);
-        }
-
-        .sidebar-menu li a.active::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 3px;
-            height: 24px;
-            background: var(--gold);
-            border-radius: 0 4px 4px 0;
-        }
-
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 10px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255, 255, 255, 0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.04);
-        }
-
-        .sidebar-footer .avatar {
-            width: 40px;
-            height: 40px;
-            background: var(--maroon-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-        }
-
-        .sidebar-footer .user-details h4 {
-            color: var(--text-sidebar-active);
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .sidebar-footer .user-details p {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.65rem;
-        }
-
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 500;
-            background: rgba(255, 255, 255, 0.04);
-            transition: all 0.3s ease;
-            margin-top: 8px;
-        }
-
-        .sidebar-footer a:hover {
-            background: rgba(255, 255, 255, 0.10);
-            color: var(--text-sidebar-active);
-            transform: translateX(4px);
-        }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.4s ease;
         }
 
         /* ========== TOP BAR ========== */
@@ -963,70 +748,25 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             }
         }
     </style>
-</head>
-
-<body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-bullhorn"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <span>Admin Panel</span>
-                </div>
-            </div>
-
-            <ul class="sidebar-menu">
-                <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="announcements.php" class="active"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-                <li><a href="calendar.php"><i class="fas fa-calendar-alt"></i> Calendar Manager</a></li>
-                <li class="menu-divider">User Management</li>
-                <li><a href="manage-verifications.php"><i class="fas fa-shield-alt"></i> Verifications</a></li>
-                <li><a href="manage-staff.php"><i class="fas fa-users"></i> Manage Staff</a></li>
-                <li><a href="manage-residents.php"><i class="fas fa-user-friends"></i> Residents</a></li>
-                <li><a href="manage-staff-services.php"><i class="fas fa-user-tag"></i> Staff Services</a></li>
-            <li><a href="manage-users.php"><i class="fas fa-users-cog"></i> System Users</a></li>
-                <li class="menu-divider">System</li>
-                <li><a href="audit-logs.php"><i class="fas fa-history"></i> Audit Logs</a></li>
-                <li><a href="settings.php"><i class="fas fa-cog"></i> System Settings</a></li>
-                <li><a href="backup.php"><i class="fas fa-database"></i> Database Backup</a></li>
-                <li class="menu-divider"></li>
-                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
-
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <div class="avatar">
-                        <?php echo $initials; ?>
-                    </div>
-                    <div class="user-details">
-                        <h4>
-                            <?php echo htmlspecialchars($_SESSION['full_name']); ?>
-                        </h4>
-                        <p>Administrator</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="page-title">
-                    <h1><i class="fas fa-bullhorn"></i> Manage Announcements</h1>
-                    <p>Create, manage, and publish announcements for residents</p>
-                </div>
-                <div class="top-bar-actions">
-                    <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="../announcements.php" class="top-icon" target="_blank" title="View Public Page">
-                        <i class="fas fa-external-link-alt"></i>
-                    </a>
-                </div>
-            </div>
+<?php
+require_once __DIR__ . '/includes/admin-sidebar.php';
+require_once __DIR__ . '/includes/admin-header.php';
+?>
+<div class="dash-subheader">
+    <div class="subheader-title-wrap">
+        <h1><i class="fas fa-bullhorn" style="color: var(--ref-maroon);"></i> Announcements Management</h1>
+        <p>Create, manage, and publish announcements for residents</p>
+    </div>
+    <div class="dash-cursive-branding-inline">
+        <h2 class="dash-cursive-title">One-Palayan Kalinga Hub</h2>
+    </div>
+    <div class="subheader-status-wrap">
+        <a href="../announcements.php" class="portal-hdr-pill" target="_blank" title="View Public Announcements Page" style="background: var(--ref-card); border: 1px solid var(--ref-border); font-size: 0.78rem;">
+            <i class="fas fa-external-link-alt"></i>
+            <span>View Public Board</span>
+        </a>
+    </div>
+</div>
 
             <!-- Alerts -->
             <?php if ($error): ?>
@@ -1143,57 +883,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                         </div>
                     <?php endif; ?>
                 </div>
-            </div>
         </div>
     </div>
 
     <script>
-        // ========== THEME TOGGLE ==========
-        const themeToggle = document.getElementById('themeToggle');
-        const html = document.documentElement;
-
-        const currentTheme = localStorage.getItem('theme') ||
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-        function setTheme(theme) {
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = themeToggle.querySelector('i');
-            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-            document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-        }
-
-        setTheme(currentTheme);
-
-        themeToggle.addEventListener('click', function () {
-            const current = html.getAttribute('data-theme');
-            const newTheme = current === 'dark' ? 'light' : 'dark';
-            setTheme(newTheme);
-
-            // Haptic feedback
-            this.style.transform = 'scale(0.85)';
-            setTimeout(() => {
-                this.style.transform = '';
-            }, 200);
-        });
-
-        // ========== MOBILE SIDEBAR TOGGLE ==========
-        // Add hamburger menu for mobile if needed
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('active');
-        }
-
-        // Close sidebar on outside click (mobile)
-        document.addEventListener('click', function (e) {
-            const sidebar = document.getElementById('sidebar');
-            if (window.innerWidth <= 992) {
-                if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !e.target.closest('.main-content')) {
-                    sidebar.classList.remove('active');
-                }
-            }
-        });
-
         // ========== KEYBOARD SHORTCUTS ==========
         document.addEventListener('keydown', function (e) {
             // Ctrl + N to create new announcement (focus on title)
@@ -1205,22 +898,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
                     titleInput.scrollIntoView({ behavior: 'smooth' });
                 }
             }
-            // Escape to close sidebar on mobile
-            if (e.key === 'Escape') {
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar.classList.contains('active')) {
-                    sidebar.classList.remove('active');
-                }
-            }
         });
-
-        // ========== CONSOLE WELCOME ==========
-        console.log('📢 One Palayan-Kalinga Hub - Announcements Manager');
-        console.log('💡 Keyboard shortcuts: Ctrl+N (New Announcement), ESC (Close Menu)');
-        console.log('🌓 Toggle dark/light mode using the sun/moon button!');
     </script>
-</body>
-
-</html>
+<?php require_once __DIR__ . '/includes/admin-footer.php'; ?>
 
 

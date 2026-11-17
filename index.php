@@ -1,6 +1,7 @@
 <?php
 // Include database configuration
 require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/includes/cms-helper.php';
 
 // Get real-time statistics for the dashboard
 $database = new Database();
@@ -66,11 +67,11 @@ if (isLoggedIn()) {
 $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled';
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>One Palayan-Kalinga Hub - CSWDO Palayan City</title>
+    <title><?php echo htmlspecialchars(cms_get('site_title', 'One Palayan-Kalinga Hub')); ?> - <?php echo htmlspecialchars(cms_get('site_tagline', 'CSWDO Palayan City')); ?></title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -251,293 +252,23 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             animation: bounceUp 1.5s infinite;
         }
 
-        /* ========== THEME TOGGLE ========== */
-        .theme-toggle-nav {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 50%;
-            width: 38px;
-            height: 38px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: white;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            font-size: 1rem;
-            margin-right: 8px;
-        }
-        .theme-toggle-nav:hover {
-            background: rgba(255,255,255,0.2);
-            transform: rotate(30deg) scale(1.05);
-        }
-        .navbar.scrolled .theme-toggle-nav {
-            background: var(--bg-card);
-            border-color: var(--border-color);
-            color: var(--text-secondary);
-        }
-        .navbar.scrolled .theme-toggle-nav:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-        }
 
-        /* ========== NAVBAR STYLES ========== */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            z-index: 1000;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            background: var(--midnight);
-            border-bottom: none;
-        }
 
-        .navbar.scrolled {
-            background: var(--bg-card);
-            box-shadow: var(--shadow-md);
-            padding: 0.7rem 2rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo-circle {
-            width: 65px;
-            height: 65px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .logo-circle:hover {
-            transform: scale(1.05) rotate(-5deg);
-        }
-
-        .logo-circle img {
-            width: 63px;
-            height: auto;
-        }
-
-        .logo-text h2 {
-            font-size: 1.3rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, white 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            letter-spacing: -0.3px;
-        }
-
-        .logo-text span {
-            font-size: 0.7rem;
-            font-weight: 500;
-            background: var(--tan);
-            padding: 2px 10px;
-            border-radius: 40px;
-            margin-left: 8px;
-            color: #3b2a1f;
-        }
-
-        .navbar.scrolled .logo-text h2 {
-            background: linear-gradient(135deg, var(--midnight) 0%, var(--light-blue) 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-
-        .nav-links a {
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.85);
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .nav-links a::after {
-            content: '';
-            position: absolute;
-            bottom: -4px;
-            left: 0;
-            width: 0;
-            height: 2px;
-            background: var(--gold);
-            transition: width 0.3s ease;
-        }
-
-        .nav-links a:hover::after {
-            width: 100%;
-        }
-
-        .nav-links a:hover {
-            color: white;
-        }
-
-        .navbar.scrolled .nav-links a {
-            color: var(--text-secondary);
-        }
-
-        .navbar.scrolled .nav-links a:hover {
-            color: var(--maroon);
-        }
-
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .profile-icon {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.12);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            text-decoration: none;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .profile-icon i { font-size: 1.1rem; }
-        .profile-icon span { font-size: 0.85rem; }
-        .profile-icon:hover { 
-            background: rgba(255, 255, 255, 0.25); 
-            transform: translateY(-2px) scale(1.02);
-        }
-        .logout-icon {
-            background: rgba(255, 255, 255, 0.1);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            color: white;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .logout-icon:hover { 
-            background: rgba(255, 255, 255, 0.2); 
-            transform: translateY(-2px) scale(1.05);
-        }
-        .navbar.scrolled .profile-icon { 
-            background: var(--alabaster); 
-            color: var(--midnight); 
-        }
-        .navbar.scrolled .profile-icon:hover { 
-            background: var(--tan); 
-        }
-        .navbar.scrolled .logout-icon { 
-            background: var(--bg-primary); 
-            color: var(--maroon); 
-        }
-        .navbar.scrolled .logout-icon:hover { 
-            background: var(--border-color); 
-        }
-
-        .login-btn {
-            background: var(--maroon);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .login-btn:hover { 
-            background: var(--maroon-light); 
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 4px 15px rgba(127,3,3,0.3);
-        }
-        .login-btn::after { display: none; }
-        .navbar.scrolled .login-btn { 
-            background: var(--maroon); 
-            color: white !important; 
-        }
-        .navbar.scrolled .login-btn:hover { 
-            background: var(--maroon-light); 
-        }
-
-        .register-btn {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.5rem 1.2rem;
-            border-radius: 40px;
-            font-weight: 600;
-            color: white !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            margin-right: 20px;
-        }
-        .register-btn:hover { 
-            background: rgba(255, 255, 255, 0.25); 
-            transform: translateY(-2px) scale(1.02);
-        }
-        .register-btn::after { display: none; }
-        .navbar.scrolled .register-btn { 
-            background: var(--alabaster); 
-            color: var(--midnight) !important; 
-        }
-        .navbar.scrolled .register-btn:hover { 
-            background: var(--tan); 
-        }
-
-        .hamburger {
-            display: none;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 8px;
-            flex-direction: column;
-            gap: 5px;
-        }
-        .hamburger span {
-            display: block;
-            width: 25px;
-            height: 2px;
-            background: white;
-            transition: all 0.3s ease;
-            border-radius: 2px;
-        }
-        .hamburger.active span:nth-child(1) {
-            transform: rotate(45deg) translate(5px, 5px);
-        }
-        .hamburger.active span:nth-child(2) {
-            opacity: 0;
-        }
-        .hamburger.active span:nth-child(3) {
-            transform: rotate(-45deg) translate(5px, -5px);
-        }
-        .navbar.scrolled .hamburger span { 
-            background: var(--text-primary); 
-        }
-
-        /* ========== HERO SECTION ========== */
+        /* ========== HERO SECTION (Fills entire screen down to bottom) ========== */
         .hero {
             position: relative;
             color: white;
-            padding: 160px 0 90px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 130px 0 70px;
             overflow: hidden;
             background: var(--midnight);
             margin-top: 0;
+            box-sizing: border-box;
+        }
+        .hero .container {
+            width: 100%;
         }
 
         .hero::before {
@@ -677,36 +408,183 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             margin-top: 30px;
             background: rgba(255,255,255,0.95);
             border-radius: 18px;
-            padding: 18px 22px;
+            padding: 16px 20px;
             box-shadow: var(--shadow-md);
             border-left: 4px solid var(--maroon);
-            max-width: 380px;
+            max-width: 390px;
             transition: all 0.3s ease;
             cursor: pointer;
+            position: relative;
+            user-select: none;
+            backdrop-filter: blur(8px);
         }
         .status-card:hover {
             transform: translateX(5px);
             box-shadow: var(--shadow-lg);
+            border-left-color: var(--gold);
         }
-        .status-card-content { display: flex; align-items: center; gap: 15px; }
+        .status-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px dashed rgba(0,0,0,0.06);
+        }
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(16, 185, 129, 0.12);
+            color: #059669;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            background: #10b981;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: livePulse 2s infinite;
+        }
+        @keyframes livePulse {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+        .live-time {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .status-card-content { 
+            display: flex; 
+            align-items: center; 
+            gap: 14px; 
+            transition: opacity 0.28s ease, transform 0.28s ease;
+        }
+        .status-card-content.status-fade-out {
+            opacity: 0;
+            transform: translateY(-5px);
+        }
+        .status-card-content.status-fade-in {
+            opacity: 1;
+            transform: translateY(0);
+        }
         .status-icon {
             background: rgba(127,3,3,0.1);
-            width: 50px;
-            height: 50px;
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: all 0.3s ease;
         }
-        .status-icon i { color: var(--maroon); font-size: 1.5rem; }
-        .status-text h4 { color: var(--midnight); margin-bottom: 5px; font-size: 0.9rem; font-weight: 700; }
-        .status-text p { color: var(--gray-600); margin: 0; font-weight: 500; font-size: 0.85rem; }
-        .status-text strong { color: var(--maroon); }
+        .status-icon i { color: var(--maroon); font-size: 1.4rem; transition: color 0.3s ease; }
+        .status-icon.status-icon-released,
+        .status-icon.status-icon-approved {
+            background: rgba(16, 185, 129, 0.14);
+        }
+        .status-icon.status-icon-released i,
+        .status-icon.status-icon-approved i {
+            color: #059669;
+        }
+        .status-icon.status-icon-reviewing {
+            background: rgba(59, 130, 246, 0.14);
+        }
+        .status-icon.status-icon-reviewing i {
+            color: #2563eb;
+        }
+        .status-icon.status-icon-confirmed,
+        .status-icon.status-icon-completed {
+            background: rgba(127, 3, 3, 0.1);
+        }
+        .status-icon.status-icon-confirmed i,
+        .status-icon.status-icon-completed i {
+            color: var(--maroon);
+        }
+        .status-text {
+            flex: 1;
+            min-width: 0;
+        }
+        .status-text h4 { 
+            color: var(--midnight); 
+            margin-bottom: 4px; 
+            font-size: 0.88rem; 
+            font-weight: 700; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+        .status-text p { 
+            color: var(--text-secondary); 
+            margin: 0; 
+            font-weight: 500; 
+            font-size: 0.84rem; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px; 
+            flex-wrap: wrap; 
+        }
+        .status-text strong { 
+            color: var(--maroon); 
+            font-weight: 700; 
+            font-size: 0.85rem; 
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .status-pill.status-released {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status-pill.status-approved {
+            background: #dcfce7;
+            color: #15803d;
+        }
+        .status-pill.status-reviewing {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        .status-pill.status-confirmed {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status-pill.status-completed {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+        .status-pill.status-submitted {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
 
         .stats-row {
             display: flex;
             gap: 16px;
-            margin-top: 20px;
+            margin-top: 10px;
             flex-wrap: wrap;
         }
         .stat-box {
@@ -718,6 +596,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             min-width: 140px;
             border: 1px solid rgba(127,3,3,0.08);
             transition: all 0.3s ease;
+            backdrop-filter: blur(8px);
         }
         .stat-box:hover {
             transform: translateY(-3px);
@@ -728,115 +607,254 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             font-weight: 800; 
             color: var(--midnight); 
             display: block; 
+            transition: color 0.3s ease, transform 0.3s ease;
+        }
+        .stat-number.stat-updated {
+            animation: statPulse 0.7s ease;
+        }
+        @keyframes statPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); color: #059669; }
+            100% { transform: scale(1); }
         }
         .stat-label { color: var(--text-muted); font-size: 0.75rem; font-weight: 500; }
+
+        /* Dark mode adaptions for status card & stats */
+        [data-theme="dark"] .status-card,
+        [data-theme="dark"] .stat-box {
+            background: rgba(26, 35, 50, 0.95);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+        }
+        [data-theme="dark"] .status-card-header {
+            border-bottom-color: rgba(255, 255, 255, 0.08);
+        }
+        [data-theme="dark"] .status-text h4 {
+            color: #E8EDF5;
+        }
+        [data-theme="dark"] .status-text p {
+            color: #B0C4DE;
+        }
+        [data-theme="dark"] .stat-number {
+            color: #E8EDF5;
+        }
+        [data-theme="dark"] .status-pill.status-released {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+        [data-theme="dark"] .status-pill.status-approved {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+        }
+        [data-theme="dark"] .status-pill.status-reviewing {
+            background: rgba(59, 130, 246, 0.2);
+            color: #93c5fd;
+        }
+        [data-theme="dark"] .status-pill.status-confirmed {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fde68a;
+        }
 
         /* ========== CSWDO STATS SECTION ========== */
         .cswdo-stats-section {
             padding: 84px 0;
-            background: var(--bg-primary);
-            transition: background 0.4s ease;
+            background: linear-gradient(180deg, #F8F9FC 0%, #FFFFFF 100%);
+            position: relative;
         }
         .stats-grid-large {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 30px;
+            gap: 24px;
             text-align: center;
         }
         .stat-card-large {
-            background: var(--bg-card);
-            padding: 36px 22px;
+            background: #FFFFFF;
+            padding: 38px 24px;
             border-radius: 24px;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 24px rgba(15, 65, 74, 0.06);
+            border: 1.5px solid #E8ECF2;
             position: relative;
             overflow: hidden;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
             animation: fadeInUp 0.6s ease both;
         }
-        .stat-card-large:nth-child(1) { animation-delay: 0.1s; }
-        .stat-card-large:nth-child(2) { animation-delay: 0.2s; }
-        .stat-card-large:nth-child(3) { animation-delay: 0.3s; }
-        .stat-card-large:nth-child(4) { animation-delay: 0.4s; }
+        .stat-card-large:nth-child(1) { border-top: 5px solid #7F0303; animation-delay: 0.1s; }
+        .stat-card-large:nth-child(2) { border-top: 5px solid #0284C7; animation-delay: 0.2s; }
+        .stat-card-large:nth-child(3) { border-top: 5px solid #D97706; animation-delay: 0.3s; }
+        .stat-card-large:nth-child(4) { border-top: 5px solid #10B981; animation-delay: 0.4s; }
 
-        .stat-card-large::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(127,3,3,0.04), transparent 60%);
-            pointer-events: none;
-        }
         .stat-card-large:hover {
-            transform: translateY(-8px) scale(1.01);
-            box-shadow: var(--shadow-hover);
-            border-color: var(--maroon-light);
+            transform: translateY(-8px);
+            box-shadow: 0 16px 36px rgba(15, 65, 74, 0.12);
         }
-        .stat-card-large i {
-            font-size: 3rem;
-            color: var(--maroon);
-            margin-bottom: 20px;
+        .stat-card-large .stat-icon-wrap {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            margin: 0 auto 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.85rem;
             transition: all 0.3s ease;
         }
-        .stat-card-large:hover i {
-            transform: scale(1.1) rotate(-5deg);
+        .stat-card-large:nth-child(1) .stat-icon-wrap { background: rgba(127, 3, 3, 0.08); color: #7F0303; }
+        .stat-card-large:nth-child(2) .stat-icon-wrap { background: rgba(2, 132, 199, 0.08); color: #0284C7; }
+        .stat-card-large:nth-child(3) .stat-icon-wrap { background: rgba(217, 119, 6, 0.08); color: #D97706; }
+        .stat-card-large:nth-child(4) .stat-icon-wrap { background: rgba(16, 185, 129, 0.08); color: #10B981; }
+
+        .stat-card-large:hover .stat-icon-wrap {
+            transform: scale(1.12) rotate(-5deg);
         }
         .stat-card-large .stat-number-large {
-            font-size: 2.5rem;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 2.6rem;
             font-weight: 800;
-            color: var(--text-primary);
-            margin-bottom: 10px;
-            transition: color 0.3s ease;
+            color: #1E293B;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
         }
         .stat-card-large .stat-label-large {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            font-weight: 500;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #64748B;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
-        /* ========== HOUSING PROGRAM SECTION ========== */
+        /* ========== HOUSING PROGRAM SECTION (LANDSCAPE THEATER SHOWCASE) ========== */
         .housing-program-section {
             padding: 84px 0;
             background: var(--alabaster);
             transition: background 0.4s ease;
         }
-        .housing-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 60px;
-            align-items: center;
+        .housing-landscape-wrap {
+            max-width: 1100px;
+            margin: 0 auto;
         }
-        .housing-text h2 {
-            font-size: 2.2rem;  
+        .housing-header-landscape {
+            text-align: center;
+            max-width: 780px;
+            margin: 0 auto 36px;
+        }
+        .housing-header-landscape .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            background: rgba(127, 3, 3, 0.08);
+            color: var(--maroon);
+            padding: 6px 16px;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .housing-header-landscape h2 {
+            font-size: 2.35rem;  
             font-weight: 800;
             color: var(--maroon);
-            margin-bottom: 15px;
+            margin-bottom: 14px;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
         }
-        .housing-text p {
+        .housing-header-landscape p {
             color: var(--text-muted);
-            margin-bottom: 30px;
-            line-height: 1.7;
+            font-size: 1.02rem;
+            line-height: 1.65;
+            margin: 0 auto;
         }
-        .housing-features {
+
+        /* 16:9 Cinema Landscape Video Wrapper */
+        .housing-video-theater {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            min-height: 420px;
+            max-height: 600px;
+            border-radius: 28px;
+            overflow: hidden;
+            background: #061518;
+            box-shadow: 0 24px 60px rgba(15, 65, 74, 0.22), 0 4px 16px rgba(0, 0, 0, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            margin-bottom: 36px;
             display: flex;
-            flex-direction: column;
-            gap: 25px;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.35s ease, box-shadow 0.35s ease;
+        }
+        .housing-video-theater:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 30px 70px rgba(15, 65, 74, 0.28), 0 6px 20px rgba(0, 0, 0, 0.12);
+        }
+        .housing-video-element {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .housing-video-pill {
+            position: absolute;
+            top: 18px;
+            left: 20px;
+            background: rgba(15, 65, 74, 0.82);
+            color: #FFFFFF;
+            backdrop-filter: blur(8px);
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            z-index: 2;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            pointer-events: none;
+        }
+        .housing-video-pill span.live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10B981;
+            box-shadow: 0 0 8px #10B981;
+        }
+
+        /* 3-Column Landscape Highlights Grid */
+        .housing-features-landscape {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
         }
         .housing-feature {
             display: flex;
-            gap: 15px;
+            gap: 16px;
             align-items: flex-start;
-            padding: 12px 16px;
-            border-radius: 16px;
-            transition: all 0.3s ease;
+            padding: 22px 20px;
+            border-radius: 20px;
+            background: #FFFFFF;
+            border: 1.5px solid rgba(15, 65, 74, 0.08);
+            box-shadow: 0 4px 16px rgba(15, 65, 74, 0.04);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             cursor: pointer;
         }
         .housing-feature:hover {
-            background: rgba(255,255,255,0.5);
-            transform: translateX(5px);
+            background: #FFFFFF;
+            transform: translateY(-5px);
+            border-color: rgba(127, 3, 3, 0.3);
+            box-shadow: 0 12px 28px rgba(127, 3, 3, 0.1);
         }
         .housing-feature i {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             color: var(--maroon);
+            background: rgba(127, 3, 3, 0.08);
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
             transition: all 0.3s ease;
         }
         .housing-feature:hover i {
@@ -844,38 +862,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
         .housing-feature h4 {
             color: var(--text-primary);
-            margin-bottom: 5px;
-            font-size: 1.1rem;
+            margin-bottom: 6px;
+            font-size: 1.05rem;
+            font-weight: 700;
         }
         .housing-feature p {
             color: var(--text-muted);
             font-size: 0.85rem;
+            line-height: 1.55;
             margin: 0;
         }
-
-        .housing-video-wrapper {
-            position: relative;
-            border-radius: 28px;
-            overflow: hidden;
-            min-height: 360px;
-            box-shadow: 0 20px 44px rgba(15,65,74,0.16);
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid var(--border-color);
-            transition: transform 0.4s ease, box-shadow 0.4s ease;
-        }
-        .housing-video-wrapper:hover {
-            transform: scale(1.02);
-            box-shadow: 0 24px 50px rgba(15,65,74,0.25);
-        }
-        .housing-video-element {
-            width: 100%;
-            height: 100%;
-            min-height: 360px;
-            object-fit: cover;
-            display: block;
+        @media (max-width: 900px) {
+            .housing-features-landscape {
+                grid-template-columns: 1fr;
+            }
+            .housing-video-theater {
+                min-height: 280px;
+            }
+            .housing-header-landscape h2 {
+                font-size: 1.8rem;
+            }
         }
 
         /* ========== TRANSPARENCY SECTION ========== */
@@ -907,46 +913,47 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .process-step {
             text-align: center;
             position: relative;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 20px;
-            padding: 24px 18px;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #FFFFFF;
+            border: 1.5px solid #E8ECF2;
+            border-radius: 22px;
+            padding: 30px 22px;
+            box-shadow: 0 6px 20px rgba(15, 65, 74, 0.05);
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
             animation: fadeInUp 0.6s ease both;
         }
-        .process-step:nth-child(1) { animation-delay: 0.1s; }
-        .process-step:nth-child(2) { animation-delay: 0.2s; }
-        .process-step:nth-child(3) { animation-delay: 0.3s; }
-        .process-step:nth-child(4) { animation-delay: 0.4s; }
+        .process-step:nth-child(1) { border-top: 4px solid #7F0303; animation-delay: 0.1s; }
+        .process-step:nth-child(2) { border-top: 4px solid #0284C7; animation-delay: 0.2s; }
+        .process-step:nth-child(3) { border-top: 4px solid #D97706; animation-delay: 0.3s; }
+        .process-step:nth-child(4) { border-top: 4px solid #10B981; animation-delay: 0.4s; }
 
         .process-step:hover {
-            transform: translateY(-8px) scale(1.02);
-            box-shadow: var(--shadow-hover);
-            border-color: var(--maroon-light);
+            transform: translateY(-8px);
+            box-shadow: 0 16px 36px rgba(15, 65, 74, 0.12);
         }
         .process-step:not(:last-child):after {
             content: "→";
             position: absolute;
             right: -20px;
-            top: 30px;
-            font-size: 1.5rem;
-            color: var(--maroon);
-            font-weight: 700;
+            top: 36px;
+            font-size: 1.4rem;
+            color: #7F0303;
+            font-weight: 800;
             animation: float 2s infinite;
         }
         .step-number {
-            width: 60px;
-            height: 60px;
-            background: var(--maroon);
-            color: white;
+            width: 58px;
+            height: 58px;
+            background: linear-gradient(135deg, #7F0303 0%, #A31212 100%);
+            color: #FFFFFF;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin: 0 auto 20px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin: 0 auto 18px;
+            box-shadow: 0 6px 16px rgba(127, 3, 3, 0.25);
             transition: all 0.3s ease;
         }
         .process-step:hover .step-number {
@@ -1020,23 +1027,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         }
         .notification-channel {
             display: flex;
-            gap: 15px;
+            gap: 16px;
             align-items: flex-start;
-            padding: 16px 18px;
-            background: var(--bg-primary);
-            border-radius: 18px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid var(--border-color);
+            padding: 18px 20px;
+            background: #FFFFFF;
+            border-radius: 20px;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 1.5px solid #E8ECF2;
+            box-shadow: 0 4px 16px rgba(15, 65, 74, 0.04);
             cursor: pointer;
         }
         .notification-channel:hover {
-            transform: translateX(8px) scale(1.01);
-            box-shadow: var(--shadow-md);
-            border-color: var(--maroon-light);
+            transform: translateX(6px) translateY(-3px);
+            box-shadow: 0 12px 28px rgba(15, 65, 74, 0.08);
+            border-color: rgba(127, 3, 3, 0.25);
         }
         .notification-channel i {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             color: var(--maroon);
+            background: rgba(127, 3, 3, 0.08);
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
             transition: all 0.3s ease;
         }
         .notification-channel:hover i {
@@ -1220,23 +1236,24 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             gap: 30px;
         }
         .service-card {
-            background: var(--bg-card);
-            padding: 30px;
+            background: #FFFFFF;
+            padding: 34px 28px;
             border-radius: 24px;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid var(--border-color);
+            box-shadow: 0 6px 20px rgba(15, 65, 74, 0.05);
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 1.5px solid #E8ECF2;
             animation: fadeInUp 0.6s ease both;
+            position: relative;
+            overflow: hidden;
         }
-        .service-card:nth-child(1) { animation-delay: 0.1s; }
-        .service-card:nth-child(2) { animation-delay: 0.2s; }
-        .service-card:nth-child(3) { animation-delay: 0.3s; }
-        .service-card:nth-child(4) { animation-delay: 0.4s; }
+        .service-card:nth-child(1) { border-top: 5px solid #7F0303; animation-delay: 0.1s; }
+        .service-card:nth-child(2) { border-top: 5px solid #0284C7; animation-delay: 0.2s; }
+        .service-card:nth-child(3) { border-top: 5px solid #D97706; animation-delay: 0.3s; }
+        .service-card:nth-child(4) { border-top: 5px solid #10B981; animation-delay: 0.4s; }
 
         .service-card:hover {
-            transform: translateY(-8px) scale(1.01);
-            box-shadow: var(--shadow-hover);
-            border-color: var(--maroon-light);
+            transform: translateY(-8px);
+            box-shadow: 0 16px 36px rgba(15, 65, 74, 0.12);
         }
         .service-card h3 { 
             color: var(--text-primary); 
@@ -1348,10 +1365,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         .contact-number, .email { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); font-size: 0.85rem; }
         .footer-bottom { text-align: center; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); font-size: 0.75rem; }
 
-        /* ========== RESPONSIVE ========== */
+        /* ========== RESPONSIVE & MOBILE SMALL UI/UX ========== */
+        .mobile-bottom-nav {
+            display: none; /* Hidden on desktop */
+        }
+
         @media (max-width: 968px) {
-            .hero-wrapper { flex-direction: column-reverse; gap: 40px; }
-            .hero-content h2 { font-size: 2rem; }
+            .hero-wrapper { flex-direction: column-reverse; gap: 30px; }
+            .hero-content h2 { font-size: 1.85rem; }
             .hero-buttons { flex-direction: column; }
             .hero-buttons a { width: 100%; text-align: center; }
             .stats-row { justify-content: center; }
@@ -1359,216 +1380,465 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             .housing-content, .notification-content, .document-content { grid-template-columns: 1fr; }
             .process-steps { grid-template-columns: repeat(2, 1fr); }
             .process-step:not(:last-child):after { display: none; }
-            .footer-grid { grid-template-columns: 1fr; gap: 30px; }
+            .footer-grid { grid-template-columns: 1fr; gap: 24px; }
             .cta-buttons { flex-direction: column; align-items: center; }
-            .cta-buttons a { width: 80%; text-align: center; }
-            .nav-links { display: none; width: 100%; flex-direction: column; padding: 20px 0; gap: 15px; }
-            .nav-links.active { display: flex; }
+            .cta-buttons a { width: 85%; text-align: center; }
             .hamburger { display: flex; }
             .scroll-up-btn {
                 bottom: 20px;
                 right: 20px;
-                width: 45px;
-                height: 45px;
+                width: 44px;
+                height: 44px;
             }
         }
+
         @media (max-width: 768px) {
-            .navbar { padding: 0.8rem 1.5rem; }
-            .navbar.scrolled { padding: 0.6rem 1.5rem; }
-            .container { padding: 0 20px; }
-            .services-grid { grid-template-columns: 1fr; }
-            .hero { padding: 120px 0 60px; }
-            .stats-grid-large { grid-template-columns: 1fr; }
-            .process-steps { grid-template-columns: 1fr; }
-            .scroll-up-btn {
-                bottom: 15px;
-                right: 15px;
-                width: 40px;
-                height: 40px;
+            /* General Small UI/UX Spacing */
+            body {
+                padding-bottom: 68px !important; /* Space for fixed bottom tab bar */
             }
-            .logo-circle {
-                width: 38px;
-                height: 38px;
+            .container { 
+                padding: 0 16px !important; 
             }
-            .logo-circle img {
-                width: 26px;
+
+            /* Compact Hero Section */
+            .hero { 
+                padding: 85px 0 25px !important; 
             }
-            .logo-text h2 {
-                font-size: 1rem;
+            .hero-wrapper { 
+                gap: 20px !important; 
+            }
+            .hero-content .badge {
+                font-size: 0.72rem !important;
+                padding: 4px 10px !important;
+                margin-bottom: 10px !important;
+            }
+            .hero-content h1 {
+                font-size: 0.75rem !important;
+                letter-spacing: 0.8px !important;
+                margin-bottom: 6px !important;
             }
             .hero-content h2 {
-                font-size: 1.8rem;
+                font-size: 1.45rem !important;
+                line-height: 1.25 !important;
+                margin-bottom: 10px !important;
             }
-        }
-        @media (max-width: 480px) {
-            .hero-content h2 {
-                font-size: 1.5rem;
+            .hero-content p {
+                font-size: 0.85rem !important;
+                line-height: 1.45 !important;
+                margin-bottom: 16px !important;
+            }
+            .hero-buttons {
+                flex-direction: column !important;
+                gap: 8px !important;
+                width: 100% !important;
+            }
+            .hero-buttons a {
+                width: 100% !important;
+                padding: 10px 16px !important;
+                font-size: 0.86rem !important;
+                border-radius: 12px !important;
+                justify-content: center !important;
+            }
+            .hero-image {
+                text-align: center !important;
+            }
+            .hero-image img {
+                max-height: 200px !important;
+                width: 100% !important;
+                object-fit: cover !important;
+                border-radius: 16px !important;
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12) !important;
+            }
+
+            /* Compact 2x2 Stats Dashboard Grid */
+            .cswdo-stats-section {
+                padding: 12px 0 16px !important;
+            }
+            .stats-grid-large { 
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 10px !important;
             }
             .stat-card-large {
-                padding: 24px 16px;
+                padding: 14px 10px !important;
+                border-radius: 14px !important;
+                text-align: center !important;
             }
-            .stat-card-large .stat-number-large {
-                font-size: 2rem;
+            .stat-icon-wrap {
+                width: 36px !important;
+                height: 36px !important;
+                font-size: 1rem !important;
+                margin: 0 auto 6px !important;
+                border-radius: 10px !important;
+            }
+            .stat-number-large {
+                font-size: 1.35rem !important;
+                line-height: 1.1 !important;
+                margin-bottom: 3px !important;
+            }
+            .stat-label-large {
+                font-size: 0.72rem !important;
+                line-height: 1.25 !important;
+                font-weight: 600 !important;
+            }
+
+            /* Compact Housing Section */
+            .housing-program-section {
+                padding: 18px 0 !important;
+            }
+            .housing-landscape-wrap {
+                padding: 16px 12px !important;
+                border-radius: 18px !important;
+            }
+            .housing-header-landscape .badge {
+                font-size: 0.7rem !important;
+                padding: 4px 10px !important;
+            }
+            .housing-header-landscape h2 {
+                font-size: 1.25rem !important;
+                margin: 8px 0 !important;
+            }
+            .housing-header-landscape p {
+                font-size: 0.8rem !important;
+                line-height: 1.4 !important;
+                margin-bottom: 12px !important;
+            }
+            .housing-video-theater {
+                min-height: auto !important;
+                border-radius: 12px !important;
+                margin-bottom: 12px !important;
+            }
+            .housing-video-element {
+                max-height: 190px !important;
+                border-radius: 12px !important;
+            }
+            .housing-video-pill {
+                font-size: 0.7rem !important;
+                padding: 4px 10px !important;
+            }
+            .housing-features-landscape {
+                grid-template-columns: 1fr !important;
+                gap: 8px !important;
+            }
+            .housing-feature {
+                padding: 10px 12px !important;
+                border-radius: 12px !important;
+                gap: 10px !important;
+            }
+            .housing-feature i {
+                font-size: 1.1rem !important;
+            }
+            .housing-feature h4 {
+                font-size: 0.85rem !important;
+                margin-bottom: 2px !important;
+            }
+            .housing-feature p {
+                font-size: 0.75rem !important;
+                line-height: 1.35 !important;
+            }
+
+            /* Compact Transparency & 2x2 Steps Grid */
+            .transparency-section {
+                padding: 18px 0 !important;
+            }
+            .transparency-header h2 {
+                font-size: 1.25rem !important;
+                margin-bottom: 6px !important;
+            }
+            .transparency-header p {
+                font-size: 0.8rem !important;
+                line-height: 1.4 !important;
+                margin-bottom: 14px !important;
+            }
+            .process-steps { 
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 8px !important;
+            }
+            .process-step {
+                padding: 12px 10px !important;
+                border-radius: 12px !important;
+                text-align: center !important;
+            }
+            .step-number {
+                width: 28px !important;
+                height: 28px !important;
+                font-size: 0.78rem !important;
+                margin: 0 auto 6px !important;
+            }
+            .process-step h4 {
+                font-size: 0.82rem !important;
+                margin-bottom: 3px !important;
+            }
+            .process-step p {
+                font-size: 0.7rem !important;
+                line-height: 1.3 !important;
+            }
+            .tracking-demo {
+                padding: 12px 14px !important;
+                margin-top: 14px !important;
+                border-radius: 12px !important;
+                font-size: 0.8rem !important;
+            }
+
+            /* Compact Services Section */
+            .services {
+                padding: 20px 0 !important;
+            }
+            .section-title {
+                font-size: 1.25rem !important;
+                line-height: 1.3 !important;
+                margin-bottom: 14px !important;
+            }
+            .services-grid { 
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+            .service-card {
+                padding: 14px 14px !important;
+                border-radius: 14px !important;
+            }
+            .service-card h3 {
+                font-size: 0.95rem !important;
+                margin-bottom: 4px !important;
+            }
+            .service-card p {
+                font-size: 0.8rem !important;
+                line-height: 1.4 !important;
+                margin-bottom: 8px !important;
+            }
+            .service-card .learn-more {
+                font-size: 0.8rem !important;
+            }
+
+            /* Compact Notifications & Document Sections */
+            .notification-section, .document-upload-section {
+                padding: 18px 0 !important;
+            }
+            .notification-text h2, .document-text h2 {
+                font-size: 1.25rem !important;
+                margin-bottom: 6px !important;
+            }
+            .notification-text p, .document-text p {
+                font-size: 0.8rem !important;
+                line-height: 1.4 !important;
+                margin-bottom: 12px !important;
+            }
+            .notification-channels {
+                gap: 8px !important;
+            }
+            .notification-channel {
+                padding: 10px 12px !important;
+                border-radius: 12px !important;
+                gap: 10px !important;
+            }
+            .notification-channel i {
+                font-size: 1.1rem !important;
+            }
+            .notification-channel h4 {
+                font-size: 0.85rem !important;
+                margin-bottom: 2px !important;
+            }
+            .notification-channel p {
+                font-size: 0.75rem !important;
+                line-height: 1.35 !important;
             }
             .notification-preview {
-                padding: 20px;
+                padding: 14px !important;
+                border-radius: 14px !important;
+                margin-top: 14px !important;
+            }
+            .notification-preview h3 {
+                font-size: 0.9rem !important;
+                margin-bottom: 8px !important;
+            }
+            .preview-item {
+                padding: 8px 0 !important;
+                font-size: 0.78rem !important;
+            }
+            .secure-badge {
+                font-size: 0.72rem !important;
+                padding: 4px 10px !important;
+                margin-bottom: 8px !important;
+            }
+            .document-features {
+                gap: 6px !important;
+            }
+            .document-feature {
+                font-size: 0.8rem !important;
+                gap: 8px !important;
+            }
+            .document-btn {
+                padding: 9px 16px !important;
+                font-size: 0.82rem !important;
+                border-radius: 10px !important;
+                margin-top: 12px !important;
+                display: inline-flex !important;
+            }
+
+            /* Compact CTA Banner */
+            .cta-section {
+                padding: 28px 16px !important;
+                border-radius: 18px !important;
+                margin: 16px 0 !important;
+            }
+            .cta-section h2 {
+                font-size: 1.25rem !important;
+                margin-bottom: 6px !important;
+            }
+            .cta-section p {
+                font-size: 0.8rem !important;
+                line-height: 1.4 !important;
+                margin-bottom: 14px !important;
+            }
+
+            /* Reposition Floating Scroll Up Button */
+            .scroll-up-btn {
+                bottom: 18px !important;
+                right: 14px !important;
+                width: 38px !important;
+                height: 38px !important;
+                font-size: 0.85rem !important;
+            }
+
+            /* Bottom tabs disabled per user request */
+            .mobile-bottom-nav {
+                display: none !important;
+                visibility: hidden !important;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar" id="navbar">
-        <div class="logo-area">
-            <div class="logo-circle">
-                <img src="images/logo.png" alt="One Palayan-Kalinga Hub Logo" onerror="this.src='https://placehold.co/32x32?text=PKH'">
-            </div>
-            <div class="logo-text">
-                <h2>ONE PALAYAN-KALINGA HUB</h2>
-                <span>CSWDO Palayan City</span>
-            </div>
-        </div>
-        <div class="nav-links" id="navLinks">
-            <a href="index.php">Home</a>
-            <a href="services.php">Services</a>
-            <a href="about.php">About</a>
-            <a href="contact.php">Contact</a>
-            
-            <?php if(isLoggedIn()): ?>
-                <div class="user-menu">
-                    <button class="theme-toggle-nav" id="themeToggleNav" title="Toggle Dark/Light Mode">
-                        <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                    </button>
-                    <a href="dashboard.php" class="profile-icon">
-                        <i class="fas fa-user-circle"></i>
-                        <span><?php echo htmlspecialchars($_SESSION['full_name']); ?></span>
-                    </a>
-                </div>
-            <?php else: ?>
-                <button class="theme-toggle-nav" id="themeToggleNav" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="login.php" class="login-btn">Login</a>
-                <a href="register.php" class="register-btn">Register</a>
-            <?php endif; ?>
-        </div>
-        <button class="hamburger" id="hamburger" aria-label="Toggle menu">
-            <span></span>
-            <span></span>
-            <span></span>
-        </button>
-    </nav>
+    <!-- Navbar (Unified Header Design matching Services, About, Contact) -->
+    <?php include 'includes/navbar.php'; ?>
 
     <!-- Hero Section -->
     <section class="hero">
         <div class="container">
             <div class="hero-wrapper">
                 <div class="hero-content animate-fade-down">
-                    <div class="badge"><i class="fas fa-star"></i> CSWDO Palayan City</div>
-                    <h1>SERVING PALAYAN CITY WITH EXCELLENCE</h1>
-                    <h2>Streamlined Social Services For Every <span>Palayan Resident</span></h2>
-                    <p>Schedule appointments, track assistance requests, and access housing programs - all in one integrated platform designed for efficiency and transparency.</p>
+                    <div class="badge"><i class="fas fa-star"></i> <?php echo htmlspecialchars(cms_get('hero_badge', 'CSWDO Palayan City')); ?></div>
+                    <h1><?php echo htmlspecialchars(cms_get('hero_headline', 'SERVING PALAYAN CITY WITH EXCELLENCE')); ?></h1>
+                    <h2><?php echo htmlspecialchars(cms_get('hero_subheadline', 'Streamlined Social Services For Every Palayan Resident')); ?></h2>
+                    <p><?php echo htmlspecialchars(cms_get('hero_description', 'Schedule appointments, track assistance requests, and access housing programs - all in one integrated platform designed for efficiency and transparency.')); ?></p>
                     
                     <div class="hero-buttons">
-                        <a href="appointments.php" class="btn-primary">Book Appointment Now <i class="fas fa-arrow-right"></i></a>
-                        <a href="track-aics.php" class="btn-secondary">Track My Request</a>
-                    </div>
-
-                    <div class="status-card">
-                        <div class="status-card-content">
-                            <div class="status-icon"><i class="fas fa-check-circle"></i></div>
-                            <div class="status-text">
-                                <h4>AICS Status Update</h4>
-                                <p><strong>Request #12345</strong> Approved</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="stats-row">
-                        <div class="stat-box"><span class="stat-number">847+</span><span class="stat-label">Appointments Served</span></div>
-                        <div class="stat-box"><span class="stat-number">₱1.2M</span><span class="stat-label">AICS Released</span></div>
+                        <a href="<?php echo htmlspecialchars(cms_get('hero_btn1_link', 'appointments.php')); ?>" class="btn-primary"><?php echo htmlspecialchars(cms_get('hero_btn1_text', 'Book Appointment Now')); ?> <i class="fas fa-arrow-right"></i></a>
+                        <a href="<?php echo htmlspecialchars(cms_get('hero_btn2_link', 'track-aics.php')); ?>" class="btn-secondary"><?php echo htmlspecialchars(cms_get('hero_btn2_text', 'Track My Request')); ?></a>
                     </div>
                 </div>
 
                 <div class="hero-image animate-fade-scale delay-2">
-                    <img src="images/palayan-city.png" alt="Lungsod ng Palayan - Kabisera ng Nueva Ecija">
+                    <img src="<?php 
+                        $hero_src = cms_get('hero_image', 'images/palayan_hero_cswdo_banner.jpg');
+                        if ($hero_src === 'images/palayan-city.png' || empty($hero_src)) {
+                            $hero_src = 'images/palayan_hero_cswdo_banner.jpg';
+                        }
+                        echo htmlspecialchars($hero_src) . '?v=' . time();
+                    ?>" alt="<?php echo htmlspecialchars(cms_get('site_title', 'Palayan City')); ?>">
                 </div>
             </div>
         </div>
     </section>
 
     <!-- CSWDO Stats Section -->
+    <?php if (cms_bool('show_hero_stats', true)): ?>
     <section class="cswdo-stats-section">
         <div class="container">
             <div class="stats-grid-large">
                 <div class="stat-card-large">
-                    <i class="fas fa-calendar-check"></i>
+                    <div class="stat-icon-wrap"><i class="fas fa-calendar-check"></i></div>
                     <div class="stat-number-large" data-count="<?php echo number_format($stats['total_appointments'] ?? 2847); ?>">0</div>
                     <div class="stat-label-large">Appointments Scheduled</div>
                 </div>
                 <div class="stat-card-large">
-                    <i class="fas fa-hand-holding-heart"></i>
+                    <div class="stat-icon-wrap"><i class="fas fa-hand-holding-heart"></i></div>
                     <div class="stat-number-large" data-count="<?php echo number_format($stats['total_aics'] ?? 1523); ?>">0</div>
                     <div class="stat-label-large">AICS Requests Tracked</div>
                 </div>
                 <div class="stat-card-large">
-                    <i class="fas fa-home"></i>
+                    <div class="stat-icon-wrap"><i class="fas fa-home"></i></div>
                     <div class="stat-number-large" data-count="<?php echo number_format($stats['total_housing_beneficiaries'] ?? 892); ?>">0</div>
                     <div class="stat-label-large">Housing Beneficiaries</div>
                 </div>
                 <div class="stat-card-large">
-                    <i class="fas fa-smile"></i>
+                    <div class="stat-icon-wrap"><i class="fas fa-smile"></i></div>
                     <div class="stat-number-large" data-count="<?php echo number_format($stats['satisfaction_rate'] ?? 98); ?>">0%</div>
                     <div class="stat-label-large">User Satisfaction Rate</div>
                 </div>
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
-    <!-- Housing Program Section -->
+    <!-- Housing Program Section (Landscape Theater Layout) -->
+    <?php if (cms_bool('show_housing_section', true)): ?>
     <section class="housing-program-section">
         <div class="container">
-            <div class="housing-content">
-                <div class="housing-text animate-fade-up">
-                    <h2>Comprehensive Beneficiary Management</h2>
-                    <p>Streamlined housing application tracking and beneficiary data management for efficient allocation and transparent monitoring of housing programs in Palayan City.</p>
-                    <div class="housing-features">
-                        <div class="housing-feature">
-                            <i class="fas fa-database"></i>
-                            <div><h4>Beneficiary Database</h4><p>Centralized records of all housing program beneficiaries with complete documentation and eligibility information.</p></div>
-                        </div>
-                        <div class="housing-feature">
-                            <i class="fas fa-check-circle"></i>
-                            <div><h4>Eligibility Verification</h4><p>Automated validation of applicant eligibility based on program requirements and government guidelines.</p></div>
-                        </div>
-                        <div class="housing-feature">
-                            <i class="fas fa-chart-line"></i>
-                            <div><h4>Distribution Monitoring</h4><p>Real-time tracking of housing unit allocation, distribution progress, and beneficiary status updates.</p></div>
-                        </div>
+            <div class="housing-landscape-wrap">
+                <!-- Section Header -->
+                <div class="housing-header-landscape animate-fade-up">
+                    <div class="badge">
+                        <i class="fas fa-city"></i> <?php echo htmlspecialchars(str_ireplace(['&amp;', '&'], 'and', cms_get('housing_section_badge', 'Municipal Resettlement and In-Site Housing')), ENT_QUOTES, 'UTF-8'); ?>
                     </div>
+                    <h2><?php echo htmlspecialchars(cms_get('housing_section_title', 'Comprehensive Beneficiary Management')); ?></h2>
+                    <p><?php echo htmlspecialchars(cms_get('housing_section_desc', 'Streamlined housing application tracking and beneficiary data management for efficient allocation and transparent monitoring of housing programs in Palayan City.')); ?></p>
                 </div>
-                <div class="housing-video-wrapper animate-fade-scale delay-2">
-                    <video class="housing-video-element" controls poster="images/cswdo-housing-assistance.jpg" preload="none">
-                        <source src="video/Palayan%20City%20Township%20Housing%20Fair.mp4" type="video/mp4">
+
+                <!-- Landscape 16:9 Cinema Video Showcase -->
+                <div class="housing-video-theater animate-fade-scale delay-1">
+                    <div class="housing-video-pill">
+                        <span class="live-dot"></span>
+                        <i class="fas fa-play-circle"></i> Palayan City Township Housing Fair Video
+                    </div>
+                    <video class="housing-video-element" controls poster="<?php echo cms_image('housing_section_poster', 'images/cswdo-housing-assistance.jpg'); ?>" preload="none">
+                        <source src="<?php echo htmlspecialchars(cms_get('housing_section_video', 'video/Palayan City Township Housing Fair.mp4')); ?>" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
+                </div>
+
+                <!-- 3-Column Landscape Features Grid -->
+                <div class="housing-features-landscape animate-fade-up delay-2">
+                    <div class="housing-feature">
+                        <i class="fas fa-database"></i>
+                        <div>
+                            <h4>Beneficiary Database</h4>
+                            <p>Centralized records of all housing program beneficiaries with complete documentation and eligibility information.</p>
+                        </div>
+                    </div>
+                    <div class="housing-feature">
+                        <i class="fas fa-check-circle"></i>
+                        <div>
+                            <h4>Eligibility Verification</h4>
+                            <p>Automated validation of applicant eligibility based on program requirements and government guidelines.</p>
+                        </div>
+                    </div>
+                    <div class="housing-feature">
+                        <i class="fas fa-chart-line"></i>
+                        <div>
+                            <h4>Distribution Monitoring</h4>
+                            <p>Real-time tracking of housing unit allocation, distribution progress, and beneficiary status updates.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- Transparency Section -->
+    <?php if (cms_bool('show_transparency_section', true)): ?>
     <section class="transparency-section">
         <div class="container">
             <div class="transparency-header animate-fade-down">
-                <h2>Transparency & Accountability</h2>
-                <p>Track your assistance request in real-time. From submission to release, you'll always know where your request stands.</p>
+                <h2><?php echo htmlspecialchars(str_ireplace(['&amp;', '&'], 'and', cms_get('transparency_title', 'Transparency and Accountability'))); ?></h2>
+                <p><?php echo htmlspecialchars(cms_get('transparency_desc', "Track your assistance request in real-time. From submission to release, you'll always know where your request stands.")); ?></p>
             </div>
             <div class="process-steps">
-                <div class="process-step"><div class="step-number">01</div><h4>Submit</h4><p>Fill out the online form and submit your AICS request with required documents.</p></div>
-                <div class="process-step"><div class="step-number">02</div><h4>Review</h4><p>CSWDO staff reviews your application and verifies submitted documents.</p></div>
-                <div class="process-step"><div class="step-number">03</div><h4>Approval</h4><p>Your request is evaluated and approved based on eligibility criteria.</p></div>
-                <div class="process-step"><div class="step-number">04</div><h4>Release</h4><p>Receive notification and claim your assistance at the CSWDO office.</p></div>
+                <div class="process-step"><div class="step-number">01</div><h4><?php echo htmlspecialchars(cms_get('step1_title', 'Submit')); ?></h4><p><?php echo htmlspecialchars(cms_get('step1_desc', 'Fill out the online form and submit your AICS request with required documents.')); ?></p></div>
+                <div class="process-step"><div class="step-number">02</div><h4><?php echo htmlspecialchars(cms_get('step2_title', 'Review')); ?></h4><p><?php echo htmlspecialchars(cms_get('step2_desc', 'CSWDO staff reviews your application and verifies submitted documents.')); ?></p></div>
+                <div class="process-step"><div class="step-number">03</div><h4><?php echo htmlspecialchars(cms_get('step3_title', 'Approval')); ?></h4><p><?php echo htmlspecialchars(cms_get('step3_desc', 'Your request is evaluated and approved based on eligibility criteria.')); ?></p></div>
+                <div class="process-step"><div class="step-number">04</div><h4><?php echo htmlspecialchars(cms_get('step4_title', 'Release')); ?></h4><p><?php echo htmlspecialchars(cms_get('step4_desc', 'Receive notification and claim your assistance at the CSWDO office.')); ?></p></div>
             </div>
             <div class="tracking-demo animate-fade-up">
                 <i class="fas fa-chart-line"></i>
@@ -1577,14 +1847,16 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- Stay Informed Section -->
+    <?php if (cms_bool('show_notification_section', true)): ?>
     <section class="notification-section">
         <div class="container">
             <div class="notification-content">
                 <div class="notification-text animate-fade-up">
-                    <h2>Stay Informed with Automated Updates</h2>
-                    <p>Receive timely notifications through multiple channels to keep you updated on your appointments, requests, and application status at every step.</p>
+                    <h2><?php echo htmlspecialchars(cms_get('notif_section_title', 'Stay Informed with Automated Updates')); ?></h2>
+                    <p><?php echo htmlspecialchars(cms_get('notif_section_desc', 'Receive timely notifications through multiple channels to keep you updated on your appointments, requests, and application status at every step.')); ?></p>
                     <div class="notification-channels">
                         <div class="notification-channel">
                             <i class="fas fa-sms"></i>
@@ -1634,15 +1906,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- Document Upload Section -->
+    <?php if (cms_bool('show_document_upload_section', true)): ?>
     <section class="document-upload-section">
         <div class="container">
             <div class="document-content">
                 <div class="document-text animate-fade-up">
-                    <div class="secure-badge"><i class="fas fa-lock"></i> Secure Upload • 256-bit encryption</div>
-                    <h2>Upload Documents Before Your Visit</h2>
-                    <p>Our document pre-verification system allows you to upload required documents before your scheduled appointment, significantly reducing processing time and ensuring a smoother experience at the CSWDO office.</p>
+                    <div class="secure-badge"><i class="fas fa-lock"></i> <?php echo htmlspecialchars(cms_get('doc_upload_badge', 'Secure Upload • 256-bit encryption')); ?></div>
+                    <h2><?php echo htmlspecialchars(cms_get('doc_upload_title', 'Upload Documents Before Your Visit')); ?></h2>
+                    <p><?php echo htmlspecialchars(cms_get('doc_upload_desc', 'Our document pre-verification system allows you to upload required documents before your scheduled appointment, significantly reducing processing time and ensuring a smoother experience at the CSWDO office.')); ?></p>
                     <div class="document-features">
                         <div class="document-feature"><i class="fas fa-check-circle"></i><span>Faster processing and reduced waiting time</span></div>
                         <div class="document-feature"><i class="fas fa-cloud-upload-alt"></i><span>Secure cloud storage for all documents</span></div>
@@ -1657,45 +1931,59 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- Services Section -->
+    <?php if (cms_bool('show_services_section', true)): ?>
+    <?php $homepage_services = cms_get_featured_services(4); ?>
     <section class="services">
         <div class="container">
             <h2 class="section-title animate-fade-down">Integrated Services<br><span>Designed for Efficiency</span></h2>
             <div class="services-grid">
-                <div class="service-card"><h3>📅 Appointment Scheduling</h3><p>Book your social service appointments online with ease. Choose your preferred date and time, and receive instant confirmation with automated reminders.</p><a href="appointments.php" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
-                <div class="service-card"><h3>📄 Document Pre-Verification</h3><p>Upload required documents before your appointment to reduce processing time. Our secure system verifies your documents in advance for faster service.</p><a href="documents.php" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
-                <div class="service-card"><h3>🤝 AICS Tracking</h3><p>Monitor your Assistance to Individuals in Crisis Situation request status in real-time. Track every step from submission to approval and release.</p><a href="track-aics.php" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
-                <div class="service-card"><h3>🏠 Housing Management</h3><p>Apply for housing programs and track your beneficiary status. Access centralized records and monitor allocation updates through our integrated system.</p><a href="housing.php" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
+                <?php if (!empty($homepage_services)): ?>
+                    <?php foreach ($homepage_services as $h_svc): ?>
+                    <div class="service-card">
+                        <h3><i class="<?php echo htmlspecialchars($h_svc['icon'] ?: 'fas fa-hands-helping'); ?>"></i> <?php echo htmlspecialchars($h_svc['service_name']); ?></h3>
+                        <p><?php echo htmlspecialchars($h_svc['short_desc'] ?: $h_svc['description']); ?></p>
+                        <a href="<?php echo htmlspecialchars($h_svc['apply_url'] ?: 'services.php'); ?>" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="service-card"><h3>📅 Appointment Scheduling</h3><p>Book your social service appointments online with ease. Choose your preferred date and time, and receive instant confirmation with automated reminders.</p><a href="services.php?service=appointments" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
+                    <div class="service-card"><h3>📄 Document Pre-Verification</h3><p>Upload required documents before your appointment to reduce processing time. Our secure system verifies your documents in advance for faster service.</p><a href="services.php?service=documents" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
+                    <div class="service-card"><h3>🤝 Crisis Assistance (AICS)</h3><p>Medical, burial, educational, transportation, food, and emergency cash relief for individuals and families in crisis. Complete checklists and guidelines.</p><a href="services.php?cat=aics" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
+                    <div class="service-card"><h3>🏠 Socialized and In-Site Housing</h3><p>Explore Akap Village, San Lorenzo NHA, and In-Site Housing (on your own lot). Review full requirements, guidelines, and procedures freely.</p><a href="services.php?cat=housing" class="learn-more">Learn More <i class="fas fa-arrow-right"></i></a></div>
+                <?php endif; ?>
+            </div>
+            <div style="text-align: center; margin-top: 36px;">
+                <a href="services.php" class="learn-more" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1rem; color: var(--maroon);">
+                    <i class="fas fa-th-large"></i> Explore All Available Public Services and Citizen's Charters <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- CTA Section -->
+    <?php if (cms_bool('show_cta_section', true)): ?>
     <section class="cta-section">
         <div class="container">
-            <h2 class="animate-fade-down">Ready to Get Started?</h2>
-            <p class="animate-fade-up delay-1">Create your account in under 2 minutes and start accessing social services online. Join thousands of Palayan City residents already using our platform.</p>
+            <h2 class="animate-fade-down"><?php echo htmlspecialchars(cms_get('cta_title', 'Ready to Get Started?')); ?></h2>
+            <p class="animate-fade-up delay-1"><?php echo htmlspecialchars(cms_get('cta_desc', 'Create your account in under 2 minutes and start accessing social services online. Join thousands of Palayan City residents already using our platform.')); ?></p>
             <div class="cta-buttons animate-fade-scale delay-2">
-                <a href="register.php" class="btn-primary">Register as Resident <i class="fas fa-arrow-right"></i></a>
-                <?php if(!function_exists('isStaff') || !isStaff()): ?>
-                <a href="staff-login.php" class="btn-secondary">Staff Login</a>
+                <a href="<?php echo htmlspecialchars(cms_get('cta_btn1_link', 'register.php')); ?>" class="btn-primary"><?php echo htmlspecialchars(cms_get('cta_btn1_text', 'Register as Resident')); ?> <i class="fas fa-arrow-right"></i></a>
+                <?php if(!isLoggedIn()): ?>
+                <a href="<?php echo htmlspecialchars(cms_get('cta_btn2_link', 'login.php')); ?>" class="btn-secondary"><?php echo htmlspecialchars(cms_get('cta_btn2_text', 'Sign In')); ?> <i class="fas fa-sign-in-alt"></i></a>
                 <?php endif; ?>
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-section"><h3>ONE PALAYAN-KALINGA HUB</h3><p>CSWDO Palayan City — Integrated Social Services Platform</p><div><h4>SERVICES</h4><ul><li><a href="appointments.php">Appointment Booking</a></li><li><a href="aics.php">AICS Application</a></li><li><a href="housing.php">Housing Programs</a></li></ul></div></div>
-                <div class="footer-section"><h4>RESOURCES</h4><ul><li><a href="user-guide.php">User Guide</a></li><li><a href="faqs.php">FAQs</a></li><li><a href="privacy-policy.php">Privacy Policy</a></li><li><a href="terms.php">Terms of Service</a></li></ul></div>
-                <div class="footer-section"><h4>CONTACT US</h4><p>City Social Welfare and Development Office<br>Palayan City, Nueva Ecija, Philippines</p><p class="contact-number"><i class="fas fa-phone"></i> +63 (44) 123 4567</p><p class="email"><i class="fas fa-envelope"></i> cswdo@palayancity.gov.ph</p></div>
-            </div>
-            <div class="footer-bottom"><p>&copy; 2026 One Palayan-Kalinga Hub. All rights reserved. | A project of CSWDO Palayan City</p></div>
-        </div>
-    </footer>
+    <!-- Global Unified Green Footer -->
+    <?php include 'includes/footer.php'; ?>
 
     <!-- Scroll Up Button -->
     <div class="scroll-up-btn" id="scrollUpBtn">
@@ -1724,34 +2012,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         return 'just now';
     }
 
-    // ========== THEME TOGGLE ==========
-    const themeToggleNav = document.getElementById('themeToggleNav');
-    const html = document.documentElement;
-
-    const currentTheme = localStorage.getItem('theme') || 
-                        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-    function setTheme(theme) {
-        html.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-        const icon = themeToggleNav.querySelector('i');
-        icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-    }
-
-    setTheme(currentTheme);
-
-    themeToggleNav.addEventListener('click', function() {
-        const current = html.getAttribute('data-theme');
-        const newTheme = current === 'dark' ? 'light' : 'dark';
-        setTheme(newTheme);
-        
-        // Haptic feedback simulation
-        this.style.transform = 'scale(0.85)';
-        setTimeout(() => {
-            this.style.transform = '';
-        }, 200);
-    });
+    // Ensure light theme for public homepage
+    document.documentElement.setAttribute('data-theme', 'light');
 
     // ========== NAVBAR SCROLL EFFECT ==========
     window.addEventListener('scroll', function() {
@@ -1779,13 +2041,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'enabled'
         });
     });
 
-    // ========== MOBILE MENU TOGGLE ==========
-    const hamburger = document.getElementById('hamburger');
-    const navLinks = document.getElementById('navLinks');
-    if (hamburger) {
-        hamburger.addEventListener('click', function() {
-            this.classList.toggle('active');
-            navLinks.classList.toggle('active');
+    // ========== MOBILE MENU TOGGLE (DRAWER & BOTTOM NAV) ==========
+    const mobileMenuBtn = document.getElementById('mobileMenuTabBtn');
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (typeof openDrawer === 'function') {
+                openDrawer();
+            } else {
+                const hb = document.getElementById('hamburger');
+                if (hb) hb.click();
+            }
         });
     }
 

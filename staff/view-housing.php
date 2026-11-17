@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // staff/view-housing.php
 require_once __DIR__ . '/../config/database.php';
 
@@ -8,6 +8,28 @@ if (!isStaff()) {
 
 $database = new Database();
 $db = $database->getConnection();
+
+// Access check: Ensure staff has Housing category permission
+$staff_id_query = "SELECT id FROM staff WHERE user_id = :user_id";
+$staff_id_stmt = $db->prepare($staff_id_query);
+$staff_id_stmt->bindParam(':user_id', $_SESSION['user_id']);
+$staff_id_stmt->execute();
+$staff_data = $staff_id_stmt->fetch(PDO::FETCH_ASSOC);
+$staff_id = $staff_data ? $staff_data['id'] : 0;
+
+$cat_query = "SELECT DISTINCT sc.category_name 
+               FROM staff_service_assignments ssa
+               JOIN service_categories sc ON ssa.category_id = sc.category_id
+               WHERE ssa.staff_id = :staff_id AND ssa.is_active = 1";
+$cat_stmt = $db->prepare($cat_query);
+$cat_stmt->bindParam(':staff_id', $staff_id);
+$cat_stmt->execute();
+$assigned_categories = $cat_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+if (!in_array('Housing', $assigned_categories) && !isAdmin()) {
+    $_SESSION['error'] = "You do not have permission to access or manage Housing applications.";
+    redirect('../staff-dashboard.php');
+}
 
 // Get housing application ID from URL
 $beneficiary_id = isset($_GET['id']) ? sanitize($_GET['id']) : 0;
@@ -73,14 +95,46 @@ if ($stmt->rowCount() == 0) {
 
 $application = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Fetch documents for this application
+// Fetch documents specifically linked to this housing application
 $doc_query = "SELECT * FROM documents 
-              WHERE user_id = :user_id 
+              WHERE user_id = :user_id AND reference_id = :ref_id 
               ORDER BY upload_date DESC";
 $doc_stmt = $db->prepare($doc_query);
 $doc_stmt->bindParam(':user_id', $application['user_id']);
+$doc_stmt->bindParam(':ref_id', $beneficiary_id);
 $doc_stmt->execute();
 $documents = $doc_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fallback for legacy applications created before reference_id was set
+if (empty($documents)) {
+    $legacy_doc_query = "SELECT * FROM documents 
+                         WHERE user_id = :user_id 
+                         AND (reference_id IS NULL OR reference_id = 0)
+                         AND (document_path LIKE '%housing%' 
+                              OR document_type IN ('Letter of Intent', 'Proof of Land Ownership', 'Affidavit of Consent', 'House / Lot Photo', 'Tax Declaration', 'Lot Sketch Plan', 'Barangay Clearance', 'Valid ID'))
+                         ORDER BY upload_date DESC";
+    $legacy_stmt = $db->prepare($legacy_doc_query);
+    $legacy_stmt->bindParam(':user_id', $application['user_id']);
+    $legacy_stmt->execute();
+    $documents = $legacy_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$tracking_number = "HSG-" . date('Y', strtotime($application['application_date'])) . "-" . str_pad($beneficiary_id, 5, '0', STR_PAD_LEFT);
+
+// Fetch linked appointment if scheduled
+$linked_appt_query = "SELECT appointment_id, reference_number, appointment_date, appointment_time, window_assignment, status, service_type, purpose 
+                      FROM appointments 
+                      WHERE user_id = :uid 
+                        AND (purpose LIKE :tno OR notes LIKE :tno_note) 
+                        AND status NOT IN ('cancelled', 'rejected') 
+                      ORDER BY appointment_id DESC LIMIT 1";
+$linked_appt_stmt = $db->prepare($linked_appt_query);
+$linked_appt_stmt->execute([
+    ':uid' => $application['user_id'],
+    ':tno' => '%' . $tracking_number . '%',
+    ':tno_note' => '%' . $tracking_number . '%'
+]);
+$linked_appointment = $linked_appt_stmt->fetch(PDO::FETCH_ASSOC);
 
 // Helper function to clean document path
 function cleanDocumentPath($path) {
@@ -108,7 +162,7 @@ function getHousingStatusInfo($status) {
         'pending' => ['color' => '#FF9800', 'icon' => 'fa-clock', 'text' => 'Pending', 'bg' => 'rgba(255,152,0,0.12)'],
         'qualified' => ['color' => '#2196F3', 'icon' => 'fa-search', 'text' => 'Qualified', 'bg' => 'rgba(33,150,243,0.12)'],
         'approved' => ['color' => '#4CAF50', 'icon' => 'fa-check-circle', 'text' => 'Approved', 'bg' => 'rgba(76,175,80,0.12)'],
-        'rejected' => ['color' => '#EF5350', 'icon' => 'fa-times-circle', 'text' => 'Rejected', 'bg' => 'rgba(244,67,54,0.12)'],
+        'rejected' => ['color' => '#EF5350', 'icon' => 'fa-times-circle', 'text' => 'Disapproved', 'bg' => 'rgba(244,67,54,0.12)'],
         'released' => ['color' => '#9C27B0', 'icon' => 'fa-gift', 'text' => 'Released', 'bg' => 'rgba(156,39,176,0.12)']
     ];
     return $statuses[$status] ?? ['color' => '#999', 'icon' => 'fa-question-circle', 'text' => ucfirst($status), 'bg' => '#f5f5f5'];
@@ -146,859 +200,91 @@ $app_pic = !empty($application['profile_picture']) && file_exists(__DIR__ . '/..
     : '';
 $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($application['last_name'], 0, 1));
 ?>
-<!DOCTYPE html>
-<html lang="en" data-theme="<?php echo $dark_mode ? 'dark' : 'light'; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Housing Application #<?php echo $beneficiary_id; ?> - Staff</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        /* ========== CSS VARIABLES - LIGHT/DARK THEME ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --maroon-light: #9a1515;
-            --maroon-dark: #5a0202;
-            --midnight: #0F414A;
-            --white: #FFFFFF;
-            
-            --bg-primary: #E8ECF2;
-            --bg-secondary: #FFFFFF;
-            --bg-card: #FFFFFF;
-            --bg-sidebar: #7F0303;
-            --bg-sidebar-hover: rgba(255,255,255,0.12);
-            --bg-sidebar-active: rgba(255,255,255,0.15);
-            --text-primary: #263238;
-            --text-secondary: #3A4A5A;
-            --text-muted: #6B7A8A;
-            --text-sidebar: rgba(255,255,255,0.7);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #C8D0DC;
-            
-            --shadow-sm: 0 2px 10px rgba(15,65,74,0.10), 0 1px 4px rgba(0,0,0,0.07);
-            --shadow-md: 0 6px 24px rgba(15,65,74,0.12), 0 2px 8px rgba(0,0,0,0.07);
-            --shadow-lg: 0 12px 40px rgba(15,65,74,0.15), 0 4px 12px rgba(0,0,0,0.08);
-            --shadow-hover: 0 12px 40px rgba(127, 3, 3, 0.12);
-            
-            --card-bg: #FFFFFF;
-            --badge-bg: #F1F3F8;
-            --divider: rgba(255,255,255,0.08);
-            
-            --radius-card: 20px;
-            --radius-element: 12px;
-            
-            --color-success: #4CAF50;
-            --color-warning: #FF9800;
-            --color-danger: #EF5350;
-            --color-info: #2196F3;
-            --color-purple: #9C27B0;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --bg-sidebar: #0f1629;
-            --bg-sidebar-hover: rgba(255,255,255,0.06);
-            --bg-sidebar-active: rgba(255,255,255,0.10);
-            --text-primary: #E8EDF5;
-            --text-secondary: #B0C4DE;
-            --text-muted: #6B85A0;
-            --text-sidebar: rgba(255,255,255,0.6);
-            --text-sidebar-active: #FFFFFF;
-            --border-color: #2a3a4f;
-            
-            --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.40);
-            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.50);
-            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.60);
-            --shadow-hover: 0 12px 40px rgba(139, 26, 26, 0.20);
-            
-            --card-bg: #1a2332;
-            --badge-bg: #2a3a4f;
-            --divider: rgba(255,255,255,0.05);
-            
-            --maroon: #8B1A1A;
-            --maroon-light: #A82828;
-            --maroon-dark: #5a0202;
-            
-            --color-success: #66BB6A;
-            --color-warning: #FFA726;
-            --color-danger: #EF5350;
-            --color-info: #42A5F5;
-            --color-purple: #AB47BC;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            line-height: 1.5;
-            min-height: 100vh;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .app-container { display: flex; min-height: 100vh; }
-
-        /* ========== SIDEBAR ========== */
-        .sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            transition: background 0.3s ease;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-header {
-            padding: 28px 20px 20px;
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(255,255,255,0.10);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--maroon-light);
-            font-size: 1.3rem;
-        }
-        .logo-text h2 {
-            color: var(--text-sidebar-active);
-            font-size: 1.1rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }
-        .logo-text span {
-            color: rgba(255,255,255,0.4);
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .staff-profile {
-            padding: 20px 20px 16px;
-            border-bottom: 1px solid var(--divider);
-            text-align: center;
-        }
-        .staff-avatar {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            margin: 0 auto 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            font-weight: 700;
-            color: white;
-            background: var(--maroon-light);
-            border: 3px solid rgba(255,255,255,0.2);
-            overflow: hidden;
-        }
-        .staff-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .staff-profile h4 {
-            color: var(--text-sidebar-active);
-            font-size: 1rem;
-            font-weight: 600;
-        }
-        .staff-profile p {
-            color: rgba(255,255,255,0.6);
-            font-size: 0.75rem;
-            margin-top: 2px;
-        }
-        .staff-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.15);
-            padding: 3px 12px;
-            border-radius: 20px;
-            font-size: 0.6rem;
-            margin-top: 6px;
-            color: rgba(255,255,255,0.8);
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 12px 14px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 2px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.82rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 20px; font-size: 0.95rem; color: rgba(255,255,255,0.4); }
-        .sidebar-menu li a:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar-active); }
-        .sidebar-menu li a:hover i { color: rgba(255,255,255,0.8); }
-        .sidebar-menu li a.active {
-            background: var(--bg-sidebar-active);
-            color: var(--text-sidebar-active);
-        }
-        .sidebar-menu li a.active i { color: var(--text-sidebar-active); }
-        .menu-divider {
-            border-top: 1px solid var(--divider);
-            margin: 10px 0;
-            padding-top: 10px;
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.3);
-            padding-left: 14px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 12px;
-            color: var(--text-sidebar);
-            text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.04);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.10); color: var(--text-sidebar-active); }
-
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 28px 36px 40px;
-            min-height: 100vh;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-        }
-
-        /* ========== TOP BAR ========== */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .page-title h1 {
-            font-size: 1.5rem;
-            color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s ease;
-        }
-        .page-title p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
-        }
-        .top-bar-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-            box-shadow: var(--shadow-sm);
-        }
-        .theme-toggle:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: scale(1.05);
-            box-shadow: var(--shadow-md);
-        }
-        .top-icon {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: color 0.3s ease;
-            text-decoration: none;
-            background: var(--bg-card);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
-        .top-icon:hover { 
-            color: var(--text-primary);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-
-        .back-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--card-bg);
-            color: var(--text-secondary);
-            padding: 8px 20px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.82rem;
-            border: 1px solid var(--border-color);
-            transition: all 0.3s;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 20px;
-        }
-        .back-btn:hover {
-            background: var(--maroon);
-            color: white;
-            border-color: var(--maroon);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-
-        /* ========== APPLICATION HEADER ========== */
-        .app-header {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 20px 28px;
-            margin-bottom: 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 16px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-        .app-header .left {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .app-header .left .avatar {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background: var(--badge-bg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            flex-shrink: 0;
-            border: 2px solid var(--maroon-light);
-        }
-        .app-header .left .avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .app-header .left .avatar .initials {
-            font-weight: 700;
-            font-size: 1.2rem;
-            color: var(--text-primary);
-        }
-        .app-info h1 {
-            color: var(--text-primary);
-            font-size: 1.2rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .app-info h1 i {
-            color: var(--maroon-light);
-        }
-        .app-info .meta {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-        }
-        .app-info .meta strong {
-            color: var(--text-primary);
-        }
-
-        .status-badge-large {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 20px;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            box-shadow: var(--shadow-sm);
-        }
-
-        /* ========== INFO GRID ========== */
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-            gap: 20px;
-            margin-bottom: 24px;
-        }
-        .info-card {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            padding: 20px 24px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-color);
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-        .info-card:hover {
-            box-shadow: var(--shadow-hover);
-        }
-        .info-card .card-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 14px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--border-color);
-        }
-        .info-card .card-header h3 {
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-weight: 700;
-        }
-        .info-card .card-header i {
-            color: var(--maroon-light);
-            font-size: 1rem;
-        }
-
-        .info-row {
-            display: flex;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .info-row:last-child {
-            border-bottom: none;
-        }
-        .info-row .label {
-            width: 140px;
-            font-weight: 600;
-            color: var(--text-muted);
-            font-size: 0.78rem;
-            flex-shrink: 0;
-        }
-        .info-row .value {
-            flex: 1;
-            color: var(--text-secondary);
-            font-size: 0.82rem;
-        }
-        .info-row .value .highlight {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-        .info-row .value .unit {
-            color: var(--color-success);
-            font-weight: 700;
-        }
-
-        /* ========== HOUSING NEED ========== */
-        .housing-need {
-            background: var(--badge-bg);
-            border-radius: var(--radius-element);
-            padding: 16px 20px;
-            margin-top: 8px;
-            border-left: 3px solid var(--maroon-light);
-        }
-        .housing-need .content {
-            color: var(--text-secondary);
-            font-size: 0.82rem;
-            line-height: 1.6;
-            white-space: pre-wrap;
-        }
-
-        /* ========== DOCUMENTS ========== */
-        .documents-list {
-            display: grid;
-            gap: 10px;
-        }
-        .document-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 14px;
-            background: var(--badge-bg);
-            border-radius: var(--radius-element);
-            transition: all 0.3s;
-            border: 1px solid var(--border-color);
-        }
-        .document-item:hover {
-            background: var(--border-color);
-            transform: translateX(4px);
-        }
-        .document-item .doc-name {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-        }
-        .document-item .doc-name i {
-            color: var(--maroon-light);
-            font-size: 1rem;
-        }
-        .btn-download {
-            background: var(--maroon);
-            color: white;
-            padding: 4px 14px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-size: 0.7rem;
-            font-weight: 600;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .btn-download:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 30px 20px;
-        }
-        .empty-state i {
-            font-size: 2rem;
-            color: var(--text-muted);
-            opacity: 0.3;
-            display: block;
-            margin-bottom: 10px;
-        }
-        .empty-state p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        /* ========== ACTION BUTTONS ========== */
-        .action-buttons {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-        }
-        .btn-primary {
-            background: var(--maroon);
-            color: white;
-            padding: 10px 24px;
-            border: none;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.82rem;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s;
-            box-shadow: var(--shadow-sm);
-        }
-        .btn-primary:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-        .btn-secondary {
-            background: var(--badge-bg);
-            color: var(--text-secondary);
-            padding: 10px 24px;
-            border: none;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 0.82rem;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s;
-        }
-        .btn-secondary:hover {
-            background: var(--border-color);
-            transform: translateY(-2px);
-        }
-        .btn-print {
-            background: var(--color-info);
-            color: white;
-        }
-        .btn-print:hover {
-            background: #1565C0;
-        }
-
-        /* ========== MODAL ========== */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-            backdrop-filter: blur(4px);
-        }
-        .modal.active {
-            display: flex;
-        }
-        .modal-content {
-            background: var(--card-bg);
-            border-radius: var(--radius-card);
-            width: 90%;
-            max-width: 550px;
-            max-height: 90vh;
-            overflow-y: auto;
-            animation: slideIn 0.3s ease;
-            box-shadow: var(--shadow-lg);
-            border: 1px solid var(--border-color);
-        }
-        @keyframes slideIn {
-            from { transform: translateY(-30px) scale(0.95); opacity: 0; }
-            to { transform: translateY(0) scale(1); opacity: 1; }
-        }
-        .modal-header {
-            padding: 18px 24px;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--badge-bg);
-            border-radius: var(--radius-card) var(--radius-card) 0 0;
-        }
-        .modal-header h2 {
-            font-size: 1.1rem;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .modal-header h2 i {
-            color: var(--maroon-light);
-        }
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: var(--text-muted);
-            transition: all 0.3s;
-            line-height: 1;
-        }
-        .close-btn:hover {
-            color: var(--maroon);
-            transform: rotate(90deg);
-        }
-        .modal-body {
-            padding: 24px;
-        }
-        .modal-body .applicant-info {
-            padding: 10px 14px;
-            background: var(--badge-bg);
-            border-radius: var(--radius-element);
-            margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .modal-body .applicant-info span {
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-        }
-        .modal-body .applicant-info strong {
-            color: var(--text-primary);
-        }
-        .form-group {
-            margin-bottom: 16px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            font-size: 0.82rem;
-        }
-        .form-group select,
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px 14px;
-            border: 2px solid var(--border-color);
-            border-radius: var(--radius-element);
-            font-size: 0.85rem;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            transition: all 0.3s;
-            font-family: inherit;
-        }
-        .form-group select:focus,
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--maroon-light);
-            box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.1);
-        }
-        .form-group small {
-            display: block;
-            margin-top: 4px;
-            color: var(--text-muted);
-            font-size: 0.7rem;
-        }
-        .modal-footer {
-            padding: 16px 24px;
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            background: var(--badge-bg);
-            border-radius: 0 0 var(--radius-card) var(--radius-card);
-        }
-
-        /* ========== RESPONSIVE ========== */
-        @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; padding: 20px; }
-            .info-grid { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; }
-            .top-bar-actions { justify-content: stretch; flex-wrap: wrap; }
-            .app-header { flex-direction: column; align-items: flex-start; }
-            .app-header .left { width: 100%; }
-            .info-row { flex-direction: column; }
-            .info-row .label { width: 100%; margin-bottom: 4px; }
-            .action-buttons { flex-direction: column; }
-            .action-buttons .btn-primary,
-            .action-buttons .btn-secondary { width: 100%; justify-content: center; }
-            .modal-content { width: 95%; }
-            .modal-body .applicant-info { flex-direction: column; }
-            .housing-need { padding: 12px 16px; }
-        }
-        @media (max-width: 480px) {
-            .main-content { padding: 16px; }
-            .app-header { padding: 16px 20px; }
-            .app-info h1 { font-size: 1rem; }
-            .info-card { padding: 16px 18px; }
-            .document-item { flex-direction: column; gap: 8px; }
-            .document-item .btn-download { width: 100%; justify-content: center; }
-        }
-        @media print {
-            .sidebar, .top-bar, .back-btn, .action-buttons, .theme-toggle { display: none; }
-            .main-content { margin-left: 0; padding: 20px; }
-            .info-card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
-            .app-header { box-shadow: none; border: 1px solid #ddd; }
-            .status-badge-large { border: 1px solid #ccc; }
-        }
-    </style>
+<?php
+$page_title = 'View Housing Application #' . $beneficiary_id . ' - Staff Portal';
+$active_nav = 'housing';
+require_once __DIR__ . '/includes/staff-head.php';
+?>
+<style>
+/* Page Specific Details & Modal Styling */
+.app-header { background: var(--ref-card); border-radius: 20px; padding: 20px 24px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--ref-shadow-sm); border: 1px solid var(--ref-border); }
+.app-header .left { display: flex; align-items: center; gap: 16px; }
+.app-header .left .avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--ref-canvas); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 2px solid var(--ref-maroon); }
+.app-header .left .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.app-header .left .avatar .initials { font-weight: 800; font-size: 1.1rem; color: var(--ref-maroon); }
+.app-info h1 { color: var(--ref-text); font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.app-info h1 i { color: var(--ref-maroon); }
+.app-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76rem; color: var(--ref-muted); margin-top: 4px; }
+.app-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.status-badge-large { padding: 6px 18px; border-radius: 50px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 20px; }
+.info-card { background: var(--ref-card); border-radius: 20px; padding: 20px 22px; box-shadow: var(--ref-shadow-sm); border: 1px solid var(--ref-border); }
+.info-card .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--ref-border); }
+.info-card .card-header h3 { color: var(--ref-text); font-size: 0.92rem; font-weight: 700; }
+.info-card .card-header i { color: var(--ref-maroon); font-size: 1rem; }
+.info-row { display: flex; padding: 8px 0; border-bottom: 1px solid var(--ref-border); font-size: 0.82rem; }
+.info-row:last-child { border-bottom: none; }
+.info-row .label { width: 140px; font-weight: 600; color: var(--ref-muted); flex-shrink: 0; }
+.info-row .value { flex: 1; color: var(--ref-text); font-weight: 500; }
+.info-row .value .highlight { color: var(--ref-text); font-weight: 700; }
+.housing-need { background: var(--ref-canvas); border-radius: 14px; padding: 14px 18px; margin-top: 8px; border-left: 3px solid var(--ref-maroon); }
+.housing-need .content { color: var(--ref-text); font-size: 0.82rem; line-height: 1.6; white-space: pre-wrap; }
+.documents-list { display: grid; gap: 10px; }
+.document-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--ref-canvas); border-radius: 12px; transition: all 0.2s; border: 1px solid var(--ref-border); }
+.document-item:hover { background: var(--ref-card); border-color: rgba(127, 3, 3, 0.3); }
+.document-item .doc-name { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--ref-text); font-weight: 600; }
+.document-item .doc-name i { color: var(--ref-maroon); font-size: 1rem; }
+.btn-download { background: var(--ref-maroon); color: white; padding: 5px 14px; border-radius: 50px; text-decoration: none; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+.action-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); display: none; justify-content: center; align-items: center; z-index: 2000; backdrop-filter: blur(4px); }
+.modal.active { display: flex; }
+.modal-content { background: var(--ref-card); border-radius: 24px; width: 90%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: var(--ref-shadow-lg); border: 1px solid var(--ref-border); }
+.modal-header { padding: 18px 24px; border-bottom: 1px solid var(--ref-border); display: flex; justify-content: space-between; align-items: center; background: var(--ref-card-subtle); }
+.modal-header h2 { font-size: 1.1rem; font-weight: 800; color: var(--ref-text); display: flex; align-items: center; gap: 10px; margin: 0; }
+.close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--ref-muted); line-height: 1; }
+.modal-body { padding: 22px 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--ref-border); display: flex; justify-content: flex-end; gap: 12px; background: var(--ref-card-subtle); }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; margin-bottom: 6px; font-weight: 700; color: var(--ref-text); font-size: 0.8rem; }
+.form-group small { display: block; margin-top: 4px; font-size: 0.72rem; color: var(--ref-muted); }
+</style>
 </head>
 <body>
 <div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-icon"><i class="fas fa-home"></i></div>
-            <div class="logo-text">
-                <h2>One Palayan-Kalinga Hub</h2>
-                <span>Staff Panel</span>
-            </div>
-        </div>
-        
-        <div class="staff-profile">
-            <div class="staff-avatar">
-                <?php if(!empty($avatar_url)): ?>
-                    <img src="<?php echo htmlspecialchars($avatar_url); ?>" alt="Profile Picture">
-                <?php else: ?>
-                    <?php echo $initials; ?>
-                <?php endif; ?>
-            </div>
-            <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-            <p><?php echo htmlspecialchars($staff_info['position'] ?? 'Staff Member'); ?></p>
-            <span class="staff-badge"><i class="fas fa-user-check"></i> Staff</span>
-        </div>
-        
-        <ul class="sidebar-menu">
-            <li><a href="../staff-dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-            <li class="menu-divider">Appointments</li>
-            <li><a href="manage-appointments.php"><i class="fas fa-calendar-check"></i> Manage Appointments</a></li>
-            <li class="menu-divider">Services</li>
-            <li><a href="manage-aics.php"><i class="fas fa-hand-holding-heart"></i> Manage AICS</a></li>
-            <li><a href="manage-housing.php"><i class="fas fa-home"></i> Manage Housing</a></li>
-            <li><a href="reports.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-            <li class="menu-divider"></li>
-            <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-        
-        <div class="sidebar-footer">
-            <a href="../index.php"><i class="fas fa-globe"></i> View Main Site</a>
-        </div>
-    </div>
+    <!-- Modern Staff Sidebar -->
+    <?php require_once __DIR__ . '/includes/staff-sidebar.php'; ?>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="page-title">
-                <h1><i class="fas fa-home" style="color: var(--maroon-light); margin-right: 10px;"></i> Housing Application Details</h1>
-                <p>View and manage housing application</p>
-            </div>
-            <div class="top-bar-actions">
-                <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                    <i class="fas <?php echo $dark_mode ? 'fa-sun' : 'fa-moon'; ?>"></i>
-                </button>
-                <a href="manage-housing.php" class="top-icon"><i class="fas fa-arrow-left"></i></a>
-            </div>
-        </div>
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Unified Staff Header Bar -->
+        <?php require_once __DIR__ . '/includes/staff-header.php'; ?>
 
-        <a href="manage-housing.php" class="back-btn">
-            <i class="fas fa-arrow-left"></i> Back to Housing Applications
-        </a>
+        <!-- Elevated Big Card Canvas -->
+        <div class="staff-big-card">
+            <div class="staff-subheader">
+                <div class="staff-subheader-title">
+                    <h1><i class="fas fa-home"></i> Housing Application Details</h1>
+                    <p>Application #<?php echo $beneficiary_id; ?> • Beneficiary Information</p>
+                </div>
+                <div class="staff-subheader-actions">
+                    <a href="manage-housing.php" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Housing Applications</a>
+                </div>
+            </div>
 
-        <?php $statusInfo = getHousingStatusInfo($application['status']); ?>
+            <?php if (isset($_SESSION['success'])): ?>
+                <div style="background: rgba(76, 175, 80, 0.1); border-left: 4px solid #4CAF50; color: #2e7d32; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-check-circle" style="font-size: 1.1rem;"></i>
+                    <span><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></span>
+                </div>
+            <?php endif; ?>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div style="background: rgba(244, 67, 54, 0.1); border-left: 4px solid #f44336; color: #c62828; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 1.1rem;"></i>
+                    <span><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></span>
+                </div>
+            <?php endif; ?>
+
+            <?php $statusInfo = getHousingStatusInfo($application['status']); ?>
         
         <!-- Application Header -->
         <div class="app-header">
@@ -1014,9 +300,19 @@ $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($ap
                     <h1>
                         <i class="fas fa-tag"></i>
                         <?php echo htmlspecialchars($application['program_name']); ?>
-                        <span style="font-size: 0.7rem; background: var(--badge-bg); padding: 2px 12px; border-radius: 50px; font-weight: 500; color: var(--text-muted);">
-                            #<?php echo $beneficiary_id; ?>
+                        <span style="font-family: monospace; font-size: 0.72rem; background: var(--ref-card-subtle, #f5f5f5); padding: 3px 12px; border-radius: 50px; font-weight: 800; color: var(--ref-maroon, #7F0303); border: 1px solid var(--ref-border, #ddd);">
+                            <i class="fas fa-barcode"></i> <?php echo 'HSG-' . date('Y', strtotime($application['application_date'] ?? 'now')) . '-' . str_pad($beneficiary_id, 5, '0', STR_PAD_LEFT); ?>
                         </span>
+                        <span style="font-size: 0.7rem; color: var(--ref-muted);">(ID #<?php echo $beneficiary_id; ?>)</span>
+                        <?php if(($application['housing_type'] ?? 'relocation') === 'in_site'): ?>
+                            <span style="font-size: 0.72rem; background: rgba(46, 125, 50, 0.12); color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.25); padding: 3px 12px; border-radius: 50px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="fas fa-house-chimney-user"></i> In-Site Housing (Sariling Lupa)
+                            </span>
+                        <?php else: ?>
+                            <span style="font-size: 0.72rem; background: rgba(15, 65, 74, 0.12); color: #0F414A; border: 1px solid rgba(15, 65, 74, 0.25); padding: 3px 12px; border-radius: 50px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="fas fa-truck-ramp-box"></i> Relocation Housing
+                            </span>
+                        <?php endif; ?>
                     </h1>
                     <div class="meta">
                         <strong>Applicant:</strong> <?php echo htmlspecialchars($application['full_name']); ?>
@@ -1082,27 +378,64 @@ $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($ap
                 <?php endif; ?>
             </div>
             
-            <!-- Housing Program Details -->
+            <!-- Housing Assistance Pathway & Program Details -->
             <div class="info-card">
                 <div class="card-header">
                     <i class="fas fa-building"></i>
-                    <h3>Housing Program</h3>
+                    <h3>Housing Assistance Details</h3>
+                </div>
+                <div class="info-row">
+                    <span class="label">Assistance Pathway</span>
+                    <span class="value">
+                        <?php if(($application['housing_type'] ?? 'relocation') === 'in_site'): ?>
+                            <strong style="color: #2e7d32;"><i class="fas fa-house-chimney-user"></i> In-Site Housing</strong>
+                            <small style="display: block; color: var(--ref-muted); font-size: 0.72rem;">Construction on applicant's own property without relocation</small>
+                        <?php else: ?>
+                            <strong style="color: #0F414A;"><i class="fas fa-truck-ramp-box"></i> Relocation Housing</strong>
+                            <small style="display: block; color: var(--ref-muted); font-size: 0.72rem;">Resettlement to designated community housing project</small>
+                        <?php endif; ?>
+                    </span>
                 </div>
                 <div class="info-row">
                     <span class="label">Program Name</span>
                     <span class="value"><span class="highlight"><?php echo htmlspecialchars($application['program_name']); ?></span></span>
                 </div>
-                <div class="info-row">
-                    <span class="label">Location</span>
-                    <span class="value"><?php echo htmlspecialchars($application['location']); ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Total Units</span>
-                    <span class="value"><?php echo $application['total_units']; ?> units</span>
-                </div>
+                <?php if(($application['housing_type'] ?? 'relocation') === 'in_site'): ?>
+                    <div class="info-row">
+                        <span class="label">Property Address</span>
+                        <span class="value"><strong style="color: #2e7d32;"><?php echo htmlspecialchars($application['property_location'] ?: $application['location']); ?></strong></span>
+                    </div>
+                    <?php if(!empty($application['land_ownership_status'])): ?>
+                    <div class="info-row">
+                        <span class="label">Land Tenure</span>
+                        <span class="value"><?php echo htmlspecialchars($application['land_ownership_status']); ?></span>
+                    </div>
+                    <?php endif; ?>
+                    <?php if(!empty($application['lot_area'])): ?>
+                    <div class="info-row">
+                        <span class="label">Lot Area</span>
+                        <span class="value"><?php echo htmlspecialchars($application['lot_area']); ?> sq.m</span>
+                    </div>
+                    <?php endif; ?>
+                    <?php if(!empty($application['construction_type'])): ?>
+                    <div class="info-row">
+                        <span class="label">Construction Scope</span>
+                        <span class="value"><?php echo htmlspecialchars($application['construction_type']); ?></span>
+                    </div>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <div class="info-row">
+                        <span class="label">Location</span>
+                        <span class="value"><?php echo htmlspecialchars($application['location']); ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Total Units</span>
+                        <span class="value"><?php echo $application['total_units']; ?> units</span>
+                    </div>
+                <?php endif; ?>
                 <?php if(!empty($application['unit_assigned'])): ?>
                 <div class="info-row">
-                    <span class="label">Unit Assigned</span>
+                    <span class="label"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Lot/Grant Ref' : 'Unit Assigned'; ?></span>
                     <span class="value"><span class="unit"><?php echo htmlspecialchars($application['unit_assigned']); ?></span></span>
                 </div>
                 <?php endif; ?>
@@ -1134,8 +467,27 @@ $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($ap
                 </div>
                 <?php if(!empty($application['interview_date'])): ?>
                 <div class="info-row">
-                    <span class="label">Interview Date</span>
+                    <span class="label"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Lot Inspection Date' : 'Interview Date'; ?></span>
                     <span class="value"><?php echo date('F d, Y', strtotime($application['interview_date'])); ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if(!empty($application['move_in_date'])): ?>
+                <div class="info-row">
+                    <span class="label"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Grant Release Date' : 'Turnover / Move-in'; ?></span>
+                    <span class="value"><strong style="color: #9C27B0;"><i class="fas fa-calendar-check"></i> <?php echo date('F d, Y', strtotime($application['move_in_date'])); ?></strong></span>
+                </div>
+                <?php endif; ?>
+                <?php if(!empty($linked_appointment)): ?>
+                <div class="info-row">
+                    <span class="label">Linked Appointment</span>
+                    <span class="value">
+                        <a href="view-appointment.php?id=<?php echo $linked_appointment['appointment_id']; ?>" style="color: #0F414A; font-weight: 700; text-decoration: underline;">
+                            <i class="fas fa-calendar-day"></i> <?php echo htmlspecialchars($linked_appointment['reference_number']); ?>
+                        </a>
+                        <span style="display: block; font-size: 0.75rem; color: var(--ref-muted); margin-top: 2px;">
+                            <?php echo date('M d, Y', strtotime($linked_appointment['appointment_date'])); ?> &bull; <?php echo htmlspecialchars($linked_appointment['window_assignment'] ?? 'Window 2'); ?> &bull; <span style="text-transform: capitalize; color: #2e7d32; font-weight: 600;"><?php echo htmlspecialchars($linked_appointment['status']); ?></span>
+                        </span>
+                    </span>
                 </div>
                 <?php endif; ?>
             </div>
@@ -1244,13 +596,18 @@ $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($ap
                 <i class="fas fa-edit"></i> Update Status
             </button>
             <?php endif; ?>
+            <a href="../print-claim-stub.php?type=housing&id=<?php echo $beneficiary_id; ?>" target="_blank" class="btn-primary" style="background: var(--ref-maroon, #7F0303);">
+                <i class="fas fa-receipt"></i> Official Claim Stub
+            </a>
             <button onclick="window.print()" class="btn-primary btn-print">
                 <i class="fas fa-print"></i> Print Details
             </button>
         </div>
     </div>
+</main>
 </div>
 
+<!-- Update Status Modal -->
 <!-- Update Status Modal -->
 <div id="updateModal" class="modal">
     <div class="modal-content">
@@ -1259,39 +616,64 @@ $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($ap
             <button class="close-btn" onclick="closeModal()">&times;</button>
         </div>
         <form method="POST" action="manage-housing.php">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="beneficiary_id" value="<?php echo $beneficiary_id; ?>">
+            <input type="hidden" name="return_to" value="view">
+            
             <div class="modal-body">
-                <input type="hidden" name="beneficiary_id" value="<?php echo $beneficiary_id; ?>">
-                
-                <div class="applicant-info">
-                    <span><strong>Applicant:</strong> <?php echo htmlspecialchars($application['full_name']); ?></span>
-                    <span><strong>Program:</strong> <?php echo htmlspecialchars($application['program_name']); ?></span>
+                <div class="applicant-info" style="display: flex; flex-direction: column; gap: 6px; background: var(--badge-bg); padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <div><strong>Applicant:</strong> <?php echo htmlspecialchars($application['full_name']); ?></div>
+                    <div><strong>Program:</strong> <?php echo htmlspecialchars($application['program_name']); ?></div>
+                    <div>
+                        <strong>Assistance Pathway:</strong>
+                        <?php if(($application['housing_type'] ?? 'relocation') === 'in_site'): ?>
+                            <span style="color:#2e7d32; font-weight:700;"><i class="fas fa-house-chimney-user"></i> In-Site Housing (Sariling Lupa)</span>
+                        <?php else: ?>
+                            <span style="color:#0F414A; font-weight:700;"><i class="fas fa-truck-ramp-box"></i> Relocation Housing</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 
                 <div class="form-group">
                     <label>New Status</label>
                     <select name="new_status" id="modal_status" required onchange="toggleHousingFields()">
                         <option value="qualified">📋 Mark as Qualified</option>
-                        <option value="approved">✅ Approve & Assign Unit</option>
-                        <option value="rejected">❌ Reject</option>
+                        <option value="approved">✅ Approve & Assign <?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Grant / Voucher' : 'Unit'; ?></option>
+                        <option value="rejected">❌ Disapprove</option>
                         <option value="released">💰 Mark as Released</option>
                         <option value="pending">⏰ Mark as Pending</option>
                     </select>
                 </div>
                 
                 <div class="form-group" id="unit_field" style="display: none;">
-                    <label>Unit Number / House Assignment</label>
-                    <input type="text" name="unit_assigned" id="unit_assigned" placeholder="e.g., Block 1, Lot 5, Unit 203">
-                    <small>The housing unit assigned to the beneficiary</small>
+                    <label id="unit_assigned_label"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Core Shelter Grant / Material Voucher Code' : 'Unit Number / House Assignment'; ?></label>
+                    <input type="text" name="unit_assigned" id="unit_assigned" 
+                           placeholder="<?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'e.g., Voucher #INSITE-2026-0042 (Core Shelter Package)' : 'e.g., Block 1, Lot 5, Unit 203'; ?>">
+                    <small id="unit_assigned_small"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'The construction grant voucher or materials allocation reference' : 'The housing unit assigned to the beneficiary'; ?></small>
                 </div>
                 
                 <div class="form-group" id="interview_field" style="display: none;">
-                    <label>Interview / Site Visit Date</label>
+                    <label id="interview_date_label"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Site Verification / Field Inspection Date' : 'Interview / Family Assessment Date'; ?></label>
                     <input type="date" name="interview_date" id="interview_date" min="<?php echo date('Y-m-d'); ?>">
+                    <small id="interview_date_small"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Schedule for on-site lot and construction inspection' : 'Schedule for caseworker interview and assessment'; ?></small>
+                </div>
+
+                <div class="form-group" id="move_in_field" style="display: none;">
+                    <label id="move_in_date_label"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Grant Voucher Release / Turn-Over Date' : 'Move-in / Unit Turn-Over Date'; ?></label>
+                    <input type="date" name="move_in_date" id="move_in_date">
+                    <small id="move_in_date_small"><?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'Official date for release of building grant package' : 'Official move-in date for assigned housing unit'; ?></small>
+                </div>
+
+                <div class="form-group" id="assessment_field" style="display: none;">
+                    <label for="assessment_notes" id="assessment_notes_label">Caseworker Assessment / Clearance Notes</label>
+                    <textarea name="assessment_notes" id="assessment_notes" rows="2" 
+                              placeholder="<?php echo ($application['housing_type'] ?? 'relocation') === 'in_site' ? 'e.g., Land ownership documents verified, lot inspected and cleared for construction grant...' : 'e.g., Family eligibility confirmed for relocation allocation...'; ?>"></textarea>
+                    <small>Caseworker notes to record permanently on this application</small>
                 </div>
                 
                 <div class="form-group" id="remarks_field" style="display: none;">
-                    <label>Rejection Reason</label>
-                    <textarea name="remarks" id="remarks" rows="3" placeholder="Enter reason for rejection..."></textarea>
+                    <label>Disapproval Reason</label>
+                    <textarea name="remarks" id="remarks" rows="3" placeholder="Enter reason for disapproval..."></textarea>
                 </div>
             </div>
             
@@ -1305,41 +687,37 @@ $app_initials = strtoupper(substr($application['first_name'], 0, 1) . substr($ap
     </div>
 </div>
 
+<?php require_once __DIR__ . '/includes/staff-footer.php'; ?>
 <script>
-// ========== THEME TOGGLE ==========
-const themeToggle = document.getElementById('themeToggle');
-const html = document.documentElement;
-
-const currentTheme = localStorage.getItem('theme') || 
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-function setTheme(theme) {
-    html.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    const icon = themeToggle.querySelector('i');
-    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-    document.cookie = `dark_mode=${theme === 'dark' ? 'enabled' : 'disabled'}; path=/; max-age=31536000`;
-}
-
-setTheme(currentTheme);
-
-themeToggle.addEventListener('click', () => {
-    const current = html.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
+const currentAppData = <?php echo json_encode($application); ?>;
 
 // ========== MODAL FUNCTIONS ==========
 function showUpdateModal() {
+    if (currentAppData) {
+        document.getElementById('modal_status').value = currentAppData.status || 'qualified';
+        document.getElementById('unit_assigned').value = currentAppData.unit_assigned || '';
+        document.getElementById('interview_date').value = currentAppData.interview_date || '';
+        document.getElementById('move_in_date').value = currentAppData.move_in_date || (currentAppData.status === 'released' ? '<?php echo date('Y-m-d'); ?>' : '');
+    }
+    if (document.getElementById('assessment_notes')) document.getElementById('assessment_notes').value = '';
+    if (document.getElementById('remarks')) document.getElementById('remarks').value = '';
+
     document.getElementById('updateModal').classList.add('active');
+    toggleHousingFields();
 }
 
 function closeModal() {
     document.getElementById('updateModal').classList.remove('active');
     document.getElementById('unit_field').style.display = 'none';
     document.getElementById('interview_field').style.display = 'none';
+    if (document.getElementById('move_in_field')) document.getElementById('move_in_field').style.display = 'none';
+    const assessmentField = document.getElementById('assessment_field');
+    if (assessmentField) assessmentField.style.display = 'none';
     document.getElementById('remarks_field').style.display = 'none';
     document.getElementById('unit_assigned').value = '';
     document.getElementById('interview_date').value = '';
+    if (document.getElementById('move_in_date')) document.getElementById('move_in_date').value = '';
+    if (document.getElementById('assessment_notes')) document.getElementById('assessment_notes').value = '';
     document.getElementById('remarks').value = '';
     document.getElementById('modal_status').value = 'qualified';
 }
@@ -1348,19 +726,40 @@ function toggleHousingFields() {
     const status = document.getElementById('modal_status').value;
     const unitField = document.getElementById('unit_field');
     const interviewField = document.getElementById('interview_field');
+    const moveInField = document.getElementById('move_in_field');
+    const assessmentField = document.getElementById('assessment_field');
     const remarksField = document.getElementById('remarks_field');
     
     unitField.style.display = 'none';
     interviewField.style.display = 'none';
+    if (moveInField) moveInField.style.display = 'none';
+    if (assessmentField) assessmentField.style.display = 'none';
     remarksField.style.display = 'none';
+    
+    document.getElementById('unit_assigned').required = false;
+    document.getElementById('interview_date').required = false;
+    if (document.getElementById('move_in_date')) document.getElementById('move_in_date').required = false;
+    document.getElementById('remarks').required = false;
     
     if (status === 'approved') {
         unitField.style.display = 'block';
         interviewField.style.display = 'block';
+        if (moveInField) moveInField.style.display = 'block';
+        if (assessmentField) assessmentField.style.display = 'block';
         document.getElementById('unit_assigned').required = true;
-        document.getElementById('interview_date').required = true;
+    } else if (status === 'released') {
+        unitField.style.display = 'block';
+        if (moveInField) {
+            moveInField.style.display = 'block';
+            document.getElementById('move_in_date').required = true;
+            if (!document.getElementById('move_in_date').value) {
+                document.getElementById('move_in_date').value = '<?php echo date('Y-m-d'); ?>';
+            }
+        }
+        if (assessmentField) assessmentField.style.display = 'block';
     } else if (status === 'qualified') {
         interviewField.style.display = 'block';
+        if (assessmentField) assessmentField.style.display = 'block';
         document.getElementById('interview_date').required = true;
     } else if (status === 'rejected') {
         remarksField.style.display = 'block';

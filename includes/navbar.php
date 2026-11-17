@@ -1,43 +1,43 @@
 <?php
 // This file contains the navigation bar that's used across the site
+include_once __DIR__ . '/pwa-meta.php';
 ?>
 <nav class="navbar" id="mainNavbar">
     <div class="nav-container">
+        <!-- Hamburger (3 lines) on mobile placed on the left side before the logo -->
+        <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
         <!-- Brand -->
         <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../index.php' : 'index.php'; ?>" class="nav-brand">
             <div class="brand-logo-circle">
                 <?php
-                $logo_path = (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../images/logo.png' : 'images/logo.png';
+                if (!function_exists('cms_get')) {
+                    require_once __DIR__ . '/cms-helper.php';
+                }
+                $nav_logo_src = cms_image('site_logo', 'images/logo.png');
                 ?>
-                <img src="<?php echo $logo_path; ?>" alt="One Palayan-Kalinga Hub Logo">
+                <img src="<?php echo $nav_logo_src; ?>" alt="<?php echo htmlspecialchars(cms_get('site_title', 'One Palayan-Kalinga Hub')); ?> Logo" onerror="this.src='<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../images/logo.png' : 'images/logo.png'; ?>'">
             </div>
             <div class="brand-text">
-                <span class="brand-title">ONE PALAYAN-KALINGA HUB</span>
-                <span class="brand-sub">CSWDO Palayan City</span>
+                <span class="brand-title"><?php echo htmlspecialchars(cms_get('site_title', 'ONE PALAYAN-KALINGA HUB')); ?></span>
+                <span class="brand-sub"><?php echo htmlspecialchars(cms_get('site_tagline', 'CSWDO Palayan City')); ?></span>
             </div>
         </a>
 
         <!-- Desktop Navigation -->
         <ul class="nav-links" id="navLinks">
-            <!-- Public links -->
             <li><a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../index.php' : 'index.php'; ?>"
                    <?php echo basename($_SERVER['PHP_SELF']) == 'index.php' ? 'class="active"' : ''; ?>>Home</a></li>
             <li><a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../services.php' : 'services.php'; ?>"
                    <?php echo basename($_SERVER['PHP_SELF']) == 'services.php' ? 'class="active"' : ''; ?>>Services</a></li>
-            <li><a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../announcements.php' : 'announcements.php'; ?>"
-                   <?php echo basename($_SERVER['PHP_SELF']) == 'announcements.php' ? 'class="active"' : ''; ?>>Announcements</a></li>
-
-            <?php if(isLoggedIn() && !isStaff() && !isAdmin()): ?>
-                <li><a href="appointments.php" <?php echo basename($_SERVER['PHP_SELF']) == 'appointments.php' ? 'class="active"' : ''; ?>>Appointments</a></li>
-                <li><a href="track-aics.php"   <?php echo basename($_SERVER['PHP_SELF']) == 'track-aics.php'   ? 'class="active"' : ''; ?>>Track AICS</a></li>
-                <li><a href="housing.php"       <?php echo basename($_SERVER['PHP_SELF']) == 'housing.php'       ? 'class="active"' : ''; ?>>Housing</a></li>
-            <?php endif; ?>
-
-            <?php if(!isLoggedIn()): ?>
-                <li><a href="appointments.php">Appointments</a></li>
-                <li><a href="track-aics.php">Track AICS</a></li>
-                <li><a href="housing.php">Housing</a></li>
-            <?php endif; ?>
+            <li><a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../about.php' : 'about.php'; ?>"
+                   <?php echo basename($_SERVER['PHP_SELF']) == 'about.php' ? 'class="active"' : ''; ?>>About</a></li>
+            <li><a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../contact.php' : 'contact.php'; ?>"
+                   <?php echo basename($_SERVER['PHP_SELF']) == 'contact.php' ? 'class="active"' : ''; ?>>Contact Us</a></li>
         </ul>
 
         <!-- Right Actions -->
@@ -48,7 +48,7 @@
             </button>
 
             <?php if(!isLoggedIn()): ?>
-                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? '../login.php' : 'login.php'; ?>" class="nav-btn nav-btn-outline">Log In</a>
+                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? '../login.php' : 'login.php'; ?>" class="nav-btn nav-btn-outline">Login</a>
                 <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? '../register.php' : 'register.php'; ?>" class="nav-btn nav-btn-solid">Register</a>
             <?php else: ?>
                 <!-- Notification Bell -->
@@ -64,67 +64,125 @@
                 </a>
                 <?php endif; ?>
 
-                <!-- User Dropdown -->
-                <div class="nav-user-dropdown" id="userDropdown">
-                    <button class="user-pill" id="userPillBtn" aria-expanded="false">
-                        <div class="user-avatar-sm">
-                            <?php
-                            $name_parts = explode(' ', $_SESSION['full_name'] ?? 'User');
-                            $initials = '';
-                            foreach($name_parts as $part) { $initials .= strtoupper(substr($part, 0, 1)); }
-                            echo substr($initials, 0, 2);
-                            ?>
-                        </div>
-                        <span><?php echo htmlspecialchars(explode(' ', $_SESSION['full_name'] ?? 'User')[0]); ?></span>
-                        <i class="fas fa-chevron-down chevron-icon"></i>
-                    </button>
+                <!-- User Dropdown / Logged In Navigation -->
+                <?php 
+                $is_nav_home = (basename($_SERVER['PHP_SELF']) === 'index.php');
+                $user_dash_link = (isStaff() || isAdmin()) 
+                    ? ((isAdmin() && strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? 'dashboard.php' : (isAdmin() ? 'admin/dashboard.php' : 'staff/staff-dashboard.php')) 
+                    : 'dashboard.php';
+                
+                // Get user avatar picture if available
+                $nav_profile_pic = '';
+                if (isset($_SESSION['user_id'])) {
+                    if (!empty($_SESSION['profile_picture']) && file_exists($_SESSION['profile_picture'])) {
+                        $nav_profile_pic = $_SESSION['profile_picture'];
+                    } elseif (class_exists('Database')) {
+                        try {
+                            $nav_db = (new Database())->getConnection();
+                            $av_stmt = $nav_db->prepare("SELECT profile_picture FROM users WHERE user_id = :uid LIMIT 1");
+                            $av_stmt->execute([':uid' => $_SESSION['user_id']]);
+                            $av_res = $av_stmt->fetch(PDO::FETCH_ASSOC);
+                            if ($av_res && !empty($av_res['profile_picture']) && file_exists($av_res['profile_picture'])) {
+                                $nav_profile_pic = $av_res['profile_picture'];
+                                $_SESSION['profile_picture'] = $nav_profile_pic;
+                            }
+                        } catch (Exception $e) {}
+                    }
+                }
+                ?>
 
-                    <div class="user-dropdown-menu" id="userDropdownMenu">
-                        <div class="dropdown-header">
-                            <div class="user-avatar-lg">
-                                <?php echo substr($initials, 0, 2); ?>
-                            </div>
-                            <div>
-                                <p class="dropdown-name"><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></p>
-                                <p class="dropdown-role"><?php echo ucfirst($_SESSION['role'] ?? 'User'); ?></p>
-                            </div>
+                <?php if ($is_nav_home): ?>
+                    <!-- Logged-in Home Page (index.php): Avatar with back-to-dashboard arrow badge (No public/user dropdown menu per Requirement 1) -->
+                    <a href="<?php echo $user_dash_link; ?>" class="nav-home-dashboard-btn" title="Back to Dashboard" aria-label="Back to Dashboard">
+                        <div class="nav-home-avatar-wrap">
+                            <?php if (!empty($nav_profile_pic)): ?>
+                                <img src="<?php echo htmlspecialchars($nav_profile_pic); ?>" alt="Profile" class="nav-home-avatar-img">
+                            <?php else: ?>
+                                <div class="nav-home-avatar-initials">
+                                    <?php echo substr($initials, 0, 2); ?>
+                                </div>
+                            <?php endif; ?>
+                            <span class="nav-home-arrow-badge" title="Back to Dashboard">
+                                <i class="fas fa-arrow-right"></i>
+                            </span>
                         </div>
-                        <div class="dropdown-body">
-                            <?php if(!isStaff() && !isAdmin()): ?>
-                                 <a href="dashboard.php"       class="dropdown-item"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                                 <a href="profile.php"         class="dropdown-item"><i class="fas fa-user-circle"></i> Profile</a>
-                                 <a href="my-appointments.php" class="dropdown-item"><i class="fas fa-calendar-check"></i> My Appointments</a>
-                                 <a href="documents.php"       class="dropdown-item"><i class="fas fa-file-alt"></i> My Documents</a>
-                                 <a href="my-housing.php"      class="dropdown-item"><i class="fas fa-home"></i> My Housing</a>
-                                 <a href="my-aics.php"         class="dropdown-item"><i class="fas fa-hand-holding-heart"></i> My AICS</a>
-                                 <a href="calendar.php"        class="dropdown-item"><i class="fas fa-calendar-alt"></i> Event Calendar</a>
-                                 <a href="print-forms.php"     class="dropdown-item"><i class="fas fa-print"></i> Printable Forms</a>
-                                 <a href="feedback.php"        class="dropdown-item"><i class="fas fa-comments"></i> Rate Us / Feedback</a>
-                                 <a href="settings.php"        class="dropdown-item"><i class="fas fa-cog"></i> Settings</a>
-                                 <div class="dropdown-divider"></div>
-                            <?php endif; ?>
-                            <?php if(isStaff() || isAdmin()): ?>
-                                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? 'dashboard.php' : 'staff-dashboard.php'; ?>" class="dropdown-item">
-                                    <i class="fas fa-tachometer-alt"></i>
-                                    <?php echo isAdmin() ? 'Admin Dashboard' : 'Staff Dashboard'; ?>
+                        <span class="nav-home-dash-label">Dashboard</span>
+                    </a>
+                <?php else: ?>
+                    <!-- Normal User Dropdown on other pages using navbar.php -->
+                    <div class="nav-user-dropdown" id="userDropdown">
+                        <button class="user-pill" id="userPillBtn" aria-expanded="false">
+                            <div class="user-avatar-sm">
+                                <?php if (!empty($nav_profile_pic)): ?>
+                                    <img src="<?php echo htmlspecialchars($nav_profile_pic); ?>" alt="Profile" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                                <?php else: ?>
+                                    <?php echo substr($initials, 0, 2); ?>
+                                <?php endif; ?>
+                            </div>
+                            <span><?php echo htmlspecialchars(explode(' ', $_SESSION['full_name'] ?? 'User')[0]); ?></span>
+                            <i class="fas fa-chevron-down chevron-icon"></i>
+                        </button>
+
+                        <div class="user-dropdown-menu" id="userDropdownMenu">
+                            <div class="dropdown-header">
+                                <div class="user-avatar-lg">
+                                    <?php if (!empty($nav_profile_pic)): ?>
+                                        <img src="<?php echo htmlspecialchars($nav_profile_pic); ?>" alt="Profile" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                                    <?php else: ?>
+                                        <?php echo substr($initials, 0, 2); ?>
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <p class="dropdown-name"><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></p>
+                                    <p class="dropdown-role"><?php echo ucfirst($_SESSION['role'] ?? 'User'); ?></p>
+                                </div>
+                            </div>
+                            <div class="dropdown-body">
+                                <?php if(!isStaff() && !isAdmin()): ?>
+                                     <a href="dashboard.php"       class="dropdown-item"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                                     <a href="profile.php"         class="dropdown-item"><i class="fas fa-user-circle"></i> Profile</a>
+                                     <a href="my-appointments.php" class="dropdown-item"><i class="fas fa-calendar-check"></i> My Appointments</a>
+                                     <a href="documents.php"       class="dropdown-item"><i class="fas fa-file-alt"></i> My Documents</a>
+                                     <a href="my-housing.php"      class="dropdown-item"><i class="fas fa-home"></i> My Housing</a>
+                                     <a href="my-aics.php"         class="dropdown-item"><i class="fas fa-hand-holding-heart"></i> My AICS</a>
+                                     <a href="calendar.php"        class="dropdown-item"><i class="fas fa-calendar-alt"></i> Event Calendar</a>
+                                     <a href="print-forms.php"     class="dropdown-item"><i class="fas fa-print"></i> Printable Forms</a>
+                                     <a href="feedback.php"        class="dropdown-item"><i class="fas fa-comments"></i> Rate Us / Feedback</a>
+                                     <a href="settings.php"        class="dropdown-item"><i class="fas fa-cog"></i> Settings</a>
+                                     <div class="dropdown-divider"></div>
+                                <?php endif; ?>
+                                <?php if(isStaff() || isAdmin()): ?>
+                                    <?php
+                                    if (isAdmin()) {
+                                        $dash_target = (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? 'dashboard.php' : 'admin/dashboard.php';
+                                        $dash_label = 'Admin Dashboard';
+                                    } else {
+                                        $dash_target = (strpos($_SERVER['PHP_SELF'], '/staff/') !== false || strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? '../staff-dashboard.php' : 'staff-dashboard.php';
+                                        $dash_label = 'Staff Dashboard';
+                                    }
+                                    ?>
+                                    <a href="<?php echo $dash_target; ?>" class="dropdown-item">
+                                        <i class="fas fa-tachometer-alt"></i>
+                                        <?php echo $dash_label; ?>
+                                    </a>
+                                    <div class="dropdown-divider"></div>
+                                <?php endif; ?>
+                                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../logout.php' : 'logout.php'; ?>"
+                                   class="dropdown-item dropdown-item-danger">
+                                    <i class="fas fa-sign-out-alt"></i> Logout
                                 </a>
-                                <div class="dropdown-divider"></div>
-                            <?php endif; ?>
-                            <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../logout.php' : 'logout.php'; ?>"
-                               class="dropdown-item dropdown-item-danger">
-                                <i class="fas fa-sign-out-alt"></i> Logout
-                            </a>
+                            </div>
                         </div>
                     </div>
-                </div>
+                <?php endif; ?>
             <?php endif; ?>
 
-            <!-- Hamburger -->
-            <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
+            <?php if(isLoggedIn()): ?>
+                <!-- Mobile Home Button beside 3 lines (Mobile only) -->
+                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../index.php' : 'index.php'; ?>" class="mobile-nav-home-btn" aria-label="Home" title="Home">
+                    <i class="fas fa-home"></i>
+                </a>
+            <?php endif; ?>
         </div>
     </div>
 </nav>
@@ -141,9 +199,13 @@
 
     <!-- Drawer Header -->
     <div class="drawer-header">
+        <?php
+        $drawer_rel_prefix = (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../' : '';
+        $drawer_logo_src = function_exists('cms_image') ? cms_image('site_logo', $drawer_rel_prefix . 'images/logo.png') : ($drawer_rel_prefix . 'images/logo.png');
+        ?>
         <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../index.php' : 'index.php'; ?>" class="drawer-brand" id="drawerBrandLink">
             <div class="drawer-logo-circle">
-                <img src="<?php echo $logo_path; ?>" alt="Logo">
+                <img src="<?php echo htmlspecialchars($drawer_logo_src); ?>?v=<?php echo @filemtime(__DIR__ . '/../images/logo.png') ?: time(); ?>" alt="Logo" onerror="this.src='<?php echo $drawer_rel_prefix; ?>images/logo.png'">
             </div>
             <div class="drawer-brand-text">
                 <span class="drawer-brand-title">ONE PALAYAN</span>
@@ -159,7 +221,11 @@
     <?php if(isLoggedIn()): ?>
     <div class="drawer-user-card">
         <div class="drawer-avatar">
-            <?php echo substr($initials, 0, 2); ?>
+            <?php if (!empty($nav_profile_pic)): ?>
+                <img src="<?php echo htmlspecialchars($nav_profile_pic); ?>" alt="Profile" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+            <?php else: ?>
+                <?php echo substr($initials, 0, 2); ?>
+            <?php endif; ?>
         </div>
         <div class="drawer-user-info">
             <p class="drawer-user-name"><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'User'); ?></p>
@@ -172,6 +238,14 @@
             </p>
         </div>
     </div>
+    <?php if ($is_nav_home): ?>
+    <div style="padding: 10px 16px 4px;">
+        <a href="<?php echo $user_dash_link; ?>" class="drawer-link drawer-link--active" style="background: #7F0303; color: #FFFFFF; border-radius: 12px; justify-content: center; font-weight: 700; gap: 8px;">
+            <i class="fas fa-arrow-left"></i>
+            <span>Back to Dashboard</span>
+        </a>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <!-- Drawer Navigation -->
@@ -180,6 +254,16 @@
         <!-- ── MAIN PAGES ── -->
         <div class="drawer-section-label">Main</div>
         <ul class="drawer-links">
+            <?php if(isLoggedIn()): ?>
+            <li>
+                <a href="<?php echo $user_dash_link; ?>"
+                   class="drawer-link <?php echo (basename($_SERVER['PHP_SELF']) == 'dashboard.php' || basename($_SERVER['PHP_SELF']) == 'staff-dashboard.php') ? 'drawer-link--active' : ''; ?>"
+                   style="background: linear-gradient(135deg, rgba(127,3,3,0.08), rgba(15,65,74,0.08)); font-weight: 700;">
+                    <span class="drawer-link-icon" style="color: var(--maroon);"><i class="fas fa-tachometer-alt"></i></span>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <?php endif; ?>
             <li>
                 <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../index.php' : 'index.php'; ?>"
                    class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'index.php' ? 'drawer-link--active' : ''; ?>">
@@ -189,30 +273,9 @@
             </li>
             <li>
                 <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../services.php' : 'services.php'; ?>"
-                   class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'services.php' ? 'drawer-link--active' : ''; ?>">
+                   class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'services.php' ? 'drawer-link--active' : ''; ?>" onclick="if(typeof closeDrawer==='function')closeDrawer();">
                     <span class="drawer-link-icon"><i class="fas fa-concierge-bell"></i></span>
                     <span>Services</span>
-                </a>
-            </li>
-            <li>
-                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../appointments.php' : 'appointments.php'; ?>"
-                   class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'appointments.php' ? 'drawer-link--active' : ''; ?>">
-                    <span class="drawer-link-icon"><i class="fas fa-calendar-alt"></i></span>
-                    <span>Appointments</span>
-                </a>
-            </li>
-            <li>
-                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../track-aics.php' : 'track-aics.php'; ?>"
-                   class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'track-aics.php' ? 'drawer-link--active' : ''; ?>">
-                    <span class="drawer-link-icon"><i class="fas fa-search"></i></span>
-                    <span>Track AICS</span>
-                </a>
-            </li>
-            <li>
-                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../housing.php' : 'housing.php'; ?>"
-                   class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'housing.php' ? 'drawer-link--active' : ''; ?>">
-                    <span class="drawer-link-icon"><i class="fas fa-house-user"></i></span>
-                    <span>Housing</span>
                 </a>
             </li>
             <li>
@@ -226,14 +289,7 @@
                 <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../contact.php' : 'contact.php'; ?>"
                    class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'contact.php' ? 'drawer-link--active' : ''; ?>">
                     <span class="drawer-link-icon"><i class="fas fa-envelope"></i></span>
-                    <span>Contact</span>
-                </a>
-            </li>
-            <li>
-                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../faqs.php' : 'faqs.php'; ?>"
-                   class="drawer-link <?php echo basename($_SERVER['PHP_SELF']) == 'faqs.php' ? 'drawer-link--active' : ''; ?>">
-                    <span class="drawer-link-icon"><i class="fas fa-question-circle"></i></span>
-                    <span>FAQs</span>
+                    <span>Contact Us</span>
                 </a>
             </li>
         </ul>
@@ -366,8 +422,17 @@
         <div class="drawer-section-label">Management</div>
         <ul class="drawer-links">
             <li>
-                <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? 'dashboard.php' : 'staff-dashboard.php'; ?>"
-                   class="drawer-link <?php echo (basename($_SERVER['PHP_SELF']) == 'staff-dashboard.php' || basename($_SERVER['PHP_SELF']) == 'dashboard.php') ? 'drawer-link--active' : ''; ?>">
+                <?php
+                if (isAdmin()) {
+                    $drawer_dash_target = (strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? 'dashboard.php' : 'admin/dashboard.php';
+                    $drawer_dash_active = (strpos($_SERVER['PHP_SELF'], '/admin/') !== false && basename($_SERVER['PHP_SELF']) == 'dashboard.php');
+                } else {
+                    $drawer_dash_target = (strpos($_SERVER['PHP_SELF'], '/staff/') !== false || strpos($_SERVER['PHP_SELF'], '/admin/') !== false) ? '../staff-dashboard.php' : 'staff-dashboard.php';
+                    $drawer_dash_active = (basename($_SERVER['PHP_SELF']) == 'staff-dashboard.php');
+                }
+                ?>
+                <a href="<?php echo $drawer_dash_target; ?>"
+                   class="drawer-link <?php echo $drawer_dash_active ? 'drawer-link--active' : ''; ?>">
                     <span class="drawer-link-icon"><i class="fas fa-tachometer-alt"></i></span>
                     <span><?php echo isAdmin() ? 'Admin Dashboard' : 'Staff Dashboard'; ?></span>
                 </a>
@@ -435,12 +500,6 @@
                     <span>Create Account</span>
                 </a>
             </li>
-            <li>
-                <a href="staff-login.php" class="drawer-link">
-                    <span class="drawer-link-icon"><i class="fas fa-id-badge"></i></span>
-                    <span>Staff Login</span>
-                </a>
-            </li>
         </ul>
         <?php endif; ?>
 
@@ -467,60 +526,12 @@
     </div>
 </aside>
 
+<!-- Unified Sticky Mobile Bottom Tab Bar (Enabled for index/public pages; hidden on dashboard) -->
+<?php include_once __DIR__ . '/mobile-bottom-nav.php'; ?>
+
 <!-- Font Awesome -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="stylesheet" href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../css/global.css' : 'css/global.css'; ?>">
-
-<!-- Floating Chat Widget -->
-<button class="chat-fab" id="chatFab" aria-label="Open Chat Help" title="Chat with support">
-    <i class="fas fa-comments"></i>
-    <span class="chat-badge-dot"></span>
-</button>
-
-<div class="chat-panel" id="chatPanel">
-    <div class="chat-panel-header">
-        <div class="chat-avatar">
-            <i class="fas fa-robot"></i>
-        </div>
-        <div>
-            <h4>Kalinga Bot</h4>
-            <p>Online • Quick Support</p>
-        </div>
-        <button class="chat-close" id="chatCloseBtn" aria-label="Close Chat">
-            <i class="fas fa-times"></i>
-        </button>
-    </div>
-    <div class="chat-body">
-        <div class="chat-message">
-            <strong>Magandang araw!</strong>
-            Ano po ang maitutulong ko sa inyo ngayon? Pumili sa mga madalas na katanungan sa ibaba o sumulat ng mensahe.
-        </div>
-        <div class="chat-quick-btns">
-            <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../services.php' : 'services.php'; ?>" class="chat-quick-btn">
-                <i class="fas fa-concierge-bell"></i> Paano mag-apply sa AICS?
-            </a>
-            <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../appointments.php' : 'appointments.php'; ?>" class="chat-quick-btn">
-                <i class="fas fa-calendar-alt"></i> Paano magpa-appointment?
-            </a>
-            <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../housing.php' : 'housing.php'; ?>" class="chat-quick-btn">
-                <i class="fas fa-home"></i> Ano ang mga programang pabahay?
-            </a>
-            <a href="<?php echo (strpos($_SERVER['PHP_SELF'], '/admin/') !== false || strpos($_SERVER['PHP_SELF'], '/staff/') !== false) ? '../contact.php' : 'contact.php'; ?>" class="chat-quick-btn">
-                <i class="fas fa-envelope"></i> Direktang makipag-ugnayan sa CSWDO
-            </a>
-        </div>
-    </div>
-    <div class="chat-footer">
-        <form id="chatForm" onsubmit="event.preventDefault(); handleChatSend();">
-            <div class="chat-input-row">
-                <input type="text" id="chatInput" placeholder="Sumulat ng mensahe..." autocomplete="off">
-                <button type="submit" class="chat-send" aria-label="Send message">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
 
 <style>
 /* =====================================================================
@@ -539,7 +550,7 @@
     --text-secondary: #3A4A5A;
     --text-muted: #6B7A8A;
     --border-color: #C8D0DC;
-    --bg-primary: #E8ECF2;
+    --bg-primary: #E4EFE7;
 }
 
 [data-theme="dark"] {
@@ -548,45 +559,56 @@
     --text-secondary: #B0C4DE;
     --text-muted: #6B85A0;
     --border-color: #2a3a4f;
-    --bg-primary: #0a0e17;
+    --bg-primary: #0C1417;
 }
 
-/* ─── Base navbar ─── */
+/* ─── Base navbar: Floating Oval Header Design (Enlarged slightly, across all pages) ─── */
 .navbar {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 36px);
+    max-width: 1260px;
     z-index: 1000;
-    padding: 0;
-    background: var(--midnight);
-    border-bottom: none;
-    transition: background 0.4s cubic-bezier(0.4,0,0.2,1),
-                box-shadow 0.4s cubic-bezier(0.4,0,0.2,1),
-                padding 0.4s cubic-bezier(0.4,0,0.2,1);
+    padding: 8px 24px 8px 18px;
+    background: rgba(15, 65, 74, 0.94);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.24);
+    transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .navbar.scrolled {
-    background: var(--bg-card);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-    border-bottom: 1px solid var(--border-color);
+    top: 12px;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
 }
 
 /* ─── Inner container ─── */
 .nav-container {
-    max-width: 1280px;
+    max-width: 100%;
     margin: 0 auto;
-    padding: 0 24px;
-    height: 76px;
+    padding: 0;
+    height: 54px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
-    transition: height 0.3s ease;
+    gap: 18px;
 }
 
 .navbar.scrolled .nav-container {
-    height: 66px;
+    height: 54px;
+}
+
+/* Remove Night Mode button on public header per user request */
+.theme-toggle {
+    display: none !important;
 }
 
 /* ─── Brand ─── */
@@ -599,17 +621,18 @@
 }
 
 .brand-logo-circle {
-    width: 52px;
-    height: 52px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     background: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
     transition: transform 0.3s ease;
     overflow: hidden;
     flex-shrink: 0;
+    padding: 0;
 }
 
 .brand-logo-circle:hover {
@@ -617,9 +640,10 @@
 }
 
 .brand-logo-circle img {
-    width: 46px;
-    height: auto;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .brand-text {
@@ -648,17 +672,17 @@
 }
 
 .navbar.scrolled .brand-title {
-    background: linear-gradient(135deg, var(--midnight), var(--light-blue));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--midnight) !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
 }
 
 /* ─── Desktop nav links ─── */
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -727,7 +751,7 @@
 .nav-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 7px;
     flex-shrink: 0;
 }
 
@@ -815,46 +839,192 @@
 
 /* Nav Buttons */
 .nav-btn {
-    padding: 7px 18px;
+    padding: 6px 15px;
     border-radius: 40px;
-    font-size: 0.83rem;
+    font-size: 0.82rem;
     font-weight: 700;
     text-decoration: none;
     transition: all 0.3s ease;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .nav-btn-outline {
     background: transparent;
-    border: 1.5px solid rgba(255,255,255,0.35);
-    color: white;
+    border: 1.5px solid rgba(255, 255, 255, 0.45);
+    color: #FFFFFF !important;
+    padding: 0.44rem 1.15rem;
+    border-radius: 40px;
+    font-weight: 700;
+    font-size: 0.84rem;
 }
 
 .nav-btn-outline:hover {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.6);
-}
-
-.nav-btn-solid {
-    background: var(--maroon);
-    color: white;
-    border: 1.5px solid transparent;
-}
-
-.nav-btn-solid:hover {
-    background: var(--maroon-light);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 14px rgba(127,3,3,0.35);
+    background: rgba(255, 255, 255, 0.16);
+    border-color: #FFFFFF;
+    color: #FFFFFF !important;
+    transform: translateY(-1px);
 }
 
 .navbar.scrolled .nav-btn-outline {
-    border-color: var(--border-color);
-    color: var(--text-secondary);
+    border-color: rgba(0, 0, 0, 0.18);
+    color: var(--text-primary) !important;
 }
 
 .navbar.scrolled .nav-btn-outline:hover {
     border-color: var(--maroon);
-    color: var(--maroon);
+    color: var(--maroon) !important;
+    background: rgba(127, 3, 3, 0.06);
+}
+
+.nav-btn-solid {
+    background: transparent; /* copies color bg of login per user request */
+    color: #FFFFFF !important; /* white when at top / scrolling up */
+    border: 1.5px solid rgba(255, 255, 255, 0.85);
+    padding: 0.44rem 1.25rem;
+    border-radius: 40px;
+    font-weight: 700;
+    font-size: 0.84rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-btn-solid:hover {
+    background: rgba(255, 255, 255, 0.20);
+    border-color: #FFFFFF;
+    color: #FFFFFF !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(255, 255, 255, 0.25);
+}
+
+.navbar.scrolled .nav-btn-solid {
+    background: var(--maroon);
+    border-color: var(--maroon);
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(127, 3, 3, 0.25);
+}
+
+.navbar.scrolled .nav-btn-solid:hover {
+    background: var(--maroon-light);
+    border-color: var(--maroon-light);
+    color: #FFFFFF !important;
+    box-shadow: 0 6px 16px rgba(127, 3, 3, 0.35);
+}
+
+/* ─── Logged-In Home Button: Profile Avatar + Back-to-Dashboard Arrow (Req 1) ─── */
+.nav-home-dashboard-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 14px 4px 5px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    border-radius: 9999px;
+    text-decoration: none;
+    color: #FFFFFF;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+
+.nav-home-dashboard-btn:hover {
+    background: #FFFFFF;
+    border-color: #FFFFFF;
+    color: #7F0303;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.navbar.scrolled .nav-home-dashboard-btn {
+    background: var(--bg-primary, #FFFFFF);
+    border-color: var(--border-color, #E2E8F0);
+    color: var(--text-primary, #192126);
+}
+
+.navbar.scrolled .nav-home-dashboard-btn:hover {
+    background: #7F0303;
+    border-color: #7F0303;
+    color: #FFFFFF;
+}
+
+.nav-home-avatar-wrap {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+}
+
+.nav-home-avatar-img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #E5B338;
+    display: block;
+}
+
+.nav-home-avatar-initials {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7F0303 0%, #9A1515 100%);
+    color: #FFFFFF;
+    font-size: 0.76rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #E5B338;
+}
+
+.nav-home-arrow-badge {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #E5B338;
+    color: #192126;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.58rem;
+    border: 1.5px solid #FFFFFF;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-home-dashboard-btn:hover .nav-home-arrow-badge {
+    transform: scale(1.15) translateX(1px);
+    background: #7F0303;
+    color: #FFFFFF;
+}
+
+.nav-home-dash-label {
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+[data-theme="dark"] .nav-home-dashboard-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #FFFFFF;
+}
+
+[data-theme="dark"] .navbar.scrolled .nav-home-dashboard-btn {
+    background: #1A2332;
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #E5EFF2;
+}
+
+[data-theme="dark"] .navbar.scrolled .nav-home-dashboard-btn:hover {
+    background: #8B1A1A;
+    border-color: #8B1A1A;
+    color: #FFFFFF;
 }
 
 /* ─── User Dropdown ─── */
@@ -1027,6 +1197,11 @@
     margin: 6px 0;
 }
 
+/* ─── Mobile Home Button (Hidden on Desktop) ─── */
+.mobile-nav-home-btn {
+    display: none;
+}
+
 /* ─── Hamburger ─── */
 .hamburger {
     display: none;
@@ -1119,8 +1294,8 @@
 }
 
 .drawer-logo-circle {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: white;
     display: flex;
@@ -1128,13 +1303,15 @@
     justify-content: center;
     overflow: hidden;
     flex-shrink: 0;
+    padding: 0;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 .drawer-logo-circle img {
-    width: 34px;
-    height: auto;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .drawer-brand-text {
@@ -1406,30 +1583,159 @@
 }
 
 @media (max-width: 768px) {
-    .hamburger { display: flex; }
+    .navbar {
+        padding: 5px 12px 5px 8px !important;
+    }
+    .navbar.scrolled {
+        padding: 4px 12px 4px 8px !important;
+    }
+
+    .nav-container {
+        height: 56px !important;
+        padding: 0 2px !important;
+        gap: 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+    }
+    .navbar.scrolled .nav-container {
+        height: 52px !important;
+    }
+
+    /* Improved Hamburger Button placed on the Left side before Logo */
+    .hamburger {
+        display: inline-flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 4px !important;
+        width: 38px !important;
+        height: 38px !important;
+        min-width: 38px !important;
+        margin-left: 0 !important;
+        border-radius: 10px !important;
+        background: rgba(255, 255, 255, 0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.25) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        flex-shrink: 0 !important;
+        order: 1 !important;
+    }
+    .hamburger:active {
+        transform: scale(0.92) !important;
+        background: rgba(255, 255, 255, 0.28) !important;
+    }
+    .hamburger span {
+        display: block !important;
+        width: 19px !important;
+        height: 2.2px !important;
+        background: #FFFFFF !important;
+        border-radius: 3px !important;
+        transition: all 0.25s ease !important;
+    }
+    .navbar.scrolled .hamburger {
+        background: rgba(15, 65, 74, 0.08) !important;
+        border-color: rgba(15, 65, 74, 0.15) !important;
+    }
+    .navbar.scrolled .hamburger span {
+        background: var(--midnight, #0F414A) !important;
+    }
+    [data-theme="dark"] .navbar.scrolled .hamburger {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-color: rgba(255, 255, 255, 0.18) !important;
+    }
+    [data-theme="dark"] .navbar.scrolled .hamburger span {
+        background: #FFFFFF !important;
+    }
+
+    /* Brand Section beside Hamburger */
+    .nav-brand {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        text-decoration: none !important;
+        order: 2 !important;
+    }
+    .brand-logo-circle {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        border-radius: 50% !important;
+        overflow: hidden !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+        flex-shrink: 0 !important;
+    }
+    .brand-logo-circle img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+    }
+    .brand-text {
+        flex: 1 !important;
+        min-width: 0 !important;
+        overflow: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+    }
+    .brand-title {
+        font-size: 0.82rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.2px !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        color: #FFFFFF !important;
+        line-height: 1.2 !important;
+    }
+    .navbar.scrolled .brand-title {
+        color: var(--midnight, #0F414A) !important;
+    }
+    [data-theme="dark"] .navbar.scrolled .brand-title {
+        color: #FFFFFF !important;
+    }
+    .brand-sub {
+        font-size: 0.62rem !important;
+        opacity: 0.8 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        line-height: 1.1 !important;
+    }
+
+    /* Hide Right Actions (Theme toggle, etc.) on Mobile Header so System Name is 100% Complete & Visible */
+    .nav-actions {
+        display: none !important;
+    }
+    .theme-toggle {
+        display: none !important;
+    }
+    .mobile-nav-home-btn {
+        display: none !important;
+    }
+
     .nav-links  { display: none; }
 
     .nav-btn-outline,
     .nav-btn-solid { display: none; }
 
-    .notif-bell { display: flex; }
-
-    .nav-container { height: 64px; }
-    .navbar.scrolled .nav-container { height: 58px; }
-
-    .brand-title { font-size: 0.88rem; }
-    .brand-logo-circle { width: 44px; height: 44px; }
-    .brand-logo-circle img { width: 38px; }
+    .notif-bell { display: none !important; } /* Hidden on mobile per user request */
 
     /* Show the side drawer on mobile */
     .side-drawer { display: flex; }
 
-    /* Hide desktop user pill & notif bell on very small */
+    /* Hide desktop user pill on small */
     .nav-user-dropdown { display: none; }
 }
 
 @media (max-width: 480px) {
-    .nav-container { padding: 0 16px; }
+    .navbar { padding: 5px 10px 5px 6px !important; }
+    .nav-container { padding: 0 2px !important; gap: 6px !important; }
     .brand-sub { display: none; }
 }
 
@@ -1473,20 +1779,27 @@
     const drawerClose   = document.getElementById('drawerClose');
 
     function openDrawer() {
-        sideDrawer.classList.add('open');
-        drawerBackdrop.classList.add('open');
-        hamburger.classList.add('active');
-        hamburger.setAttribute('aria-expanded', 'true');
+        if (sideDrawer) sideDrawer.classList.add('open');
+        if (drawerBackdrop) drawerBackdrop.classList.add('open');
+        if (hamburger) {
+            hamburger.classList.add('active');
+            hamburger.setAttribute('aria-expanded', 'true');
+        }
         document.body.style.overflow = 'hidden';
     }
 
     function closeDrawer() {
-        sideDrawer.classList.remove('open');
-        drawerBackdrop.classList.remove('open');
-        hamburger.classList.remove('active');
-        hamburger.setAttribute('aria-expanded', 'false');
+        if (sideDrawer) sideDrawer.classList.remove('open');
+        if (drawerBackdrop) drawerBackdrop.classList.remove('open');
+        if (hamburger) {
+            hamburger.classList.remove('active');
+            hamburger.setAttribute('aria-expanded', 'false');
+        }
         document.body.style.overflow = '';
     }
+
+    window.openDrawer = openDrawer;
+    window.closeDrawer = closeDrawer;
 
     if (hamburger) {
         hamburger.addEventListener('click', function () {
@@ -1586,82 +1899,6 @@
             document.body.classList.remove('dark-mode');
         }
     });
-    // ─── Chat Widget ─────────────────────────────────────────────────
-    const chatFab = document.getElementById('chatFab');
-    const chatPanel = document.getElementById('chatPanel');
-    const chatCloseBtn = document.getElementById('chatCloseBtn');
-    const chatForm = document.getElementById('chatForm');
-    const chatInput = document.getElementById('chatInput');
-    const chatBody = document.querySelector('.chat-body');
-
-    if (chatFab && chatPanel) {
-        chatFab.addEventListener('click', function() {
-            chatPanel.classList.toggle('open');
-        });
-    }
-    if (chatCloseBtn) {
-        chatCloseBtn.addEventListener('click', function() {
-            chatPanel.classList.remove('open');
-        });
-    }
-
-    window.handleChatSend = function() {
-        const text = chatInput.value.trim();
-        if (!text) return;
-
-        // User message
-        const userMsg = document.createElement('div');
-        userMsg.className = 'chat-message';
-        userMsg.style.borderRadius = '14px 14px 4px 14px';
-        userMsg.style.background = 'rgba(127,3,3,0.06)';
-        userMsg.style.borderLeft = '3px solid var(--maroon)';
-        userMsg.style.marginLeft = '20px';
-        userMsg.innerHTML = `<strong>Kayo</strong> ${escapeHtml(text)}`;
-        chatBody.appendChild(userMsg);
-        chatInput.value = '';
-        chatBody.scrollTop = chatBody.scrollHeight;
-
-        // Typing indicator
-        const typingMsg = document.createElement('div');
-        typingMsg.className = 'chat-message typing-indicator';
-        typingMsg.innerHTML = `<strong>Kalinga Boi</strong> <i class="fas fa-circle-notch fa-spin"></i> Nagsusulat...`;
-        chatBody.appendChild(typingMsg);
-        chatBody.scrollTop = chatBody.scrollHeight;
-
-        // Smart Response matching
-        setTimeout(function() {
-            typingMsg.remove();
-            
-            const botMsg = document.createElement('div');
-            botMsg.className = 'chat-message';
-            
-            const msgLower = text.toLowerCase();
-            let response = '';
-
-            const isSubDir = window.location.pathname.includes('/admin/') || window.location.pathname.includes('/staff/');
-            const baseDir = isSubDir ? '../' : '';
-
-            if (msgLower.includes('aics') || msgLower.includes('tulong') || msgLower.includes('finan') || msgLower.includes('financial') || msgLower.includes('cash')) {
-                response = `<strong>Kalinga Boi</strong> Ang <strong>AICS</strong> (Assistance to Individuals in Crisis Situation) ay nagbibigay ng tulong pinansyal, medikal, libing, pagkain, at iba pa. <br><br>👉 Maaari kayong mag-apply online sa pamamagitan ng pagpunta sa <strong><a href="${baseDir}apply-aics.php">Apply for AICS</a></strong>.<br><br><strong>Pangunahing Requirements:</strong><br>1. Valid ID<br>2. Certificate of Indigency mula sa Barangay<br>3. Request Letter`;
-            } else if (msgLower.includes('medikal') || msgLower.includes('medical') || msgLower.includes('gamot') || msgLower.includes('ospital')) {
-                response = `<strong>Kalinga Boi</strong> Para sa <strong>Medical Assistance (AICS)</strong>, kailangan po ang mga sumusunod:<br><br>1. Barangay Certificate of Indigency ng Pasyente<br>2. Valid ID ng Pasyente at ng Naglalakad<br>3. Clinical Abstract / Medical Certificate<br>4. Prescription ng Gamot o Hospital Bill/Quotation<br><br>Maaari ninyo itong aplayan dito: <strong><a href="${baseDir}aics-medical.php">Medical Assistance Form</a></strong>.`;
-            } else if (msgLower.includes('libing') || msgLower.includes('funeral') || msgLower.includes('burial') || msgLower.includes('patay')) {
-                response = `<strong>Kalinga Boi</strong> Para sa <strong>Funeral/Burial Assistance</strong>, kailangan po ang mga sumusunod:<br><br>1. Death Certificate ng pumanaw (certified copy)<br>2. Funeral Contract at Statement of Account<br>3. Barangay Certificate of Indigency ng Claimant<br>4. Valid ID ng Claimant at Pumanaw<br><br>Maaari ninyo itong aplayan dito: <strong><a href="${baseDir}aics-funeral.php">Funeral Assistance Form</a></strong>.`;
-            } else if (msgLower.includes('appointment') || msgLower.includes('schedule') || msgLower.includes('mag-book') || msgLower.includes('oras') || msgLower.includes('time')) {
-                response = `<strong>Kalinga Boi</strong> Upang makipag-ugnayan nang personal sa CSWDO, maaari po kayong mag-book ng inyong appointment online sa pamamagitan ng pagpunta sa <strong><a href="${baseDir}book-appointment.php">Book Appointment</a></strong>.<br><br>Matatanggap ninyo ang inyong slot at schedule details sa inyong notifications kapag na-approve ng staff.`;
-            } else if (msgLower.includes('pabahay') || msgLower.includes('housing') || msgLower.includes('bahay')) {
-                response = `<strong>Kalinga Boi</strong> Nag-aalok po ang Palayan City ng iba't ibang <strong>Housing Programs</strong> para sa mga kwalipikadong residente. <br><br>👉 Maaari po kayong mag-apply o magbasa ng requirements sa <strong><a href="${baseDir}apply-housing.php">Apply for Housing</a></strong>. Kakailanganin ninyo ang Barangay Clearance, Larawan ng inyong kasalukuyang tinitirhan, at Valid ID.`;
-            } else if (msgLower.includes('salamat') || msgLower.includes('thank') || msgLower.includes('ty') || msgLower.includes('salamat po')) {
-                response = `<strong>Kalinga Boi</strong> Walang anuman po! Narito ako palagi upang magbigay-gabay. Kung may iba pa kayong katanungan, huwag mag-atubiling magtanong. Kalinga sa bawat Palayeño! 🏛️❤️`;
-            } else {
-                response = `<strong>Kalinga Boi</strong> Salamat sa inyong mensahe. Upang matulungan kayo, maaari ninyong piliin ang mga quick link sa itaas, o makipag-ugnayan sa amin sa:<br><br>📞 <strong>Hotline:</strong> (044) 123-4567<br>✉️ <strong>Email:</strong> cswdo@palayancity.gov.ph<br>🏛️ <strong>Address:</strong> CSWDO Office, Palayan City Hall.`;
-            }
-            
-            botMsg.innerHTML = response;
-            chatBody.appendChild(botMsg);
-            chatBody.scrollTop = chatBody.scrollHeight;
-        }, 800);
-    };
 
     function escapeHtml(str) {
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");

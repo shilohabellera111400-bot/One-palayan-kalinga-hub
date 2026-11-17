@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/database.php';
 
 if (!isStaff()) {
@@ -8,63 +8,89 @@ if (!isStaff()) {
 $database = new Database();
 $db = $database->getConnection();
 
+$success = '';
+$error = '';
+
 // Handle document verification
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['verify_document'])) {
+    csrf_verify();
     $document_id = sanitize($_POST['document_id']);
     $verification_status = sanitize($_POST['verification_status']);
     $remarks = sanitize($_POST['remarks'] ?? '');
     
-    $update_query = "UPDATE documents SET 
-                      verification_status = :status,
-                      verified_by = :user_id,
-                      verification_date = NOW(),
-                      remarks = :remarks
-                      WHERE document_id = :id";
-    $update_stmt = $db->prepare($update_query);
-    $update_stmt->bindParam(':status', $verification_status);
-    $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
-    $update_stmt->bindParam(':remarks', $remarks);
-    $update_stmt->bindParam(':id', $document_id);
-    
-    if ($update_stmt->execute()) {
-        // Get user_id for notification
-        $user_query = "SELECT user_id FROM documents WHERE document_id = :id";
-        $user_stmt = $db->prepare($user_query);
-        $user_stmt->bindParam(':id', $document_id);
-        $user_stmt->execute();
-        $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+    // Validation: Only allowed verification statuses
+    if (!in_array($verification_status, ['verified', 'rejected'])) {
+        $error = "Invalid verification decision selected.";
+    } elseif ($verification_status === 'rejected' && empty(trim($remarks))) {
+        $error = "A disapproval reason / feedback remark is required when disapproving a document.";
+    } else {
+        $update_query = "UPDATE documents SET 
+                          verification_status = :status,
+                          verified_by = :user_id,
+                          verification_date = NOW(),
+                          remarks = :remarks
+                          WHERE document_id = :id";
+        $update_stmt = $db->prepare($update_query);
+        $update_stmt->bindParam(':status', $verification_status);
+        $update_stmt->bindParam(':user_id', $_SESSION['user_id']);
+        $update_stmt->bindParam(':remarks', $remarks);
+        $update_stmt->bindParam(':id', $document_id);
         
-        // Create notification
-        $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
-                        VALUES (:user_id, 'Document Verified', 
-                        'Your document has been ' . $verification_status . '', 'general')";
-        $notif_stmt = $db->prepare($notif_query);
-        $notif_stmt->bindParam(':user_id', $user['user_id']);
-        $notif_stmt->execute();
-        
-        $success = "Document verification status updated!";
+        if ($update_stmt->execute()) {
+            // Get user_id for notification
+            $user_query = "SELECT user_id, document_type FROM documents WHERE document_id = :id";
+            $user_stmt = $db->prepare($user_query);
+            $user_stmt->bindParam(':id', $document_id);
+            $user_stmt->execute();
+            $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user) {
+                $type_clean = ucfirst(str_replace('_', ' ', $user['document_type'] ?? 'document'));
+                $status_text = ($verification_status === 'verified') ? 'VERIFIED and APPROVED' : 'RETURNED / DISAPPROVED';
+                $notif_title = ($verification_status === 'verified') ? 'Document Verified' : 'Document Disapproved';
+                $notif_msg = "Your uploaded requirement ({$type_clean}) has been {$status_text} by the CSWDO verification officer.";
+                if (!empty($remarks)) {
+                    $notif_msg .= " Officer Remarks: {$remarks}";
+                }
+
+                $notif_query = "INSERT INTO notifications (user_id, title, message, type) 
+                                VALUES (:user_id, :title, :message, 'document')";
+                $notif_stmt = $db->prepare($notif_query);
+                $notif_stmt->bindParam(':user_id', $user['user_id']);
+                $notif_stmt->bindParam(':title', $notif_title);
+                $notif_stmt->bindParam(':message', $notif_msg);
+                $notif_stmt->execute();
+            }
+            
+            $status_label = ($verification_status === 'verified') ? 'verified and approved' : 'marked as disapproved/returned';
+            $success = "Document #DOC-" . str_pad($document_id, 5, '0', STR_PAD_LEFT) . " successfully {$status_label}. Citizen notified.";
+        } else {
+            $error = "Failed to update document verification status. Please try again.";
+        }
     }
 }
 
 // Get filter parameters
-$status_filter = isset($_GET['status']) ? sanitize($_GET['status']) : 'pending';
+$status_filter = isset($_GET['status']) ? sanitize($_GET['status']) : 'all';
 $search = isset($_GET['search']) ? sanitize($_GET['search']) : '';
 
 // Build query
-$query = "SELECT d.*, u.first_name, u.last_name, u.email 
+$query = "SELECT d.*, u.first_name, u.last_name, u.email, u.contact_number,
+                 v.first_name as verifier_fn, v.last_name as verifier_ln
           FROM documents d
           JOIN users u ON d.user_id = u.user_id
+          LEFT JOIN users v ON d.verified_by = v.user_id
           WHERE 1=1";
 
 $params = [];
 
-if ($status_filter != 'all') {
+if ($status_filter != 'all' && !empty($status_filter)) {
     $query .= " AND d.verification_status = :status";
     $params[':status'] = $status_filter;
 }
 
 if (!empty($search)) {
-    $query .= " AND (u.first_name LIKE :search OR u.last_name LIKE :search OR d.document_type LIKE :search)";
+    $query .= " AND (u.first_name LIKE :search OR u.last_name LIKE :search OR d.document_type LIKE :search OR u.email LIKE :search)";
     $params[':search'] = "%$search%";
 }
 
@@ -75,6 +101,7 @@ foreach ($params as $key => $value) {
     $stmt->bindValue($key, $value);
 }
 $stmt->execute();
+$documents_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get statistics
 $stats_query = "SELECT 
@@ -84,6 +111,9 @@ $stats_query = "SELECT
     SUM(CASE WHEN verification_status = 'rejected' THEN 1 ELSE 0 END) as rejected
     FROM documents";
 $stats = $db->query($stats_query)->fetch(PDO::FETCH_ASSOC);
+if (!$stats) {
+    $stats = ['total' => 0, 'pending' => 0, 'verified' => 0, 'rejected' => 0];
+}
 
 // Get initials for sidebar avatar
 $initials = '';
@@ -92,877 +122,684 @@ foreach($name_parts as $part) {
     $initials .= strtoupper(substr($part, 0, 1));
 }
 $initials = substr($initials, 0, 2);
+
+$page_title = 'Verify Documents - CSWDO Staff Portal';
+$active_nav = 'documents';
+require_once __DIR__ . '/includes/staff-head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Documents - Staff Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        /* ========== COLOR PALETTE ========== */
-        :root {
-            --tan: #D8BA98;
-            --maroon: #7F0303;
-            --alabaster: #EFE8DF;
-            --light-blue: #96C0CE;
-            --midnight: #0F414A;
-            --maroon-light: #9a1515;
-            --white: #FFFFFF;
-            --gray-50: #E8ECF2;
-            --gray-100: #F1F3F8;
-            --gray-200: #E8ECF2;
-            --gray-600: #6B7A8A;
-            --gray-700: #3A4A5A;
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
-            --radius-card: 24px;
-            --radius-element: 16px;
-        }
+<style>
+/* Header Action Buttons */
+.staff-subheader-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.btn-head-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-decoration: none;
+    border: 1px solid var(--ref-border);
+    background: var(--ref-card);
+    color: var(--ref-text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: all 0.18s ease;
+}
+.btn-head-action:hover {
+    background: var(--ref-canvas);
+    border-color: var(--ref-border-strong);
+    color: var(--ref-maroon);
+    transform: translateY(-1px);
+}
+.btn-head-action.primary {
+    background: var(--ref-maroon);
+    color: #FFFFFF;
+    border-color: var(--ref-maroon);
+}
+.btn-head-action.primary:hover {
+    background: var(--ref-maroon-dark);
+    color: #FFFFFF;
+}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--gray-50);
-            color: var(--gray-700);
-            line-height: 1.5;
-        }
+/* Redesigned Minimalist Status Summary Cards (Part 2, Item 7) */
+.stats-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+}
+.stat-summary-card {
+    background: var(--ref-card);
+    border-radius: 16px;
+    padding: 14px 18px;
+    border: 1px solid var(--ref-border);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.18s ease;
+}
+.stat-summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    border-color: var(--ref-maroon);
+}
+.stat-summary-card.active-stat {
+    border: 2px solid var(--ref-maroon);
+    background: #FFFAF8;
+}
+.stat-icon-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+.stat-icon-wrap.total { background: #F1F5F9; color: #475569; }
+.stat-icon-wrap.pending { background: #FEF3C7; color: #D97706; }
+.stat-icon-wrap.verified { background: #DCFCE7; color: #16A34A; }
+.stat-icon-wrap.rejected { background: #FEE2E2; color: #DC2626; }
 
-        /* ========== LAYOUT ========== */
-        .app-container { display: flex; min-height: 100vh; background: var(--gray-50); }
+.stat-details {
+    display: flex;
+    flex-direction: column;
+}
+.stat-details h3 {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: var(--ref-text);
+    line-height: 1.1;
+    margin: 0 0 2px 0;
+}
+.stat-details p {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ref-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+}
 
-        /* ========== SIDEBAR - MAROON THEME ========== */
-        .sidebar {
-            width: 280px;
-            background: var(--maroon);
-            position: fixed;
-            height: 100vh;
-            left: 0;
-            top: 0;
-            overflow-y: auto;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-        }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
+/* Filter Bar */
+.filter-card {
+    background: var(--ref-card);
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 22px;
+    border: 1px solid var(--ref-border);
+    box-shadow: var(--ref-shadow-sm);
+}
+.filter-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr auto auto;
+    gap: 12px;
+    align-items: end;
+}
+.filter-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.filter-form-group label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ref-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.filter-form-group input, .filter-form-group select {
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--ref-border);
+    border-radius: 10px;
+    font-size: 0.82rem;
+    background: var(--ref-canvas);
+    color: var(--ref-text);
+    outline: none;
+    transition: all 0.15s;
+}
+.filter-form-group input:focus, .filter-form-group select:focus {
+    border-color: var(--ref-maroon);
+    background: var(--ref-card);
+}
+.btn-filter-apply {
+    background: var(--ref-maroon);
+    color: #FFFFFF;
+    border: none;
+    height: 38px;
+    padding: 0 18px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+}
+.btn-filter-apply:hover { background: var(--ref-maroon-dark); }
+.btn-filter-reset {
+    background: var(--ref-canvas);
+    color: var(--ref-muted);
+    border: 1px solid var(--ref-border);
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 50px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.btn-filter-reset:hover { color: var(--ref-maroon); border-color: var(--ref-maroon); }
 
-        .sidebar-header {
-            padding: 32px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 16px;
-        }
-        .logo-icon {
-            width: 52px;
-            height: 52px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.6rem;
-        }
-        .logo-text h2 {
-            color: white;
-            font-size: 1.3rem;
-            font-weight: 800;
-            line-height: 1.3;
-            letter-spacing: -0.5px;
-        }
-        .logo-text p {
-            color: rgba(255,255,255,0.65);
-            font-size: 0.7rem;
-            margin-top: 4px;
-        }
+/* Table and Records Card */
+.table-card {
+    background: var(--ref-card);
+    border-radius: 18px;
+    padding: 20px;
+    border: 1px solid var(--ref-border);
+    box-shadow: var(--ref-shadow-sm);
+    overflow: visible;
+}
+.table-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ref-border);
+}
+.table-card .card-header h2 {
+    color: var(--ref-text);
+    font-size: 1.05rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+.table-card .card-header .count-badge {
+    background: var(--ref-canvas);
+    padding: 4px 12px;
+    border-radius: 50px;
+    font-size: 0.72rem;
+    color: var(--ref-muted);
+    font-weight: 700;
+}
 
-        .staff-profile {
-            padding: 20px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            margin-bottom: 16px;
-        }
-        .staff-avatar {
-            width: 70px;
-            height: 70px;
-            background: linear-gradient(135deg, var(--tan), var(--light-blue));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 12px;
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: var(--maroon);
-        }
-        .staff-profile h4 {
-            color: white;
-            font-size: 1rem;
-            margin-bottom: 4px;
-        }
-        .staff-profile p {
-            color: rgba(255,255,255,0.7);
-            font-size: 0.75rem;
-        }
-        .staff-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 0.65rem;
-            margin-top: 8px;
-        }
+.table-container {
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 40px; /* space for dropdown menus */
+}
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.data-table th {
+    background: var(--ref-canvas);
+    color: var(--ref-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ref-border);
+    text-align: left;
+}
+.data-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--ref-border);
+    color: var(--ref-text);
+    vertical-align: middle;
+    position: relative;
+}
+.data-table tr:hover td {
+    background: #FAF8F5;
+}
 
-        .sidebar-menu {
-            list-style: none;
-            padding: 0 16px;
-            flex: 1;
-        }
-        .sidebar-menu li { margin-bottom: 4px; }
-        .sidebar-menu li a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: rgba(255,255,255,0.8);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.25s;
-        }
-        .sidebar-menu li a i { width: 22px; font-size: 1.1rem; color: rgba(255,255,255,0.7); }
-        .sidebar-menu li a:hover { background: rgba(255,255,255,0.12); color: white; }
-        .sidebar-menu li a.active {
-            background: var(--maroon-light);
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .sidebar-menu li a.active i { color: white; }
-        .menu-divider {
-            border-top: 1px solid rgba(255,255,255,0.1);
-            margin: 16px 0;
-            padding-top: 8px;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: rgba(255,255,255,0.5);
-            padding-left: 16px;
-        }
+/* Status Badges */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 50px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+.status-pill.pending { background: #FEF3C7; color: #B45309; }
+.status-pill.verified { background: #DCFCE7; color: #15803D; }
+.status-pill.rejected { background: #FEE2E2; color: #B91C1C; }
 
-        .sidebar-footer {
-            padding: 20px 16px 30px 16px;
-            margin-top: auto;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .sidebar-footer a {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: rgba(255,255,255,0.8);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            background: rgba(255,255,255,0.08);
-            transition: all 0.25s;
-        }
-        .sidebar-footer a:hover { background: rgba(255,255,255,0.18); color: white; }
+/* Document Attachment Pill */
+.btn-doc-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    background: var(--ref-canvas);
+    border: 1px solid var(--ref-border);
+    border-radius: 8px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--ref-maroon);
+    text-decoration: none;
+    transition: all 0.15s;
+}
+.btn-doc-link:hover {
+    background: var(--ref-maroon);
+    color: #FFFFFF;
+    border-color: var(--ref-maroon);
+}
 
-        /* ========== MAIN CONTENT ========== */
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 32px 40px;
-            min-height: 100vh;
-        }
+/* Standardized Row Action Dropdown (Part 2, Item 5) */
+.row-action-dropdown { position: relative; display: inline-block; }
+.btn-row-action {
+    background: var(--ref-canvas);
+    border: 1px solid var(--ref-border);
+    border-radius: 50px;
+    padding: 5px 14px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--ref-text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.18s;
+}
+.btn-row-action:hover, .row-action-dropdown.open .btn-row-action {
+    background: var(--ref-maroon);
+    color: #FFFFFF;
+    border-color: var(--ref-maroon);
+}
+.row-action-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    min-width: 210px;
+    background: var(--ref-card);
+    border: 1px solid var(--ref-border);
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    z-index: 1200;
+    padding: 6px;
+    text-align: left;
+}
+.row-action-dropdown.open .row-action-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.action-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--ref-text);
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s;
+}
+.action-menu-item:hover {
+    background: var(--ref-canvas);
+    color: var(--ref-maroon);
+}
+.action-menu-item.danger-item { color: #DC2626; }
+.action-menu-item.danger-item:hover { background: #FEE2E2; color: #991B1B; }
+.action-menu-divider { height: 1px; background: var(--ref-border); margin: 4px 0; }
 
-        /* Breadcrumb */
-        .breadcrumb {
-            margin-bottom: 20px;
-            color: var(--gray-600);
-            font-size: 0.85rem;
-        }
-        .breadcrumb a {
-            color: var(--maroon);
-            text-decoration: none;
-        }
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
+/* Modal */
+.modal { position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.6); display: none; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+.modal.active { display: flex; }
+.modal-content { background: var(--ref-card); border-radius: var(--ref-radius-xl); width: 90%; max-width: 520px; max-height: 90vh; overflow-y: auto; border: 1px solid var(--ref-border); box-shadow: var(--ref-shadow-lg); animation: modalPop 0.18s ease-out; }
+@keyframes modalPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.modal-header { padding: 18px 24px; border-bottom: 1px solid var(--ref-border); display: flex; justify-content: space-between; align-items: center; background: var(--ref-card-subtle); }
+.modal-header h2 { font-size: 1.15rem; font-weight: 800; color: var(--ref-text); margin: 0; display: flex; align-items: center; gap: 10px; }
+.modal-body { padding: 22px 24px; }
+.info-card-mini { background: var(--ref-canvas); border-radius: 12px; padding: 14px; margin-bottom: 18px; border: 1px solid var(--ref-border); }
+.info-row-mini { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.info-row-mini:last-child { margin-bottom: 0; }
+.info-label-mini { font-size: 0.76rem; color: var(--ref-muted); font-weight: 600; }
+.info-value-mini { font-size: 0.82rem; font-weight: 700; color: var(--ref-text); }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; font-weight: 700; font-size: 0.78rem; color: var(--ref-text); text-transform: uppercase; letter-spacing: 0.04em; }
+.form-group select, .form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--ref-border); border-radius: 10px; font-size: 0.84rem; background: var(--ref-card); color: var(--ref-text); outline: none; font-family: inherit; box-sizing: border-box; }
+.form-group select:focus, .form-group textarea:focus { border-color: var(--ref-maroon); box-shadow: 0 0 0 3px rgba(127, 3, 3, 0.08); }
 
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: white;
-            border-radius: var(--radius-card);
-            padding: 20px 24px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.3s;
-            border: 1px solid var(--gray-200);
-            cursor: pointer;
-        }
-        .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-md);
-        }
-        .stat-icon {
-            width: 56px;
-            height: 56px;
-            background: var(--alabaster);
-            border-radius: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.6rem;
-            color: var(--maroon);
-        }
-        .stat-info h3 {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: var(--midnight);
-        }
-        .stat-info p {
-            font-size: 0.8rem;
-            color: var(--gray-600);
-        }
-
-        /* Quick Stats Bar */
-        .quick-stats-bar {
-            background: linear-gradient(135deg, var(--midnight) 0%, #1a5a66 100%);
-            border-radius: var(--radius-card);
-            padding: 20px 28px;
-            margin-bottom: 28px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 20px;
-            color: white;
-        }
-        .document-info h4 {
-            font-size: 0.8rem;
-            opacity: 0.9;
-            margin-bottom: 5px;
-        }
-        .document-info .count {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-        .quick-actions {
-            display: flex;
-            gap: 12px;
-        }
-        .quick-btn {
-            background: rgba(255,255,255,0.15);
-            padding: 10px 18px;
-            border-radius: 10px;
-            text-decoration: none;
-            color: white;
-            font-size: 0.8rem;
-            font-weight: 500;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .quick-btn:hover {
-            background: rgba(255,255,255,0.25);
-            transform: translateY(-2px);
-        }
-
-        /* Filter Bar */
-        .filter-bar {
-            background: white;
-            border-radius: var(--radius-card);
-            padding: 20px;
-            margin-bottom: 28px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-200);
-        }
-        .filter-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            align-items: end;
-        }
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .filter-group label {
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .filter-group select,
-        .filter-group input {
-            padding: 10px 14px;
-            border: 1px solid var(--gray-200);
-            border-radius: 10px;
-            font-size: 0.85rem;
-            transition: all 0.3s;
-        }
-        .filter-group select:focus,
-        .filter-group input:focus {
-            outline: none;
-            border-color: var(--maroon);
-            box-shadow: 0 0 0 3px rgba(127,3,3,0.1);
-        }
-        .filter-actions {
-            display: flex;
-            gap: 10px;
-        }
-        .btn-primary {
-            background: var(--maroon);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .btn-primary:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-        }
-        .btn-secondary {
-            background: var(--gray-200);
-            color: var(--gray-700);
-            padding: 10px 20px;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s;
-        }
-        .btn-secondary:hover {
-            background: var(--gray-300);
-        }
-
-        /* Documents Grid */
-        .documents-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-            gap: 24px;
-        }
-        .document-card {
-            background: white;
-            border-radius: var(--radius-card);
-            overflow: hidden;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--gray-200);
-            transition: all 0.3s;
-        }
-        .document-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-md);
-        }
-        .document-header {
-            padding: 16px 20px;
-            background: var(--gray-50);
-            border-bottom: 1px solid var(--gray-200);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .document-type {
-            font-weight: 700;
-            color: var(--maroon);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-        .status-pending { background: #fff3e0; color: #f57c00; }
-        .status-verified { background: #e8f5e9; color: #43a047; }
-        .status-rejected { background: #ffebee; color: #e53935; }
-
-        .document-body {
-            padding: 20px;
-        }
-        .applicant-name {
-            font-size: 1rem;
-            font-weight: 700;
-            color: var(--midnight);
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .document-meta {
-            font-size: 0.8rem;
-            color: var(--gray-600);
-            margin-bottom: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .document-meta i {
-            width: 18px;
-            color: var(--maroon);
-        }
-        .document-preview {
-            margin: 16px 0;
-        }
-        .btn-view-doc {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            background: var(--alabaster);
-            color: var(--maroon);
-            text-decoration: none;
-            border-radius: 10px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        .btn-view-doc:hover {
-            background: var(--maroon);
-            color: white;
-        }
-        .document-remarks {
-            background: var(--gray-50);
-            padding: 12px;
-            border-radius: 10px;
-            font-size: 0.8rem;
-            margin-top: 12px;
-            border-left: 3px solid var(--maroon);
-        }
-        .document-actions {
-            padding: 16px 20px;
-            background: var(--gray-50);
-            border-top: 1px solid var(--gray-200);
-            text-align: right;
-        }
-        .btn-verify {
-            background: var(--maroon);
-            color: white;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 0.8rem;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s;
-        }
-        .btn-verify:hover {
-            background: var(--maroon-light);
-            transform: translateY(-2px);
-        }
-
-        /* Alert */
-        .alert {
-            padding: 15px 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-        .alert-success {
-            background: #e8f5e9;
-            color: #2e7d32;
-            border-left: 4px solid #4caf50;
-        }
-
-        /* Modal */
-        .modal {
-            position: fixed;
-            z-index: 9999;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(4px);
-        }
-        .modal-content {
-            background: white;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 550px;
-            max-height: 90vh;
-            overflow-y: auto;
-            animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn {
-            from { transform: translateY(-30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        .modal-header {
-            padding: 20px 25px;
-            border-bottom: 1px solid var(--gray-200);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .modal-header h2 {
-            font-size: 1.2rem;
-            color: var(--maroon);
-            margin: 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .modal-body {
-            padding: 25px;
-        }
-        .info-card-mini {
-            background: var(--gray-50);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .info-row-mini {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
-        .info-label-mini {
-            font-size: 0.8rem;
-            color: var(--gray-600);
-        }
-        .info-value-mini {
-            font-size: 0.85rem;
-            font-weight: 500;
-            color: var(--midnight);
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--gray-700);
-        }
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid var(--gray-200);
-            border-radius: 10px;
-            font-size: 0.85rem;
-            font-family: inherit;
-        }
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--maroon);
-        }
-        .form-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 20px;
-        }
-
-        /* Responsive */
-        @media (max-width: 1000px) {
-            .sidebar { width: 250px; }
-            .main-content { margin-left: 250px; padding: 20px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
-            .documents-grid { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); position: fixed; }
-            .main-content { margin-left: 0; }
-            .stats-grid { grid-template-columns: 1fr; }
-            .filter-grid { grid-template-columns: 1fr; }
-            .quick-stats-bar { flex-direction: column; text-align: center; }
-            .form-actions { flex-direction: column; }
-        }
-    </style>
+@media (max-width: 900px) {
+    .stats-summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .filter-form-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 580px) {
+    .stats-summary-grid { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
 <div class="app-container">
-    <!-- Sidebar - Maroon Theme -->
-    <div class="sidebar">
-        <div>
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fas fa-file-alt"></i></div>
-                <div class="logo-text">
-                    <h2>One Palayan-Kalinga Hub</h2>
-                    <p>CSWDO Palayan City</p>
-                </div>
-            </div>
-            
-            <div class="staff-profile">
-                <div class="staff-avatar">
-                    <?php echo $initials; ?>
-                </div>
-                <h4><?php echo htmlspecialchars($_SESSION['full_name']); ?></h4>
-                <p>Staff Member</p>
-                <span class="staff-badge">
-                    <i class="fas fa-user-check"></i> Staff
-                </span>
-            </div>
-            
-            <ul class="sidebar-menu">
-                <li><a href="../staff-dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li class="menu-divider">Appointments</li>
-                <li><a href="manage-appointments.php"><i class="fas fa-calendar-check"></i> Manage Appointments</a></li>
-                <li class="menu-divider">Services</li>
-                <li><a href="manage-aics.php"><i class="fas fa-hand-holding-heart"></i> Manage AICS</a></li>
-                <li><a href="manage-housing.php"><i class="fas fa-home"></i> Manage Housing</a></li>
-                <li class="menu-divider">Documents</li>
-                <li><a href="verify-documents.php" class="active"><i class="fas fa-file-alt"></i> Verify Documents</a></li>
-                <li><a href="reports.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-                <li class="menu-divider"></li>
-                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
-        </div>
-        
-        <div class="sidebar-footer">
-            <a href="../index.php"><i class="fas fa-globe"></i> View Main Site</a>
-        </div>
-    </div>
+    <!-- Modern Staff Sidebar -->
+    <?php require_once __DIR__ . '/includes/staff-sidebar.php'; ?>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        
-        <h1 style="margin-bottom: 24px; color: var(--midnight);"><i class="fas fa-file-alt"></i> Verify Documents</h1>
-        
-        <?php if(isset($success)): ?>
-            <div class="alert alert-success">
-                <i class="fas fa-check-circle"></i> <?php echo $success; ?>
-            </div>
-        <?php endif; ?>
-        
-        <!-- Statistics Grid -->
-        <div class="stats-grid">
-            <div class="stat-card" onclick="filterByStatus('all')">
-                <div class="stat-icon"><i class="fas fa-folder-open"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $stats['total']; ?></h3>
-                    <p>Total</p>
-                </div>
-            </div>
-            <div class="stat-card" onclick="filterByStatus('pending')">
-                <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $stats['pending']; ?></h3>
-                    <p>Pending</p>
-                </div>
-            </div>
-            <div class="stat-card" onclick="filterByStatus('verified')">
-                <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $stats['verified']; ?></h3>
-                    <p>Verified</p>
-                </div>
-            </div>
-            <div class="stat-card" onclick="filterByStatus('rejected')">
-                <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
-                <div class="stat-info">
-                    <h3><?php echo $stats['rejected']; ?></h3>
-                    <p>Rejected</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Quick Stats Bar -->
-        <div class="quick-stats-bar">
-            <div class="document-info">
-                <h4>Documents Awaiting Verification</h4>
-                <div class="count"><?php echo $stats['pending']; ?> Pending</div>
-            </div>
-            <div class="quick-actions">
-                <a href="reports.php?type=documents" class="quick-btn">
-                    <i class="fas fa-chart-line"></i> View Reports
-                </a>
-                <a href="export-documents.php" class="quick-btn">
-                    <i class="fas fa-download"></i> Export Data
-                </a>
-            </div>
-        </div>
-        
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-            <form method="GET" id="filterForm">
-                <div class="filter-grid">
-                    <div class="filter-group">
-                        <label><i class="fas fa-filter"></i> Status</label>
-                        <select name="status" id="statusFilter">
-                            <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Status</option>
-                            <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending</option>
-                            <option value="verified" <?php echo $status_filter == 'verified' ? 'selected' : ''; ?>>Verified</option>
-                            <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
-                        </select>
-                    </div>
-                    
-                    <div class="filter-group">
-                        <label><i class="fas fa-search"></i> Search</label>
-                        <input type="text" name="search" placeholder="Name or document type..." 
-                               value="<?php echo htmlspecialchars($search); ?>">
-                    </div>
-                    
-                    <div class="filter-actions">
-                        <button type="submit" class="btn-primary">
-                            <i class="fas fa-search"></i> Apply
-                        </button>
-                        <?php if($status_filter != 'all' || !empty($search)): ?>
-                        <a href="verify-documents.php" class="btn-secondary">
-                            <i class="fas fa-times"></i> Clear
-                        </a>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </form>
-        </div>
-        
-        <!-- Documents Grid -->
-        <div class="documents-grid">
-            <?php if($stmt->rowCount() > 0): ?>
-                <?php while($doc = $stmt->fetch(PDO::FETCH_ASSOC)): ?>
-                <div class="document-card">
-                    <div class="document-header">
-                        <span class="document-type">
-                            <i class="fas fa-file-<?php 
-                                $ext = pathinfo($doc['document_path'] ?? '', PATHINFO_EXTENSION);
-                                echo $ext == 'pdf' ? 'pdf' : ($ext == 'jpg' || $ext == 'jpeg' || $ext == 'png' ? 'image' : 'alt');
-                            ?>"></i>
-                            <?php echo ucfirst(str_replace('_', ' ', $doc['document_type'])); ?>
-                        </span>
-                        <span class="status-badge status-<?php echo $doc['verification_status']; ?>">
-                            <i class="fas fa-<?php 
-                                echo $doc['verification_status'] == 'pending' ? 'clock' : 
-                                    ($doc['verification_status'] == 'verified' ? 'check-circle' : 'times-circle'); 
-                            ?>"></i>
-                            <?php echo ucfirst($doc['verification_status']); ?>
-                        </span>
-                    </div>
-                    
-                    <div class="document-body">
-                        <div class="applicant-name">
-                            <i class="fas fa-user-circle"></i> 
-                            <?php echo htmlspecialchars($doc['first_name'] . ' ' . $doc['last_name']); ?>
-                        </div>
-                        <div class="document-meta">
-                            <span><i class="fas fa-calendar-alt"></i> Uploaded: <?php echo date('M d, Y h:i A', strtotime($doc['upload_date'])); ?></span>
-                            <span><i class="fas fa-envelope"></i> <?php echo htmlspecialchars($doc['email']); ?></span>
-                        </div>
-                        
-                        <div class="document-preview">
-                            <a href="../<?php echo $doc['document_path']; ?>" target="_blank" class="btn-view-doc">
-                                <i class="fas fa-external-link-alt"></i> View Document
-                            </a>
-                        </div>
-                        
-                        <?php if(!empty($doc['remarks'])): ?>
-                        <div class="document-remarks">
-                            <i class="fas fa-comment"></i> <strong>Remarks:</strong> <?php echo htmlspecialchars($doc['remarks']); ?>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    
-                    <?php if($doc['verification_status'] == 'pending'): ?>
-                    <div class="document-actions">
-                        <button onclick="showVerifyModal(<?php echo htmlspecialchars(json_encode($doc)); ?>)" 
-                                class="btn-verify">
-                            <i class="fas fa-check-circle"></i> Verify Document
-                        </button>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <?php endwhile; ?>
-            <?php else: ?>
-                <div style="grid-column: 1/-1; text-align: center; padding: 60px; background: white; border-radius: var(--radius-card);">
-                    <i class="fas fa-inbox" style="font-size: 48px; color: var(--gray-200); margin-bottom: 15px; display: block;"></i>
-                    <p style="color: var(--gray-600);">No documents found</p>
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Unified Staff Header Bar -->
+        <?php require_once __DIR__ . '/includes/staff-header.php'; ?>
+
+        <!-- Elevated Big Card Canvas -->
+        <div class="staff-big-card">
+            <!-- Universal Top Hero Banner -->
+            <?php
+            $banner_title = 'Verify Documents';
+            $banner_subtitle = 'Review, authenticate, and validate citizen-submitted requirements, IDs, and certificates';
+            $banner_icon = 'fa-file-circle-check';
+            $banner_actions = [
+                ['label' => 'Export Data', 'url' => 'export-documents.php?status=' . urlencode($status_filter) . '&search=' . urlencode($search), 'icon' => 'fa-download', 'type' => 'primary'],
+                ['label' => 'View Reports', 'url' => 'reports.php?category=documents', 'icon' => 'fa-chart-line', 'type' => 'secondary']
+            ];
+            include __DIR__ . '/../includes/portal-banner.php';
+            ?>
+
+            <!-- Feedback Alerts -->
+            <?php if(!empty($error)): ?>
+                <div class="alert alert-error" style="background: #FEE2E2; color: #991B1B; padding: 12px 16px; border-radius: 12px; margin-bottom: 18px; border-left: 4px solid #EF4444; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-exclamation-circle"></i> <span><?php echo htmlspecialchars($error); ?></span>
                 </div>
             <?php endif; ?>
-        </div>
-    </div>
-</div>
+            <?php if(!empty($success)): ?>
+                <div class="alert alert-success" style="background: #F0FDF4; color: #166534; padding: 12px 16px; border-radius: 12px; margin-bottom: 18px; border-left: 4px solid #22C55E; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-check-circle"></i> <span><?php echo htmlspecialchars($success); ?></span>
+                </div>
+            <?php endif; ?>
+        
+            <!-- Redesigned Minimalist Status Summary Cards (Part 2, Item 7) -->
+            <div class="stats-summary-grid">
+                <a href="verify-documents.php?status=all" class="stat-summary-card <?php echo $status_filter == 'all' ? 'active-stat' : ''; ?>">
+                    <div class="stat-icon-wrap total"><i class="fas fa-folder-open"></i></div>
+                    <div class="stat-details">
+                        <h3><?php echo (int)($stats['total'] ?? 0); ?></h3>
+                        <p>Total Records</p>
+                    </div>
+                </a>
+                <a href="verify-documents.php?status=pending" class="stat-summary-card <?php echo $status_filter == 'pending' ? 'active-stat' : ''; ?>">
+                    <div class="stat-icon-wrap pending"><i class="fas fa-clock"></i></div>
+                    <div class="stat-details">
+                        <h3 style="color:#D97706;"><?php echo (int)($stats['pending'] ?? 0); ?></h3>
+                        <p>Pending Review</p>
+                    </div>
+                </a>
+                <a href="verify-documents.php?status=verified" class="stat-summary-card <?php echo $status_filter == 'verified' ? 'active-stat' : ''; ?>">
+                    <div class="stat-icon-wrap verified"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-details">
+                        <h3 style="color:#16A34A;"><?php echo (int)($stats['verified'] ?? 0); ?></h3>
+                        <p>Verified</p>
+                    </div>
+                </a>
+                <a href="verify-documents.php?status=rejected" class="stat-summary-card <?php echo $status_filter == 'rejected' ? 'active-stat' : ''; ?>">
+                    <div class="stat-icon-wrap rejected"><i class="fas fa-times-circle"></i></div>
+                    <div class="stat-details">
+                        <h3 style="color:#DC2626;"><?php echo (int)($stats['rejected'] ?? 0); ?></h3>
+                        <p>Disapproved</p>
+                    </div>
+                </a>
+            </div>
+            
+            <!-- Compact Filter Bar -->
+            <div class="filter-card">
+                <form method="GET" id="filterForm">
+                    <div class="filter-form-grid">
+                        <div class="filter-form-group">
+                            <label><i class="fas fa-filter"></i> Status Filter</label>
+                            <select name="status" id="statusFilter" onchange="this.form.submit()">
+                                <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Statuses</option>
+                                <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending Review</option>
+                                <option value="verified" <?php echo $status_filter == 'verified' ? 'selected' : ''; ?>>Verified &amp; Approved</option>
+                                <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Disapproved / Returned</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-form-group">
+                            <label><i class="fas fa-search"></i> Search Applicant or Document</label>
+                            <input type="text" name="search" placeholder="Type resident name, email, or requirement type..." 
+                                   value="<?php echo htmlspecialchars($search); ?>">
+                        </div>
+                        
+                        <div>
+                            <button type="submit" class="btn-filter-apply">
+                                <i class="fas fa-search"></i> Apply
+                            </button>
+                        </div>
+                        <div>
+                            <?php if($status_filter != 'all' || !empty($search)): ?>
+                            <a href="verify-documents.php" class="btn-filter-reset">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Verification Data Table -->
+            <div class="table-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-list-check" style="color: var(--ref-maroon);"></i> Document Verification Queue</h2>
+                    <span class="count-badge"><?php echo count($documents_list); ?> records displayed</span>
+                </div>
+
+                <?php if(empty($documents_list)): ?>
+                    <div style="text-align: center; padding: 48px 20px;">
+                        <i class="fas fa-folder-open" style="font-size: 40px; color: #CBD5E1; margin-bottom: 12px; display: block;"></i>
+                        <h4 style="margin: 0 0 6px 0; color: var(--ref-text); font-weight: 700;">No Documents Found</h4>
+                        <p style="margin: 0; color: var(--ref-muted); font-size: 0.82rem;">Try clearing your search query or selecting a different status filter.</p>
+                    </div>
+                <?php else: ?>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Document ID &amp; Type</th>
+                                    <th>Citizen Applicant</th>
+                                    <th>Uploaded Date</th>
+                                    <th>File Attachment</th>
+                                    <th>Status</th>
+                                    <th>Review Remarks</th>
+                                    <th style="text-align: center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($documents_list as $doc): ?>
+                                <?php 
+                                    $ext = strtolower(pathinfo($doc['document_path'] ?? '', PATHINFO_EXTENSION));
+                                    $iconClass = ($ext === 'pdf') ? 'fa-file-pdf' : (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) ? 'fa-file-image' : 'fa-file-alt');
+                                    $iconColor = ($ext === 'pdf') ? '#DC2626' : (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) ? '#2563EB' : '#475569');
+                                    $docIdLabel = 'DOC-' . str_pad($doc['document_id'], 5, '0', STR_PAD_LEFT);
+                                    $cleanType = ucfirst(str_replace('_', ' ', $doc['document_type'] ?? 'Requirement'));
+                                    $applicantName = htmlspecialchars(($doc['first_name'] ?? '') . ' ' . ($doc['last_name'] ?? ''));
+                                ?>
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 700; color: var(--ref-text); display: flex; align-items: center; gap: 7px;">
+                                            <i class="fas <?php echo $iconClass; ?>" style="color: <?php echo $iconColor; ?>; font-size: 0.95rem;"></i>
+                                            <span><?php echo $cleanType; ?></span>
+                                        </div>
+                                        <div style="font-size: 0.72rem; color: var(--ref-muted); margin-top: 2px; font-family: monospace;">
+                                            #<?php echo $docIdLabel; ?>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight: 700; color: var(--ref-text);">
+                                            <?php echo $applicantName; ?>
+                                        </div>
+                                        <div style="font-size: 0.72rem; color: var(--ref-muted); margin-top: 2px;">
+                                            <i class="fas fa-envelope"></i> <?php echo htmlspecialchars($doc['email'] ?? 'N/A'); ?>
+                                            <?php if(!empty($doc['contact_number'])): ?>
+                                                • <i class="fas fa-phone"></i> <?php echo htmlspecialchars($doc['contact_number']); ?>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight: 600;">
+                                            <?php echo !empty($doc['upload_date']) ? date('M d, Y', strtotime($doc['upload_date'])) : 'N/A'; ?>
+                                        </div>
+                                        <div style="font-size: 0.72rem; color: var(--ref-muted); margin-top: 2px;">
+                                            <i class="fas fa-clock"></i> <?php echo !empty($doc['upload_date']) ? date('h:i A', strtotime($doc['upload_date'])) : ''; ?>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <?php if(!empty($doc['document_path'])): ?>
+                                            <a href="../<?php echo htmlspecialchars($doc['document_path']); ?>" target="_blank" class="btn-doc-link" title="Open file in new tab">
+                                                <i class="fas fa-external-link-alt"></i> Open File
+                                            </a>
+                                        <?php else: ?>
+                                            <span style="color: var(--ref-muted); font-size: 0.74rem;">No file</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if($doc['verification_status'] === 'verified'): ?>
+                                            <span class="status-pill verified"><i class="fas fa-check-circle"></i> Verified</span>
+                                        <?php elseif($doc['verification_status'] === 'rejected'): ?>
+                                            <span class="status-pill rejected"><i class="fas fa-times-circle"></i> Disapproved</span>
+                                        <?php else: ?>
+                                            <span class="status-pill pending"><i class="fas fa-clock"></i> Pending</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="max-width: 220px;">
+                                        <?php if(!empty($doc['remarks'])): ?>
+                                            <div style="font-size: 0.74rem; color: var(--ref-text); line-height: 1.3;">
+                                                <?php echo htmlspecialchars($doc['remarks']); ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <span style="font-size: 0.72rem; color: var(--ref-muted); font-style: italic;">None provided</span>
+                                        <?php endif; ?>
+                                        <?php if(!empty($doc['verifier_fn'])): ?>
+                                            <div style="font-size: 0.68rem; color: var(--ref-muted); margin-top: 3px;">
+                                                <i class="fas fa-user-check"></i> By <?php echo htmlspecialchars($doc['verifier_fn'] . ' ' . $doc['verifier_ln']); ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <!-- Standardized Minimalist Row Action Dropdown -->
+                                        <div class="row-action-dropdown">
+                                            <button type="button" class="btn-dot-action" onclick="toggleRowAction(event, this)" title="Actions" aria-label="Row Actions">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <div class="row-action-menu">
+                                                <button type="button" class="action-menu-item" onclick='openVerifyModal(<?php echo json_encode($doc, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>)'>
+                                                    <i class="fas fa-file-signature" style="color: var(--ref-maroon);"></i> 
+                                                    <?php echo $doc['verification_status'] === 'pending' ? 'Review &amp; Verify' : 'Update Decision'; ?>
+                                                </button>
+                                                <?php if(!empty($doc['document_path'])): ?>
+                                                    <a href="../<?php echo htmlspecialchars($doc['document_path']); ?>" target="_blank" class="action-menu-item">
+                                                        <i class="fas fa-external-link-alt" style="color: #2563EB;"></i> Open Attachment
+                                                    </a>
+                                                <?php endif; ?>
+                                                <a href="manage-residents.php?search=<?php echo urlencode($doc['first_name'] . ' ' . $doc['last_name']); ?>" class="action-menu-item">
+                                                    <i class="fas fa-user" style="color: #059669;"></i> Resident Profile
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div> <!-- Close table-card -->
+        </div> <!-- Close staff-big-card -->
+    </main>
+</div> <!-- Close app-container -->
 
 <!-- Verification Modal -->
-<div id="verifyModal" class="modal" style="display: none;">
+<div id="verifyModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2><i class="fas fa-file-signature"></i> Verify Document</h2>
-            <button onclick="closeModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--gray-600);">&times;</button>
+            <h2><i class="fas fa-file-signature" style="color: var(--ref-maroon);"></i> Verify Document</h2>
+            <button type="button" onclick="closeModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--ref-muted);">&times;</button>
         </div>
         
-        <form method="POST">
+        <form method="POST" id="verifyForm" onsubmit="return handleFormSubmit(this)">
+            <?php echo csrf_field(); ?>
             <div class="modal-body">
                 <input type="hidden" name="document_id" id="modal_document_id">
                 
                 <div class="info-card-mini">
                     <div class="info-row-mini">
+                        <span class="info-label-mini">Document ID:</span>
+                        <span class="info-value-mini" id="modal_document_id_display" style="font-family: monospace; color: var(--ref-maroon);"></span>
+                    </div>
+                    <div class="info-row-mini">
                         <span class="info-label-mini">Document Type:</span>
                         <span class="info-value-mini" id="modal_document_info"></span>
                     </div>
                     <div class="info-row-mini">
-                        <span class="info-label-mini">Uploaded By:</span>
+                        <span class="info-label-mini">Citizen Applicant:</span>
                         <span class="info-value-mini" id="modal_uploader"></span>
+                    </div>
+                    <div class="info-row-mini">
+                        <span class="info-label-mini">Attachment File:</span>
+                        <span class="info-value-mini">
+                            <a href="#" id="modal_document_link" target="_blank" class="btn-doc-link" style="padding: 2px 8px;">
+                                <i class="fas fa-external-link-alt"></i> View Uploaded File
+                            </a>
+                        </span>
                     </div>
                 </div>
                 
                 <div class="form-group">
-                    <label for="modal_status">Verification Status</label>
+                    <label for="modal_status"><i class="fas fa-stamp"></i> Verification Decision</label>
                     <select name="verification_status" id="modal_status" required onchange="toggleRemarksField()">
-                        <option value="verified">✅ Verified - Document is valid</option>
-                        <option value="rejected">❌ Rejected - Document is invalid</option>
+                        <option value="verified">✅ Verified &amp; Approved — Requirement is valid</option>
+                        <option value="rejected">❌ Disapproved / Return — Requirement is invalid or unreadable</option>
                     </select>
                 </div>
                 
                 <div class="form-group" id="remarks_field" style="display: none;">
-                    <label for="modal_remarks">Rejection Reason</label>
+                    <label for="modal_remarks" style="color: #DC2626;">
+                        <i class="fas fa-exclamation-circle"></i> Disapproval / Return Feedback (Mandatory, emailed/notified to resident):
+                    </label>
                     <textarea name="remarks" id="modal_remarks" rows="3" 
-                              placeholder="Please explain why this document is being rejected..."></textarea>
+                              placeholder="Please clearly explain to the citizen what needs correction or re-uploading..."></textarea>
                 </div>
-                
-                <div class="form-group">
-                    <a href="#" id="modal_document_link" target="_blank" class="btn-view-doc" style="display: inline-flex;">
-                        <i class="fas fa-external-link-alt"></i> Open Document
-                    </a>
+
+                <div class="form-group" id="approval_notes_field">
+                    <label for="modal_approval_remarks" style="color: var(--ref-muted);">
+                        Optional Officer Approval Notes:
+                    </label>
+                    <textarea name="approval_remarks" id="modal_approval_remarks" rows="2" 
+                              placeholder="Optional notes or reference details for office records..."></textarea>
                 </div>
             </div>
             
-            <div class="modal-header" style="border-top: 1px solid var(--gray-200); justify-content: flex-end; gap: 12px;">
-                <button type="submit" name="verify_document" class="btn-primary">
-                    <i class="fas fa-save"></i> Submit Verification
-                </button>
-                <button type="button" onclick="closeModal()" class="btn-secondary">
+            <div class="modal-header" style="border-top: 1px solid var(--ref-border); justify-content: flex-end; gap: 10px; padding: 14px 24px;">
+                <button type="button" onclick="closeModal()" class="btn-filter-reset" style="cursor: pointer;">
                     <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="submit" name="verify_document" id="btnSubmitVerification" class="btn-filter-apply" style="cursor: pointer;">
+                    <i class="fas fa-save"></i> Save Decision
                 </button>
             </div>
         </form>
@@ -970,51 +807,136 @@ $initials = substr($initials, 0, 2);
 </div>
 
 <script>
-function showVerifyModal(document) {
-    document.getElementById('modal_document_id').value = document.document_id;
-    document.getElementById('modal_document_info').textContent = 
-        ucfirst(document.document_type.replace(/_/g, ' '));
-    document.getElementById('modal_uploader').textContent = 
-        document.first_name + ' ' + document.last_name;
-    document.getElementById('modal_document_link').href = '../' + document.document_path;
-    document.getElementById('verifyModal').style.display = 'flex';
+function toggleRowAction(e, btn) {
+    e.stopPropagation();
+    const dropdown = btn.closest('.row-action-dropdown');
+    if (!dropdown) return;
+    const isOpen = dropdown.classList.contains('open') || dropdown.classList.contains('active');
+    closeAllActionMenus();
+    if (!isOpen) {
+        const btnRect = btn.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - btnRect.bottom;
+        if (spaceBelow < 220) {
+            dropdown.classList.add('dropup');
+        }
+        dropdown.classList.add('open');
+        dropdown.classList.add('active');
+    }
+}
+
+function closeAllActionMenus() {
+    document.querySelectorAll('.row-action-dropdown.open, .row-action-dropdown.active').forEach(dd => {
+        dd.classList.remove('open', 'active', 'dropup');
+    });
+}
+
+function openVerifyModal(doc) {
+    closeAllActionMenus();
+    document.getElementById('modal_document_id').value = doc.document_id;
+    document.getElementById('modal_document_id_display').textContent = 'DOC-' + String(doc.document_id).padStart(5, '0');
+    
+    const cleanType = (doc.document_type || 'Document').replace(/_/g, ' ');
+    document.getElementById('modal_document_info').textContent = cleanType.charAt(0).toUpperCase() + cleanType.slice(1);
+    
+    document.getElementById('modal_uploader').textContent = (doc.first_name || '') + ' ' + (doc.last_name || '');
+    
+    const docLink = document.getElementById('modal_document_link');
+    if (doc.document_path) {
+        docLink.href = '../' + doc.document_path;
+        docLink.style.display = 'inline-flex';
+    } else {
+        docLink.style.display = 'none';
+    }
+    
+    const statusVal = (doc.verification_status === 'rejected') ? 'rejected' : 'verified';
+    document.getElementById('modal_status').value = statusVal;
+    
+    if (statusVal === 'rejected') {
+        document.getElementById('modal_remarks').value = doc.remarks || '';
+    } else {
+        document.getElementById('modal_approval_remarks').value = doc.remarks || '';
+    }
+    
+    toggleRemarksField();
+    document.getElementById('verifyModal').classList.add('active');
 }
 
 function closeModal() {
-    document.getElementById('verifyModal').style.display = 'none';
-    document.getElementById('remarks_field').style.display = 'none';
+    document.getElementById('verifyModal').classList.remove('active');
     document.getElementById('modal_remarks').value = '';
-    document.getElementById('modal_status').value = 'verified';
+    document.getElementById('modal_approval_remarks').value = '';
+    const submitBtn = document.getElementById('btnSubmitVerification');
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-save"></i> Save Decision';
+    }
 }
 
 function toggleRemarksField() {
     const status = document.getElementById('modal_status').value;
     const remarksField = document.getElementById('remarks_field');
+    const remarksText = document.getElementById('modal_remarks');
+    const approvalField = document.getElementById('approval_notes_field');
     
     if (status === 'rejected') {
         remarksField.style.display = 'block';
-        document.getElementById('modal_remarks').required = true;
+        remarksText.required = true;
+        approvalField.style.display = 'none';
     } else {
         remarksField.style.display = 'none';
-        document.getElementById('modal_remarks').required = false;
+        remarksText.required = false;
+        approvalField.style.display = 'block';
     }
 }
 
-function filterByStatus(status) {
-    document.getElementById('statusFilter').value = status;
-    document.getElementById('filterForm').submit();
-}
-
-function ucfirst(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
+function handleFormSubmit(form) {
+    const status = document.getElementById('modal_status').value;
+    const remarksText = document.getElementById('modal_remarks');
+    const approvalNotes = document.getElementById('modal_approval_remarks');
+    
+    if (status === 'rejected') {
+        if (!remarksText.value.trim()) {
+            alert('Please enter a disapproval or return reason for the citizen.');
+            remarksText.focus();
+            return false;
+        }
+        if (!confirm('Are you sure you want to DISAPPROVE / RETURN this document? The resident will be notified to upload a replacement.')) {
+            return false;
+        }
+    } else if (status === 'verified') {
+        if (!confirm('Confirm marking this document as VERIFIED and APPROVED?')) {
+            return false;
+        }
+    }
+    
+    // Copy approval notes to remarks if status is verified
+    if (status === 'verified' && approvalNotes.value.trim()) {
+        remarksText.value = approvalNotes.value.trim();
+    }
+    
+    const submitBtn = document.getElementById('btnSubmitVerification');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    }
+    return true;
 }
 
 window.onclick = function(event) {
     const modal = document.getElementById('verifyModal');
-    if (event.target == modal) {
+    if (event.target === modal) {
         closeModal();
     }
-}
+    closeAllActionMenus();
+};
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+        closeAllActionMenus();
+    }
+});
 </script>
+<?php require_once __DIR__ . '/includes/staff-footer.php'; ?>
 </body>
 </html>

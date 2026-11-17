@@ -36,7 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
     elseif (!isset($_FILES['valid_id']) || $_FILES['valid_id']['error'] !== UPLOAD_ERR_OK) {
         $error = "A valid ID is required.";
     } elseif (!isset($_FILES['barangay_certificate']) || $_FILES['barangay_certificate']['error'] !== UPLOAD_ERR_OK) {
-        $error = "A barangay certificate is required.";
+        $error = "A Barangay Residency document is required.";
+    } elseif (floatval($_POST['amount_requested'] ?? 0) < 500 || floatval($_POST['amount_requested'] ?? 0) > 10000) {
+        $error = "Amount requested must be between ₱500 and ₱10,000.";
     } else {
         $amount_requested   = sanitize($_POST['amount_requested']);
         $purpose            = sanitize($_POST['purpose']);
@@ -49,18 +51,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $db->beginTransaction();
         
         try {
-        $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, status) 
-                  VALUES (:user_id, 'cash_relief', :amount, 'submitted')";
+        $query = "INSERT INTO aics_requests (user_id, request_type, amount_requested, purpose, status) 
+                  VALUES (:user_id, 'cash_relief', :amount, :purpose, 'submitted')";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':user_id', $_SESSION['user_id']);
         $stmt->bindParam(':amount', $amount_requested);
+        $stmt->bindParam(':purpose', $purpose);
         $stmt->execute();
         
         $aics_id = $db->lastInsertId();
         
         $detail_query = "INSERT INTO aics_cash_relief_details 
-                        (aics_id, emergency_type, affected_members, incident_date, incident_report_no, police_report_no) 
-                        VALUES (:aics_id, :emergency_type, :affected_members, :incident_date, :incident_report_no, :police_report_no)";
+                        (aics_id, emergency_type, affected_members, incident_date, incident_report_no, police_report_no, purpose) 
+                        VALUES (:aics_id, :emergency_type, :affected_members, :incident_date, :incident_report_no, :police_report_no, :purpose)";
         $detail_stmt = $db->prepare($detail_query);
         $detail_stmt->bindParam(':aics_id', $aics_id);
         $detail_stmt->bindParam(':emergency_type', $emergency_type);
@@ -68,12 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         $detail_stmt->bindParam(':incident_date', $incident_date);
         $detail_stmt->bindParam(':incident_report_no', $incident_report_no);
         $detail_stmt->bindParam(':police_report_no', $police_report_no);
+        $detail_stmt->bindParam(':purpose', $purpose);
         $detail_stmt->execute();
         
         $uploader = new FileUploader();
         $document_fields = [
             'valid_id'              => 'Valid ID',
-            'barangay_certificate'  => 'Barangay Certificate',
+            'barangay_certificate'  => 'Barangay Residency',
             'incident_report'       => 'Incident Report',
             'medical_certificate'   => 'Medical Certificate',
             'police_report'         => 'Police Report'
@@ -110,6 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
         
         $db->commit();
         $success = "Application submitted successfully! Your tracking number is: <strong>$tracking</strong>";
+        $submission_success = true;
+        $success_tracking_no = $tracking;
+        $success_service_type = 'AICS';
         
         // Send email confirmation
         try {
@@ -151,7 +158,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/aics-enhanced.css">
+    <link rel="stylesheet" href="css/aics-enhanced.css?v=<?php echo filemtime(__DIR__ . '/css/aics-enhanced.css'); ?>">
+    <style>
+        .aics-hero { position: relative !important; overflow: hidden !important; }
+        .aics-hero::before, .aics-hero::after { pointer-events: none !important; }
+        .hero-back-to-aics-btn, .hero-back-to-aics-btn:visited, .hero-back-to-aics-btn:active {
+            color: #FFFFFF !important;
+            text-decoration: none !important;
+            cursor: pointer !important;
+            pointer-events: auto !important;
+            z-index: 9999 !important;
+        }
+        .hero-back-to-aics-btn:hover {
+            background: #FFFFFF !important;
+            color: #0F414A !important;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3) !important;
+        }
+    </style>
     <style>
         :root {
             --accent: #7F0303;
@@ -161,31 +185,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
             --midnight: #0F414A;
             --midnight-light: #1a6a78;
         }
+    
+        /* Simple Clean Minimalist Footer */
+        .aics-simple-footer {
+            padding: 24px 0 32px;
+            margin-top: 40px;
+            text-align: center;
+            border-top: 1px solid var(--ref-border, rgba(0, 0, 0, 0.08));
+            color: var(--ref-muted, #71818B);
+            font-size: 0.8rem;
+            background: transparent;
+        }
+        .aics-simple-footer p {
+            margin: 0;
+        }
+        [data-theme="dark"] .aics-simple-footer {
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #8AA0A9;
+        }
+
     </style>
+    <link rel="stylesheet" href="css/portal-layout.css?v=<?php echo filemtime(__DIR__ . '/css/portal-layout.css'); ?>">
 </head>
 <body>
 
     <!-- Unified Navigation Bar -->
-    <?php include __DIR__ . '/includes/navbar.php'; ?>
+        <div class="dashboard-container">
+        <!-- Unified Minimalist Sidebar -->
+        <?php if (isLoggedIn() && !isStaff() && !isAdmin()): ?>
+            <?php include __DIR__ . '/includes/portal-sidebar.php'; ?>
+        <?php endif; ?>
 
-    <!-- Top Navigation -->
-    <nav class="aics-topnav">
-        <div class="aics-topnav-inner">
-            <div class="aics-breadcrumb">
-                <a href="services.php">Services</a>
-                <span class="sep"><i class="fas fa-chevron-right"></i></span>
-                <a href="aics.php">AICS</a>
-                <span class="sep"><i class="fas fa-chevron-right"></i></span>
-                <span class="current">Cash Relief</span>
-            </div>
-            <a href="aics.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Back to AICS
-            </a>
-        </div>
-    </nav>
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Unified Resident Portal Header -->
+            <?php include __DIR__ . '/includes/portal-header.php'; ?>
+
+    
 
     <!-- Hero Header -->
     <div class="aics-hero">
+    <a href="aics.php" class="hero-back-to-aics-btn" style="position: absolute !important; top: 22px !important; right: 26px !important; z-index: 9999 !important; display: inline-flex !important; align-items: center !important; gap: 8px !important; background: rgba(255, 255, 255, 0.22) !important; color: #FFFFFF !important; border: 1.5px solid rgba(255, 255, 255, 0.45) !important; padding: 9px 20px !important; border-radius: 50px !important; font-size: 0.85rem !important; font-weight: 700 !important; text-decoration: none !important; backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important; cursor: pointer !important; pointer-events: auto !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2) !important;" title="Back to AICS Services"><i class="fas fa-arrow-left"></i> Back to AICS</a>
         <div class="aics-hero-inner">
             <div class="aics-hero-badge">
                 <i class="fas fa-shield-alt"></i> AICS Program
@@ -315,8 +355,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
                     </div>
                 </div>
 
-                <form method="POST" enctype="multipart/form-data" id="applicationForm">
+                <form method="POST" enctype="multipart/form-data" id="applicationForm" novalidate>
                     <?php echo csrf_field(); ?>
+                    <input type="hidden" name="submit_application" value="1">
 
                     <!-- STEP 1: Details -->
                     <div class="wizard-step" data-step="1">
@@ -405,12 +446,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
                                     <div class="upload-zone-header">
                                         <div class="upload-icon"><i class="fas fa-file-alt"></i></div>
                                         <div class="upload-zone-meta">
-                                            <strong>Barangay Certificate</strong>
-                                            <span>Clearance or Indigency Certificate</span>
+                                            <strong>Barangay Residency</strong>
+                                            <span>Barangay Certificate of Residency</span>
                                         </div>
                                         <span class="upload-required-badge">Required</span>
                                     </div>
-                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 5MB</div>
+                                    <div class="upload-zone-footer"><i class="fas fa-paperclip"></i> PDF, JPG, PNG — max 10MB</div>
                                 </div>
 
                                 <div class="upload-zone" id="zone-incident_report">
@@ -490,7 +531,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
                         </div>
 
                         <div class="submit-section">
-                            <button type="submit" name="submit_application" class="btn-submit" id="submitBtn" disabled>
+                            <button type="submit" name="submit_application" class="btn-submit" id="submitBtn">
                                 <span class="btn-icon"><i class="fas fa-paper-plane"></i></span>
                                 Submit Cash Relief Application
                             </button>
@@ -515,16 +556,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
     </div>
 
     <!-- Footer -->
-    <footer class="aics-footer">
-        <div class="aics-footer-inner">
-            <div class="footer-brand"><i class="fas fa-hands-helping"></i> Palayan-Kalinga Hub — AICS Division</div>
-            <div class="footer-links">
-                <a href="aics.php">AICS Home</a>
-                <a href="track-aics.php">Track Application</a>
-                <a href="contact.php">Contact Us</a>
-            </div>
-        </div>
-        <div class="footer-note">Assistance to Individuals in Crisis Situation (AICS) — City Social Welfare and Development Office (CSWDO)</div>
+        <!-- Simple Minimal Portal Footer -->
+    <footer class="aics-simple-footer">
+        <p>&copy; <?php echo date('Y'); ?> <strong>One Palayan-Kalinga Hub</strong> &bull; City Social Welfare and Development Office</p>
     </footer>
 
     <script>
@@ -576,18 +610,43 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application']))
             zone.addEventListener('drop', () => zone.classList.remove('drag-over'));
         });
 
-        // Toggle submit button based on declaration check
+        // Submit handling & declaration validation
+        const appForm = document.getElementById('applicationForm');
         const declCheck = document.getElementById('declaration-check');
         const submitBtn = document.getElementById('submitBtn');
-        if (declCheck && submitBtn) {
-            declCheck.addEventListener('change', function() {
-                submitBtn.disabled = !this.checked;
+
+        if (appForm) {
+            appForm.addEventListener('submit', function(e) {
+                if (declCheck && !declCheck.checked) {
+                    e.preventDefault();
+                    declCheck.focus();
+                    const confBox = document.querySelector('.summary-confirmation');
+                    if (confBox) {
+                        confBox.style.border = '2px solid #DC2626';
+                        confBox.style.borderRadius = '12px';
+                        confBox.style.padding = '10px';
+                        setTimeout(() => { confBox.style.border = ''; }, 3500);
+                    }
+                    alert('Paki-tsek ang declaration checkbox upang kumpirmahin ang iyong aplikasyon.');
+                    return false;
+                }
+                if (submitBtn) {
+                    submitBtn.style.pointerEvents = 'none';
+                    submitBtn.style.opacity = '0.75';
+                    submitBtn.innerHTML = '<span class="btn-icon"><i class="fas fa-spinner fa-spin"></i></span> Submitting...';
+                    setTimeout(() => { submitBtn.disabled = true; }, 100);
+                }
             });
         }
     </script>
 
+        </div>
+    </div>
+
     <!-- Include Wizard Logic JS -->
     <script src="js/aics-wizard.js"></script>
 
+    <!-- Succession Modal -->
+    <?php include __DIR__ . '/includes/submission-success-modal.php'; ?>
 </body>
 </html>

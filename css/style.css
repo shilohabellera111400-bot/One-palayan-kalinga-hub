@@ -465,7 +465,7 @@ body {
     }
     
     .hamburger {
-        display: block;
+        display: flex !important;
     }
     
     .hero h2 {
